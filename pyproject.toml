@@ -24,12 +24,16 @@ stt = [
 ]
 # Optional: only adds the zstd compressor. The reply engine itself is stdlib-only.
 reply = ["zstandard>=0.25"]
+# On-box neural text to speech. The playback layer needs no extra dependency.
+tts = ["piper-tts>=1.8"]
 
 [project.scripts]
 ttrpg-chatbots = "ttrpg_chatbots.cli:main"
 ttrpg-chatbots-bot = "ttrpg_chatbots.bot:main"
 ttrpg-chatbots-stt = "ttrpg_chatbots.stt.cli:main"
 ttrpg-chatbots-reply = "ttrpg_chatbots.reply.cli:main"
+ttrpg-chatbots-tts = "ttrpg_chatbots.tts.cli:main"
+ttrpg-chatbots-voice = "ttrpg_chatbots.voice.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

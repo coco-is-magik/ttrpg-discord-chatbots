@@ -1,4 +1,5 @@
-# Who knows what. known_tags gates which knowledge tags a character may speak to.
-{"id": "brannoc", "name": "Brannoc the Archivist", "known_tags": ["lore:guild", "lore:history", "lore:relic"], "fallback_tag": "fallback", "meta": {"role": "loremaster"}}
-{"id": "sable", "name": "Sable", "known_tags": ["lore:geography", "lore:harbor", "lore:ritual"], "fallback_tag": "fallback", "meta": {"role": "guide"}}
-{"id": "orla", "name": "Orla the Tavernkeep", "known_tags": ["lore:harbor", "lore:rumour"], "fallback_tag": "fallback", "meta": {"role": "rumour mill"}}
+# Who knows what: `known_tags` gates knowledge, `tags` describe the character itself
+# (role, species) and are what voice casting matches on.
+{"id": "brannoc", "name": "Brannoc the Archivist", "known_tags": ["lore:guild", "lore:history", "lore:relic"], "tags": ["role:scholar", "species:dwarf"], "fallback_tag": "fallback", "meta": {"role": "loremaster"}}
+{"id": "sable", "name": "Sable", "known_tags": ["lore:geography", "lore:harbor", "lore:ritual"], "tags": ["role:guide", "species:elf"], "fallback_tag": "fallback", "meta": {"role": "guide"}}
+{"id": "orla", "name": "Orla the Tavernkeep", "known_tags": ["lore:harbor", "lore:rumour"], "tags": ["role:tavernkeep", "species:human"], "fallback_tag": "fallback", "meta": {"role": "rumour mill"}}

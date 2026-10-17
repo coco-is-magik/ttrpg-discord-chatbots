@@ -15,6 +15,7 @@ from collections.abc import Iterable, Iterator, Mapping
 from pathlib import Path
 from typing import Any
 
+from ttrpg_chatbots import jsonl
 from ttrpg_chatbots.reply.types import (
     Character,
     DatasetError,
@@ -30,26 +31,15 @@ MANIFEST_FILE = "world.json"
 
 _KNOWLEDGE_FIELDS = frozenset({"id", "text", "tags", "slots"})
 _RESPONSE_FIELDS = frozenset({"id", "character", "tags", "template"})
-_CHARACTER_FIELDS = frozenset({"id", "name", "known_tags", "fallback_tag"})
+_CHARACTER_FIELDS = frozenset({"id", "name", "known_tags", "tags", "fallback_tag"})
 
 
 def read_jsonl(path: Path) -> Iterator[dict[str, Any]]:
-    """Yield one record per line, tolerating blank lines and ``#`` comments."""
+    """Yield one record per line, reporting problems as ``DatasetError``."""
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError as error:
-        raise DatasetError(f"cannot read {path}: {error}") from error
-    for number, line in enumerate(lines, start=1):
-        text = line.strip()
-        if not text or text.startswith("#"):
-            continue
-        try:
-            record = json.loads(text)
-        except ValueError as error:
-            raise DatasetError(f"{path}:{number}: invalid JSON: {error}") from error
-        if not isinstance(record, dict):
-            raise DatasetError(f"{path}:{number}: expected a JSON object")
-        yield record
+        yield from jsonl.read_jsonl(path)
+    except jsonl.JsonlError as error:
+        raise DatasetError(str(error)) from error
 
 
 def _identifier(record: Mapping[str, Any], where: str) -> str:
@@ -193,6 +183,7 @@ def characters_from_records(
                     id=identifier,
                     name=name.strip(),
                     known_tags=_tags(record, "known_tags", where, required=False),
+                    tags=_tags(record, "tags", where, required=False),
                     fallback_tag=fallback.strip(),
                     meta=_meta(record, _CHARACTER_FIELDS),
                 ),

@@ -172,10 +172,16 @@ above. Three JSONL files plus an optional manifest:
 
 | File | One record per line |
 | --- | --- |
-| `characters.jsonl` | `id`, `name`, `known_tags`, optional `fallback_tag` |
+| `characters.jsonl` | `id`, `name`, `known_tags` (what they know), `tags` (what they are), optional `fallback_tag` |
 | `knowledge.jsonl` | `id`, `text`, `tags`, optional `slots` |
 | `responses.jsonl` | `id`, `character` (id, name, or `*`), `tags`, `template` |
+| `voices.jsonl` | `id`, plus `characters` / `tags` / `default`, and `engine`, `voice`, `speed`, `volume` |
 | `world.json` | optional `name` / `schema_version` |
+
+`known_tags` gates knowledge -- a character may only speak about those. `tags`
+describe the character itself (`role:scholar`, `species:dwarf`) and are what voice
+casting matches on. The two are separate on purpose: knowing about relics and being a
+dwarf are different kinds of fact.
 
 `slots` is the madlib vocabulary for a fact, and it is searched too, so "the
 Sunken Crown" matches from either field. `#` comments and blank lines are allowed.
@@ -200,6 +206,145 @@ reply = replier.reply("who controls the dry docks?", "brannoc", speaker="Tav")
 print(reply.text, reply.tag, reply.knowledge_id, reply.known)
 ```
 
+## Speaking: text to speech and voice playback
+
+Three layers, deliberately independent:
+
+| Layer | Module | Knows about |
+| --- | --- | --- |
+| format | `audio/` | PCM, resampling, Discord's 48 kHz stereo 20 ms frame contract, WAV |
+| speech out | `tts/` | text → `PcmAudio` (piper, espeak-ng) |
+| playback | `voice/` | clips, files and music → frames → a voice client |
+
+`tts` and `voice` do not import each other, and neither imports `reply`. The only
+composition root is the CLI, so a classifier reply, an LLM answer, a scripted line,
+a WAV or a music file all take the same path.
+
+```bash
+.venv/bin/pip install -e '.[tts]'          # piper-tts; playback needs no extra dependency
+.venv/bin/ttrpg-chatbots-tts --list
+.venv/bin/ttrpg-chatbots-tts --say "The tide turns at the quay." --out speech.wav
+.venv/bin/ttrpg-chatbots-voice --say "..." --engine espeak-ng
+.venv/bin/ttrpg-chatbots-voice --ask "who controls the dry docks?" --character brannoc
+.venv/bin/ttrpg-chatbots-voice --wav music/tavern.wav --json
+```
+
+Measured on this box with `en_US-lessac-medium` (22.05 kHz mono):
+
+```
+$ ttrpg-chatbots-voice --ask "who controls the dry docks?" --character brannoc
+Brannoc the Archivist: The Tidewrights' Guild controls every dry-dock in the reach...
+engine: piper
+frames: 354 (7.08 s of audio)
+bytes: 1359360
+synth: 1573 ms
+```
+
+354 frames × 3840 bytes is exactly 7.08 s at 192 000 bytes/s, and 1573 ms of
+synthesis for 7 s of audio is ~0.22× realtime — the voice is never the bottleneck.
+
+From code:
+
+```python
+from ttrpg_chatbots.tts import resolve_synthesizer
+from ttrpg_chatbots.voice import PcmFrameSource, VoicePlayer
+from ttrpg_chatbots.voice.discord_voice import play_in
+
+synthesizer = resolve_synthesizer()                 # or engine="espeak-ng"
+player = VoicePlayer()
+player.enqueue(PcmFrameSource(synthesizer.synthesize(text)))
+play_in(voice_client, player)                       # voice_client.play(...) under the hood
+```
+
+Anything else that makes noise is already a source: `load_file(path)` for a
+pre-recorded WAV or music, `SilenceSource(seconds)` for a beat of silence, and
+`ChainSource(a, b, c)` to play them back to back.
+
+### Casting: one voice per character
+
+Consistency is data, not luck. A `voices.jsonl` beside the world maps characters to
+voice profiles, resolved in a fixed order: a rule naming the **character** (id or
+display name), then a rule naming one of the character's **tags** (most matching tags
+first), then the **default** rule, then the built-in profile.
+
+```json
+{"id": "cast-scholar", "tags": ["role:scholar"], "engine": "piper", "voice": "en_GB-alan-medium", "speed": 0.95}
+{"id": "cast-sable", "characters": ["sable"], "engine": "piper", "voice": "en_US-amy-medium", "speed": 1.1}
+{"id": "cast-default", "default": true, "engine": "piper", "voice": "en_US-lessac-medium"}
+```
+
+```
+$ ttrpg-chatbots-voice --list-voices --data examples/demo_world
+brannoc     Brannoc the Archivist       piper:en_GB-alan-medium speed=0.95 volume=1
+sable       Sable                       piper:en_US-amy-medium speed=1.1 volume=1
+orla        Orla the Tavernkeep         piper:en_US-lessac-medium speed=1 volume=0.9
+```
+
+`sable` shows the character rule (`amy`) winning over her `role:guide` tag rule, which
+is the precedence working. `--ask` and `--say --character` speak in that character's
+voice automatically, and the profile appears in `--json` output.
+
+Rules that protect consistency:
+
+- **No silent substitution.** A profile naming a voice must name its engine (voice
+  names only mean something inside one engine), an unknown engine raises instead of
+  falling back, and a rule naming a tag no character carries — or a character that does
+  not exist — fails at load, with the file and line.
+- **Ambiguity fails.** Two rules naming the same character, two rules with the same
+  tags, or two defaults are rejected rather than letting file order decide.
+- **State is cached, not re-decided.** `VoiceCast` keeps one loaded engine per distinct
+  profile (LRU, `max_loaded=4`), so a three-character table loads three voices once
+  instead of once per line.
+- **The voice is pinned; the waveform is not.** Piper's VITS sampler is stochastic, so
+  the same line renders ~0.4 % different in length each run (measured: 459 vs 457
+  frames). Set `TTRPG_TTS_DETERMINISTIC=1` to pin the sampler and get byte-identical
+  audio for the same line — useful when caching pre-rendered lines, at the cost of
+  slightly flatter prosody (measured: identical 94208-byte output either way, versus
+  91136/91648 by default).
+
+```python
+from ttrpg_chatbots.tts import VoiceCast, load_voice_directory
+
+world = load_world("data/my_world")
+cast = VoiceCast(load_voice_directory("data/my_world"))
+player.enqueue(PcmFrameSource(cast.synthesize(text, world.character("brannoc"))))
+```
+
+### What Discord actually needs
+
+Discord pulls exactly 3840 bytes (960 samples × 2 channels × 16-bit) per 20 ms frame
+and expects `b""` to mean "done". `audio.to_discord_pcm()` is the only place that
+resamples and channel-converts; the last frame is padded with silence rather than
+shortened, and the player rejects any source that yields a frame of the wrong size
+instead of letting Discord fail later.
+
+### Engines
+
+| Engine | Notes |
+| --- | --- |
+| `piper` | Neural VITS voices, ~60 MB per voice, fetched once into the model cache. Default. |
+| `espeak-ng` | Zero-install fallback if the binary is on `PATH`; robotic, no download. |
+
+Engine choice is **priority, not measured speed** — unlike STT, where milliseconds
+decide, TTS engines differ mainly in voice quality. Override with `--engine` or
+`TTRPG_TTS_ENGINE`. Piper runs with `normalize_audio=False`: normalising pins the
+peak at 32767, and measured speech peaks near 22500 instead, leaving Discord's own
+gain some headroom.
+
+| Variable | Effect |
+| --- | --- |
+| `TTRPG_TTS_ENGINE` | force an engine |
+| `TTRPG_TTS_VOICE` | piper voice name (default `en_US-lessac-medium`) |
+| `TTRPG_TTS_SPEED` | piper length scale, 1.0 normal, must be in (0, 3] |
+| `TTRPG_TTS_VOLUME` | piper gain, must be in (0, 2] |
+| `TTRPG_TTS_DETERMINISTIC` | pin piper's sampler: byte-identical audio for the same line |
+| `TTRPG_TTS_MODEL_DIR` | where voices are cached |
+| `TTRPG_TTS_OFFLINE` | never download; engines without a local voice are skipped |
+| `TTRPG_TTS_ESPEAK` | path to an espeak-ng binary |
+
+Joining the channel and transmitting still needs `PyNaCl`, `davey` and libopus (see
+the voice plan above); this layer ends at "here are correctly sized frames".
+
 ## Test
 
 ```bash
@@ -216,8 +361,8 @@ malformed, and empty `.env` files; and garbage or out-of-range guild ids.
 ## Layout
 
 ```
-src/ttrpg_chatbots/   package source: cli.py, config.py, bot.py, stt/, reply/
-tests/                pytest suite: CLI, config, bot, stt, reply, secrets guard
+src/ttrpg_chatbots/   package source: cli.py, config.py, bot.py, stt/, reply/, audio/, tts/, voice/
+tests/                pytest suite: CLI, config, bot, stt, reply, audio, tts, voice, secrets guard
 examples/demo_world/  committed toy dataset; data/ and datasets/ are git-ignored
 .env.example          committed credential template; .env itself is ignored
 pyproject.toml        packaging, dependencies, entry points, pytest and ruff config

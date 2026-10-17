@@ -80,11 +80,18 @@ class ResponseTemplate:
 
 @dataclass(frozen=True)
 class Character:
-    """Who knows what: the tags a character is allowed to speak about."""
+    """A character: what it knows, what it *is*, and how it sounds.
+
+    ``known_tags`` gates knowledge -- a character may only speak about these.
+    ``tags`` describe the character itself (``role:scholar``, ``species:dwarf``) and
+    are what voice casting matches on. The two are deliberately separate: knowing
+    about relics and being a dwarf are different kinds of fact.
+    """
 
     id: str
     name: str
     known_tags: frozenset[str] = frozenset()
+    tags: frozenset[str] = frozenset()
     fallback_tag: str = "fallback"
     meta: Mapping[str, Any] = field(default_factory=dict)
 

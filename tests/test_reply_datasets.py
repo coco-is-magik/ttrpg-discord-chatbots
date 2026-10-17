@@ -187,6 +187,47 @@ def test_manifest_is_optional(tmp_path) -> None:
     assert load_world(tmp_path).name == tmp_path.name
 
 
+def test_character_tags_are_parsed(tmp_path) -> None:
+    _minimal(tmp_path)
+    _write(
+        tmp_path,
+        "characters.jsonl",
+        [{"id": "ann", "name": "Ann", "known_tags": ["t:one"], "tags": ["role:scout"]}],
+    )
+    assert load_world(tmp_path).characters[0].tags == frozenset({"role:scout"})
+
+
+def test_character_tags_default_to_empty(tmp_path) -> None:
+    _minimal(tmp_path)
+    assert load_world(tmp_path).characters[0].tags == frozenset()
+
+
+def test_character_tags_are_not_meta(tmp_path) -> None:
+    """``tags`` is a known field; anything else still lands in meta."""
+    _minimal(tmp_path)
+    _write(
+        tmp_path,
+        "characters.jsonl",
+        [
+            {
+                "id": "ann",
+                "name": "Ann",
+                "known_tags": ["t:one"],
+                "tags": ["role:scout"],
+                "voice_note": "cast later",
+            }
+        ],
+    )
+    character = load_world(tmp_path).characters[0]
+    assert character.tags == frozenset({"role:scout"})
+    assert character.meta == {"voice_note": "cast later"}
+
+
+def test_demo_characters_carry_identity_tags() -> None:
+    world = load_world(DEMO_WORLD)
+    assert world.character("brannoc").tags == frozenset({"role:scholar", "species:dwarf"})
+
+
 def test_broken_manifest_is_reported(tmp_path) -> None:
     _minimal(tmp_path)
     (tmp_path / "world.json").write_text("{nope", encoding="utf-8")

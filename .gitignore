@@ -25,6 +25,11 @@ data/
 datasets/
 *.jsonl.gz
 
+# Model weights (voices, ASR models) belong in the cache or a mounted volume.
+models/
+*.onnx
+*.onnx.json
+
 # Real credentials belong in the process environment or in a *_FILE secret
 # mount (Docker secrets, systemd LoadCredential). A local .env is a plain-text
 # development convenience only; it is read when no environment variable is set

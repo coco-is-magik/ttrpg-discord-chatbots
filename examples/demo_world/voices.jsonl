@@ -1,0 +1,9 @@
+# Voice casting. A rule names characters (id or display name), names character tags,
+# or is the default. Resolution: character > tags (most matches) > default.
+# Always pin `engine`: a voice name only means something inside one engine, so an
+# unpinned profile could sound different on a different box.
+{"id": "cast-scholar", "tags": ["role:scholar"], "engine": "piper", "voice": "en_GB-alan-medium", "speed": 0.95}
+{"id": "cast-guide", "tags": ["role:guide"], "engine": "piper", "voice": "en_US-lessac-medium", "speed": 1.05}
+{"id": "cast-tavernkeep", "tags": ["role:tavernkeep"], "engine": "piper", "voice": "en_US-lessac-medium", "speed": 1.0, "volume": 0.9}
+{"id": "cast-sable", "characters": ["sable"], "engine": "piper", "voice": "en_US-amy-medium", "speed": 1.1}
+{"id": "cast-default", "default": true, "engine": "piper", "voice": "en_US-lessac-medium"}
