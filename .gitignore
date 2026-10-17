@@ -1,0 +1,41 @@
+# Virtual environments
+.venv/
+venv/
+
+# Python build artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+
+# Editors
+.vscode/
+.idea/
+
+# --- Secrets: never commit these --------------------------------------------
+# Real credentials belong in the process environment or in a *_FILE secret
+# mount (Docker secrets, systemd LoadCredential). A local .env is a plain-text
+# development convenience only; it is read when no environment variable is set
+# and must never be committed. Only .env.example is tracked.
+.env
+.env.*
+!.env.example
+*.env
+secrets/
+*.secret
+*.token
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+credentials*.json
+*creds*.json
+*credentials*.json
+*secret*.json
+service-account*.json

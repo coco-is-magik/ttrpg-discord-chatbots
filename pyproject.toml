@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ttrpg-chatbots"
+version = "0.1.0"
+description = "TTRPG chatbots."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.12"
+dependencies = [
+    "discord.py>=2.7",
+    "python-dotenv>=1.2",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8.0"]
+stt = [
+    "numpy>=2.0",
+    "vosk>=0.3.45",
+    "faster-whisper>=1.2",
+    "sherpa-onnx>=1.13",
+]
+
+[project.scripts]
+ttrpg-chatbots = "ttrpg_chatbots.cli:main"
+ttrpg-chatbots-bot = "ttrpg_chatbots.bot:main"
+ttrpg-chatbots-stt = "ttrpg_chatbots.stt.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
