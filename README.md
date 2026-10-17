@@ -10,10 +10,26 @@ Python 3.12+ is required. A virtual environment is mandatory (no global installs
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install -e '.[test]'
+.venv/bin/python -m pip install -e '.[test,voice,tts]'
 ```
 
-Runtime dependencies: `discord.py`, `python-dotenv`. Dev dependencies: `pytest`.
+**Always install with `.venv/bin/python -m pip`, never `.venv/bin/pip`.** A virtualenv is
+not relocatable: if it is copied or moved, its `pip` wrapper, activation scripts and console
+scripts keep pointing at the old directory, so installs appear to succeed and land in the
+wrong place. `python -m pip` always uses the interpreter you named. If you ever suspect a
+stale environment, delete it and recreate it — `rm -rf .venv` — rather than repairing it;
+`tests/test_layout.py` fails the suite when an environment or a file points at another
+checkout.
+
+Runtime dependencies: `discord.py`, `python-dotenv`. Dev dependencies: `pytest`. Optional
+extras: `stt`, `tts`, `voice`, `reply`.
+
+Check the configuration without contacting Discord (validates the token format and reports
+whether voice can work):
+
+```bash
+.venv/bin/ttrpg-chatbots-bot --check
+```
 
 ## Run
 
@@ -68,6 +84,44 @@ starts, loads config, and is rejected by Discord with
 `*credentials*.json`, `*secret*.json`, and `service-account*.json`.
 `tests/test_secrets.py` fails the suite if a Discord-token-shaped string appears
 anywhere in the repository, or if any of those paths stops being git-ignored.
+
+### 4. Commands, and testing it yourself
+
+Start it with the convenience script at the project root — it validates the environment,
+refuses to run with a secret that git would commit, and gives you one way to stop it:
+
+```bash
+./start-bot.sh --check        # config + voice, no connection
+./start-bot.sh                # foreground; Ctrl-C stops it
+./start-bot.sh --background   # detached, logs to data/logs/bot.log
+./start-bot.sh --status       # is it running?
+./start-bot.sh --logs         # follow the log
+./start-bot.sh --stop         # stop the detached bot
+```
+
+Once it is running, the bot answers these slash commands:
+
+| Command | What it does |
+| --- | --- |
+| `/ping` | `Pong!` — proves the gateway and the command sync |
+| `/voices` | the cast table, plus whether voice is usable on this machine |
+| `/ask question:… character:… speak:true` | answer as a character; `speak` also says it aloud |
+| `/roll dice:3d6` / `/roll check:stealth character:sable` | dice and named checks, attributed |
+| `/join` / `/leave` | join your voice channel and hold a playback stream open |
+| `/say text:… character:…` | speak arbitrary text in that character's voice |
+| `/stop` | clear the queue mid-sentence |
+
+Voice needs `PyNaCl`, the DAVE library and a system `libopus`; the `voice` extra
+covers the first two, and `voice_readiness()` names whatever is missing.
+
+Discord's terms do not allow automated harnesses on real accounts, so the live bot
+is tested by hand. **[`docs/MANUAL_TESTING.md`](docs/MANUAL_TESTING.md)** is the
+script for that: creating the application, the invite URL, real credentials, and a
+step-by-step walkthrough with the expected output and a troubleshooting table.
+
+**Not wired yet:** the bot does not listen (no speech-to-text from Discord), the
+`character` package is not connected to any command, and there is no language model
+unless you configure one.
 
 ## Speech-to-text: measured engine selection
 

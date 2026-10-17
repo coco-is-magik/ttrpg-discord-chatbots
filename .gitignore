@@ -24,6 +24,7 @@ dist/
 data/
 datasets/
 *.jsonl.gz
+custom_assets/
 
 # Model weights (voices, ASR models) belong in the cache or a mounted volume.
 models/

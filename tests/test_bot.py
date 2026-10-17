@@ -74,6 +74,35 @@ def _record_sync(monkeypatch, bot) -> list:
     return calls
 
 
+def test_setup_hook_publishes_every_command_to_the_guild(monkeypatch) -> None:
+    """Regression: sync(guild=...) uploads only guild-registered commands.
+
+    Without ``copy_global_to`` the payload was empty, so Discord received nothing and the
+    bot looked online with no commands at all.
+    """
+
+    async def build() -> list[str]:
+        bot = create_bot(guild_id=GUILD_ID)
+        _record_sync(monkeypatch, bot)
+        try:
+            await bot.setup_hook()
+            published = bot.tree.get_commands(guild=discord.Object(id=GUILD_ID))
+            return sorted(command.name for command in published)
+        finally:
+            await bot.close()
+
+    assert asyncio.run(build()) == [
+        "ask",
+        "join",
+        "leave",
+        "ping",
+        "roll",
+        "say",
+        "stop",
+        "voices",
+    ]
+
+
 def test_setup_hook_syncs_globally_without_a_guild_id(monkeypatch) -> None:
     async def build() -> None:
         bot = create_bot()
@@ -129,10 +158,38 @@ def test_main_with_a_dummy_token_delegates_to_run_bot(monkeypatch, tmp_path) -> 
 
     seen = []
     monkeypatch.setattr("ttrpg_chatbots.bot.run_bot", seen.append)
-    main()
+    main([])
 
     assert seen == [DiscordConfig(token=DUMMY_TOKEN, guild_id=None)]
     assert DUMMY_TOKEN not in repr(seen[0])
+
+
+def test_check_mode_reports_configuration_without_connecting(
+    monkeypatch, tmp_path, capsys
+) -> None:
+    monkeypatch.setenv(TOKEN_ENV_VAR, DUMMY_TOKEN)
+    for var in (TOKEN_FILE_ENV_VAR, GUILD_ID_ENV_VAR):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.chdir(tmp_path)  # hide any developer .env
+
+    def forbid(*args, **kwargs):
+        raise AssertionError("--check must not connect")
+
+    monkeypatch.setattr("ttrpg_chatbots.bot.run_bot", forbid)
+    main(["--check"])
+
+    out = capsys.readouterr().out
+    assert "token: configured" in out
+    assert DUMMY_TOKEN not in out  # the token itself is never printed
+    assert "not connecting" in out
+
+
+def test_version_does_not_need_a_token(monkeypatch, tmp_path, capsys) -> None:
+    for var in (TOKEN_ENV_VAR, TOKEN_FILE_ENV_VAR):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.chdir(tmp_path)
+    main(["--version"])
+    assert "ttrpg-chatbots-bot" in capsys.readouterr().out
 
 
 def test_main_exits_before_connecting_when_no_token_is_configured(monkeypatch, tmp_path) -> None:
@@ -146,5 +203,5 @@ def test_main_exits_before_connecting_when_no_token_is_configured(monkeypatch, t
     monkeypatch.setattr("ttrpg_chatbots.bot.run_bot", forbid_connecting)
 
     with pytest.raises(SystemExit) as exit_info:
-        main()
+        main([])
     assert TOKEN_ENV_VAR in str(exit_info.value)

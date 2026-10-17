@@ -28,14 +28,27 @@ SKIPPED_DIRS = {
     "dist",
 }
 
-SKIPPED_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".pdf", ".whl", ".zip", ".tar", ".gz"}
+SKIPPED_SUFFIXES = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".pdf",
+    ".whl",
+    ".zip",
+    ".tar",
+    ".gz",
+    ".xlsx",
+    ".xls",
+    ".onnx",
+}
 
 IGNORED_SECRET_PATHS = (".env", ".env.local", "secrets/discord_token", "bot.pem", "creds.json")
 
 
-def _repository_files():
+def _repository_files(root: Path = REPO_ROOT):
     """Yield repository files worth scanning, pruning dependency directories."""
-    for directory, dirnames, filenames in os.walk(REPO_ROOT):
+    for directory, dirnames, filenames in os.walk(root):
         dirnames[:] = sorted(
             name for name in dirnames if name not in SKIPPED_DIRS and not name.endswith(".egg-info")
         )
@@ -45,22 +58,48 @@ def _repository_files():
                 yield path
 
 
-def _git(*args: str) -> subprocess.CompletedProcess[str]:
+def _git(
+    *args: str, root: Path = REPO_ROOT, stdin_text: str | None = None
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["git", "-C", str(REPO_ROOT), *args], capture_output=True, text=True, check=False
+        ["git", "-C", str(root), *args],
+        input=stdin_text,
+        capture_output=True,
+        text=True,
+        check=False,
     )
 
 
-def _offenders(pattern: re.Pattern[str]) -> list[str]:
-    """Repository files whose text matches ``pattern``."""
+def _ignored_paths(root: Path, paths: list[Path]) -> set[Path]:
+    """Which of ``paths`` git ignores, in one call.
+
+    Ignored files are local state, not repository content: ``.env`` is *supposed* to hold a
+    real token, and a test that refuses it would fail for every correctly configured
+    developer. The rule this enforces is about what could be committed.
+    """
+    if not (root / ".git").exists() or not paths:
+        return set()
+    payload = "\n".join(str(path.relative_to(root)) for path in paths)
+    result = _git("check-ignore", "--stdin", root=root, stdin_text=payload)
+    if result.returncode not in (0, 1):  # 0 = some ignored, 1 = none ignored
+        return set()
+    return {root / line.strip() for line in result.stdout.splitlines() if line.strip()}
+
+
+def _offenders(pattern: re.Pattern[str], root: Path = REPO_ROOT) -> list[str]:
+    """Files that git would commit whose text matches ``pattern``."""
+    files = list(_repository_files(root))
+    ignored = _ignored_paths(root, files)
     found = []
-    for path in _repository_files():
+    for path in files:
+        if path in ignored:
+            continue
         try:
             text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
         if pattern.search(text):
-            found.append(str(path.relative_to(REPO_ROOT)))
+            found.append(str(path.relative_to(root)))
     return found
 
 
@@ -72,6 +111,22 @@ def test_no_token_like_string_is_stored_in_the_repository() -> None:
 def test_no_api_key_like_string_is_stored_in_the_repository() -> None:
     offenders = _offenders(API_KEY_PATTERN)
     assert offenders == [], f"API-key-like strings found in: {offenders}"
+
+
+def test_a_token_in_a_tracked_file_is_still_caught(tmp_path: Path) -> None:
+    """The ignore rule must not blind the scan: only ignored files are exempt."""
+    root = tmp_path / "repo"
+    root.mkdir()
+    subprocess.run(["git", "init", "-q", str(root)], check=False)
+    (root / ".gitignore").write_text(".env\n", encoding="utf-8")
+    # Two files, same secret-shaped content, one ignored and one not. The token is built
+    # from parts so this test file does not itself contain a token-shaped literal.
+    token = ".".join(("MTU2MTA1NDYzNzc2MTQ5OTI4Ng", "GaBcDe", "a" * 27))
+    (root / ".env").write_text(f"DISCORD_TOKEN={token}\n", encoding="utf-8")
+    (root / "notes.txt").write_text(f"the token is {token}\n", encoding="utf-8")
+
+    found = _offenders(TOKEN_PATTERN, root=root)
+    assert found == ["notes.txt"]
 
 
 @pytest.mark.parametrize("name", IGNORED_SECRET_PATHS)

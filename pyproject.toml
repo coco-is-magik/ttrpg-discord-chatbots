@@ -26,6 +26,9 @@ stt = [
 reply = ["zstandard>=0.25"]
 # On-box neural text to speech. The playback layer needs no extra dependency.
 tts = ["piper-tts>=1.8"]
+# Joining a voice channel: encryption and the DAVE protocol. libopus is a system
+# package (e.g. `apt install libopus0`), not a Python one.
+voice = ["pynacl>=1.5", "davey>=0.1.7"]
 
 [project.scripts]
 ttrpg-chatbots = "ttrpg_chatbots.cli:main"
@@ -36,6 +39,8 @@ ttrpg-chatbots-tts = "ttrpg_chatbots.tts.cli:main"
 ttrpg-chatbots-voice = "ttrpg_chatbots.voice.cli:main"
 ttrpg-chatbots-llm = "ttrpg_chatbots.llm.cli:main"
 ttrpg-chatbots-dice = "ttrpg_chatbots.dice.cli:main"
+ttrpg-chatbots-sheet = "ttrpg_chatbots.sheets.cli:main"
+ttrpg-chatbots-character = "ttrpg_chatbots.character.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
