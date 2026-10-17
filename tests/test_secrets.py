@@ -12,6 +12,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 # Real Discord bot tokens are three dot-separated base64url segments.
 TOKEN_PATTERN = re.compile(r"\b[A-Za-z0-9_-]{23,28}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27,40}\b")
 
+# OpenAI-style secret keys: "sk-" followed by a long run of the key alphabet.
+# Deliberately anchorless-hyphen-free so placeholders like "sk-invalid…" do not match.
+API_KEY_PATTERN = re.compile(r"\bsk-[A-Za-z0-9]{32,}\b")
+
 SKIPPED_DIRS = {
     ".git",
     ".venv",
@@ -47,16 +51,27 @@ def _git(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_no_token_like_string_is_stored_in_the_repository() -> None:
-    offenders = []
+def _offenders(pattern: re.Pattern[str]) -> list[str]:
+    """Repository files whose text matches ``pattern``."""
+    found = []
     for path in _repository_files():
         try:
             text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
-        if TOKEN_PATTERN.search(text):
-            offenders.append(str(path.relative_to(REPO_ROOT)))
+        if pattern.search(text):
+            found.append(str(path.relative_to(REPO_ROOT)))
+    return found
+
+
+def test_no_token_like_string_is_stored_in_the_repository() -> None:
+    offenders = _offenders(TOKEN_PATTERN)
     assert offenders == [], f"token-like strings found in: {offenders}"
+
+
+def test_no_api_key_like_string_is_stored_in_the_repository() -> None:
+    offenders = _offenders(API_KEY_PATTERN)
+    assert offenders == [], f"API-key-like strings found in: {offenders}"
 
 
 @pytest.mark.parametrize("name", IGNORED_SECRET_PATHS)

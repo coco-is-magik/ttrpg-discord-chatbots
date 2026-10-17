@@ -15,10 +15,19 @@ import sys
 import time
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 from ttrpg_chatbots.audio.pcm import DISCORD_FRAME_BYTES
 from ttrpg_chatbots.audio.wav import write_wav
+from ttrpg_chatbots.config import DEFAULT_ENV_FILE
+from ttrpg_chatbots.llm import build_backend, load_llm_config
+from ttrpg_chatbots.llm.fallback import FallbackResponder
+from ttrpg_chatbots.llm.prompt import persona_from
+from ttrpg_chatbots.llm.responder import LlmResponder
+from ttrpg_chatbots.llm.types import LlmError
 from ttrpg_chatbots.reply.datasets import load_world
 from ttrpg_chatbots.reply.replier import Replier
+from ttrpg_chatbots.reply.responder import ClassifierResponder
 from ttrpg_chatbots.reply.types import ReplyError, World
 from ttrpg_chatbots.tts import (
     SynthesisError,
@@ -45,7 +54,12 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--list-voices", action="store_true", help="show which voice each character gets"
     )
     parser.add_argument("--say", metavar="TEXT", help="text to speak")
-    parser.add_argument("--ask", metavar="TEXT", help="ask the reply engine, then speak its answer")
+    parser.add_argument("--ask", metavar="TEXT", help="ask for an answer, then speak it")
+    parser.add_argument(
+        "--llm",
+        action="store_true",
+        help="answer with the LLM first, falling back to the classifier",
+    )
     parser.add_argument("--character", help="character id or name for --ask")
     parser.add_argument("--data", type=Path, default=DEFAULT_DATA, help="dataset for --ask")
     parser.add_argument("--speaker", help="who is being answered; fills {speaker}")
@@ -71,6 +85,10 @@ def _report(payload: dict, *, as_json: bool) -> int:
         return 0
     if payload.get("character"):
         print(f"{payload['character']}: {payload['text']}")
+    if payload.get("answerer"):
+        print(f"answered by: {payload['answerer']}")
+    if payload.get("degraded"):
+        print(f"NOTE answered by the fallback: {payload['degraded']}")
     if payload.get("engine"):
         print(f"engine: {payload['engine']}")
     if payload.get("voice"):
@@ -134,6 +152,27 @@ def _availability(*, as_json: bool) -> int:
     return 0
 
 
+def _answer(args: argparse.Namespace, classifier, character):
+    """Answer with the LLM when asked to, otherwise with the classifier.
+
+    The LLM half is opt-in: a bot that silently opens a socket on every question is a
+    surprise, and the classifier is already a complete answerer.
+    """
+    if not args.llm:
+        return classifier.answer(args.ask)
+    if DEFAULT_ENV_FILE.exists():
+        load_dotenv(DEFAULT_ENV_FILE, override=False)
+    config = load_llm_config()
+    if not config.enabled:
+        raise ReplyError("--llm was given but the LLM is switched off (TTRPG_LLM_BACKEND)")
+    primary = LlmResponder(
+        lambda: build_backend(config),
+        persona_from(character),
+        name=f"llm:{config.backend}",
+    )
+    return FallbackResponder(primary, classifier).answer(args.ask)
+
+
 def main(argv: list[str] | None = None) -> int:
     """Entry point for the ``ttrpg-chatbots-voice`` console script."""
     args = _parse_args(argv)
@@ -183,17 +222,19 @@ def main(argv: list[str] | None = None) -> int:
         character = None
         profile = None
         world = None
+        answerer = None
+        degraded = None
         if args.ask or args.character:
             world = load_world(args.data)
             if args.ask:
                 replier = Replier(world)
-                reply = replier.reply(
-                    args.ask,
-                    args.character or world.characters[0].id,
-                    speaker=args.speaker,
-                )
-                text = reply.text
-                character = world.character(reply.character)
+                who = world.character(args.character or world.characters[0].id)
+                classifier = ClassifierResponder(replier, who.id, speaker=args.speaker)
+                answer = _answer(args, classifier, who)
+                text = answer.text
+                answerer = answer.source
+                degraded = answer.fallback_reason
+                character = world.character(answer.detail.get("character") or who.id)
             else:
                 character = world.character(args.character or world.characters[0].id)
 
@@ -214,6 +255,8 @@ def main(argv: list[str] | None = None) -> int:
         frames = _drain(player)
         payload = {
             "source": "ask" if args.ask else "say",
+            "answerer": answerer,
+            "degraded": degraded,
             "text": text,
             "character": character.name if character is not None else None,
             "engine": engine_label,
@@ -225,7 +268,7 @@ def main(argv: list[str] | None = None) -> int:
             "out": str(out) if out else None,
         }
         return _report(payload, as_json=args.json)
-    except (SynthesisError, ReplyError, ValueError, OSError) as error:
+    except (SynthesisError, ReplyError, LlmError, ValueError, OSError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
     finally:

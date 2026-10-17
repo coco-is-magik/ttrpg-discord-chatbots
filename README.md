@@ -345,6 +345,114 @@ gain some headroom.
 Joining the channel and transmitting still needs `PyNaCl`, `davey` and libopus (see
 the voice plan above); this layer ends at "here are correctly sized frames".
 
+## Language models: local, OpenAI or ClinePass
+
+The bot can answer with a language model. The compression classifier stays in the loop
+as the fallback, so a dead model degrades the wit, not the session.
+
+| Backend | Speaks | Needs | Default endpoint |
+| --- | --- | --- | --- |
+| `local` | Chat Completions | nothing | `http://127.0.0.1:5000/v1` (text-generation-webui) |
+| `openai` | Responses API | `OPENAI_API_KEY` | `https://api.openai.com/v1` |
+| `clinepass` | Chat Completions | `CLINE_API_KEY` | `https://api.cline.bot/api/v1` |
+
+No HTTP library was added: the client is `urllib` behind a small `Transport` protocol,
+so this whole layer is testable without opening a socket.
+
+```bash
+.venv/bin/ttrpg-chatbots-llm --show-config            # which backend, and why
+.venv/bin/ttrpg-chatbots-llm --ask "who holds the docks?" --character brannoc
+.venv/bin/ttrpg-chatbots-llm --ask "..." --ground     # hand the model matched facts
+
+# The same choice inside the voice pipeline: answer, then speak it in character
+.venv/bin/ttrpg-chatbots-voice --ask "who holds the docks?" --character brannoc --llm
+```
+
+`--llm` is opt-in on the voice CLI: without it, no socket is opened and the classifier
+answers directly. With it, the model answers and the classifier catches the failure,
+which is how the live path behaves:
+
+```
+Brannoc the Archivist: The Tidewrights' Guild controls every dry-dock in the reach…
+answered by: reply:brannoc
+NOTE answered by the fallback: local: backend unreachable
+engine: piper
+voice: piper:en_GB-alan-medium speed=0.95 volume=1
+frames: 446 (8.92 s of audio)
+```
+
+### Choosing a backend
+
+`TTRPG_LLM_BACKEND` takes `local`, `openai`, `clinepass`, `auto` or `off`. `auto` is the
+default: it uses `openai` if its key is present, then `clinepass`, and otherwise the
+local server, which needs no key. Set the variable to break a tie.
+
+| variable | meaning |
+| --- | --- |
+| `TTRPG_LLM_BACKEND` | `local`, `openai`, `clinepass`, `auto`, `off` |
+| `TTRPG_LLM_BASE_URL` | full base URL, e.g. another machine's server |
+| `TTRPG_LLM_PORT` | local port only (text-generation-webui's default is 5000) |
+| `TTRPG_LLM_MODEL` | model id or ClinePass slug (`cline-pass/qwen3.7-max`) |
+| `TTRPG_LLM_WIRE` | `chat` (Chat Completions) or `responses` (Responses API) |
+| `TTRPG_LLM_TIMEOUT` | seconds, default 30 |
+| `TTRPG_LLM_MAX_TOKENS` | default 300; an in-character line is short |
+| `TTRPG_LLM_TEMPERATURE` | default 0.7; `0` is allowed (greedy) |
+| `TTRPG_LLM_API_KEY` | keys a keyed backend without naming the vendor |
+| `OPENAI_API_KEY`, `CLINE_API_KEY` | vendor keys, used by `auto` detection |
+| `*_FILE` suffix | read the secret from a file (beats the plain variable) |
+
+Secrets follow the Discord rule: a `*_FILE` variable wins over a plain one, the key
+never appears in `repr`, a log line or an error message, and a server that echoes the key
+back in its error body gets `***` instead.
+
+### Why two wire formats
+
+Codex models are not served by `/chat/completions`: `gpt-5-codex` answers 404 there and
+is only reachable through the Responses API, so `openai` defaults to `wire=responses`.
+Chat-completions servers (text-generation-webui, Ollama, llama.cpp, LM Studio, ClinePass)
+use `wire=chat`.
+
+Two provider quirks are handled rather than assumed away. ClinePass wraps non-streaming
+responses in a `data` envelope, so both the wrapped and plain bodies decode. Reasoning
+models reject `temperature`, so the Responses payload sends `instructions` + `input` and
+no sampling temperature at all.
+
+### Falling back to the classifier
+
+`FallbackResponder` wraps the model and answers with the classifier when the model
+fails. Only `LlmError` triggers it, so a bug in our own code is never hidden behind a
+template. Every fallback is logged at WARNING with the cause attached; the traceback is
+attached once per distinct cause, because in a live game an unreachable model fails on
+every question and a traceback per reply would bury everything else.
+
+```
+$ OPENAI_API_KEY=sk-invalid… ttrpg-chatbots-llm --ask "what is the sunken crown?"
+WARNING ttrpg_chatbots.llm: llm:openai is unavailable (openai (HTTP 401):
+authentication failed); falling back to reply:brannoc. Cause: openai rejected the
+credentials (HTTP 401: Incorrect API key provided)
+Brannoc the Archivist:
+The Sunken Crown? Aye. The sunken crown is a tide-iron circlet lost when the
+Saltreach fleet broke at Greyfall.
+source: reply:brannoc
+NOTE answered by the fallback: openai (HTTP 401): authentication failed
+```
+
+Exit status is 0: the table asked a question and got an answer. `--no-fallback` turns
+the same situation into exit 2, and `--json` reports `degraded`, `fallback_reason` and
+the source on every path.
+
+The backend is built on first use, not at startup, so a missing key or an unreachable
+host fails inside the fallback wrapper instead of aborting, and nothing is connected for
+a reply the classifier ends up handling.
+
+### Grounding
+
+`--ground` passes the model the facts the classifier judged most relevant *and* that the
+character is allowed to know, so the tagging system still governs what a persona can say.
+It reuses the same ranking, so nothing new is invented. Off by default: a model that only
+talks about what the dataset contains is a different product decision.
+
+
 ## Test
 
 ```bash
@@ -361,8 +469,10 @@ malformed, and empty `.env` files; and garbage or out-of-range guild ids.
 ## Layout
 
 ```
-src/ttrpg_chatbots/   package source: cli.py, config.py, bot.py, stt/, reply/, audio/, tts/, voice/
-tests/                pytest suite: CLI, config, bot, stt, reply, audio, tts, voice, secrets guard
+src/ttrpg_chatbots/   package source: cli.py, config.py, bot.py, respond.py,
+                      stt/, reply/, llm/, audio/, tts/, voice/
+tests/                pytest suite: CLI, config, bot, stt, reply, llm, audio, tts,
+                      voice, secrets guard
 examples/demo_world/  committed toy dataset; data/ and datasets/ are git-ignored
 .env.example          committed credential template; .env itself is ignored
 pyproject.toml        packaging, dependencies, entry points, pytest and ruff config

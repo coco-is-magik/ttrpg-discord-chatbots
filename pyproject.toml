@@ -34,6 +34,7 @@ ttrpg-chatbots-stt = "ttrpg_chatbots.stt.cli:main"
 ttrpg-chatbots-reply = "ttrpg_chatbots.reply.cli:main"
 ttrpg-chatbots-tts = "ttrpg_chatbots.tts.cli:main"
 ttrpg-chatbots-voice = "ttrpg_chatbots.voice.cli:main"
+ttrpg-chatbots-llm = "ttrpg_chatbots.llm.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
