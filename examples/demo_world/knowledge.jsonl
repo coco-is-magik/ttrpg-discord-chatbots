@@ -1,0 +1,15 @@
+# One tagged fact per line. `slots` are the madlib vocabulary that goes with the
+# fact; they are also searched, so "the Sunken Crown" matches from either field.
+{"id": "k-relic-crown", "text": "The Sunken Crown is a tide-iron circlet lost when the Saltreach fleet broke at Greyfall.", "tags": ["lore:relic"], "slots": {"subject": "the Sunken Crown", "place": "Greyfall"}}
+{"id": "k-relic-lantern", "text": "The Keeper's Lantern burns brine-oil and never gutters in rain.", "tags": ["lore:relic"], "slots": {"subject": "the Keeper's Lantern"}}
+{"id": "k-guild-drydocks", "text": "The Tidewrights' Guild controls every dry-dock in the reach and charges in salt-marks.", "tags": ["lore:guild"], "slots": {"subject": "the Tidewrights' Guild"}}
+{"id": "k-guild-ledgers", "text": "Guild ledgers are kept in triplicate so no single fire can erase a debt.", "tags": ["lore:guild"], "slots": {"subject": "the guild ledgers"}}
+{"id": "k-history-greyfall", "text": "At Greyfall the fleet broke on the reef during a moonless squall.", "tags": ["lore:history", "lore:geography"], "slots": {"place": "Greyfall"}}
+{"id": "k-geo-saltreach", "text": "The Saltreach is a chain of tidal islands joined by rope bridges and causeways.", "tags": ["lore:geography"], "slots": {"place": "the Saltreach"}}
+{"id": "k-geo-brinemire", "text": "South of the causeways lies the Brine Mire, where the tide never fully leaves.", "tags": ["lore:geography"], "slots": {"place": "the Brine Mire"}}
+{"id": "k-harbor-longquay", "text": "The Long Quay is the only deep-water berth in the reach.", "tags": ["lore:harbor"], "slots": {"place": "the Long Quay"}}
+{"id": "k-harbor-purse", "text": "Quay cutpurses work the unloading bells, when every hand is busy with a rope.", "tags": ["lore:harbor"], "slots": {"place": "the Long Quay"}}
+{"id": "k-ritual-turningtide", "text": "The Turning Tide rite is spoken at the ebb to ask the water for a fair crossing.", "tags": ["lore:ritual"], "slots": {"subject": "the Turning Tide rite"}}
+{"id": "k-rumour-wreckbell", "text": "Sailors say the wreck off the reef still rings its bell on foggy nights.", "tags": ["lore:rumour"], "slots": {"subject": "the wreck bell"}}
+{"id": "k-rumour-rope", "text": "Word in the tavern is the harbour council is buying up rope.", "tags": ["lore:rumour"], "slots": {"subject": "the harbour council"}}
+{"id": "k-weather-fog", "text": "Fog rolls in with the second bell and hides the reef until dawn.", "tags": ["lore:geography", "lore:rumour"]}

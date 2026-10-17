@@ -17,7 +17,14 @@ dist/
 .vscode/
 .idea/
 
-# --- Secrets: never commit these --------------------------------------------
+# --- Datasets -----------------------------------------------------------------
+# The real knowledge / in-character response corpora are large and machine
+# produced, so they live outside git. Only examples/ (tiny demo world) and
+# tests/fixtures/ are tracked; point --data at data/ on a deployed box.
+data/
+datasets/
+*.jsonl.gz
+
 # Real credentials belong in the process environment or in a *_FILE secret
 # mount (Docker secrets, systemd LoadCredential). A local .env is a plain-text
 # development convenience only; it is read when no environment variable is set

@@ -122,6 +122,84 @@ voice data vendored, no network. It measures speed, not accuracy — check accur
 with real recordings through `--transcribe`. Only the `stt` extra is needed at
 runtime, so the core install stays dependency-free.
 
+## In-character replies: compression classification (no LLM)
+
+`ttrpg-chatbots-reply` answers from tagged data only: text is ranked against the
+knowledge base with Normalised Compression Distance (no model, no training, no
+network), gated by the tags a character is allowed to know, then rendered through
+in-character madlib templates.
+
+```bash
+.venv/bin/pip install -e '.[reply]'   # optional zstd; the engine itself is stdlib-only
+.venv/bin/ttrpg-chatbots-reply --validate                    # dataset check + who-knows-what
+.venv/bin/ttrpg-chatbots-reply --ask "what is the sunken crown?" --character brannoc
+.venv/bin/ttrpg-chatbots-reply --classify "what is the sunken crown?"
+.venv/bin/ttrpg-chatbots-reply --ask "..." --compressor lzma --top-k 3 --json
+```
+
+```
+$ ttrpg-chatbots-reply --ask "what is the sunken crown?" --character brannoc --speaker Tav
+Brannoc the Archivist [lore:relic via k-relic-crown, d=0.682]:
+The Sunken Crown? Aye. The Sunken Crown is a tide-iron circlet lost when the Saltreach fleet broke at Greyfall.
+
+$ ttrpg-chatbots-reply --ask "what is the sunken crown?" --character orla --speaker Tav
+Orla the Tavernkeep [no knowledge, d=0.682 (deflected)]:
+I only know what is said over a cup, Tav.
+```
+
+### How classification works
+
+`ncd(x, y) = 2·C(xy) / (C(x) + C(y)) - 1`, where `C` is a compressed length. Every
+knowledge item is measured against the query, the best distances fold into per-tag
+scores, and the character picks the best tag **it knows**. Two decisions were made
+by measurement, and both are recorded next to the code:
+
+- **Headerless deflate** is the default compressor: gzip's constant 18-byte header
+  is a large fraction of a short question (13/14 vs 12/14 on the demo questions).
+- **Sum normalisation, not `max`**: the classic `(C(xy)-min)/max` form lets a long
+  item win by accident (13/14 vs 9/14). Ranking is per item; concatenating each tag
+  into one prototype measured far worse (2/10), because a short question is
+  swamped by the prototype.
+
+Compressors: `deflate` (default), `gzip`, `zlib`, `bz2`, `lzma`, plus `zstd` when
+the `reply` extra is installed.
+
+### Datasets
+
+`data/` and `datasets/` are git-ignored (they will be large).
+`examples/demo_world/` is a committed toy world, used by the tests and the demo
+above. Three JSONL files plus an optional manifest:
+
+| File | One record per line |
+| --- | --- |
+| `characters.jsonl` | `id`, `name`, `known_tags`, optional `fallback_tag` |
+| `knowledge.jsonl` | `id`, `text`, `tags`, optional `slots` |
+| `responses.jsonl` | `id`, `character` (id, name, or `*`), `tags`, `template` |
+| `world.json` | optional `name` / `schema_version` |
+
+`slots` is the madlib vocabulary for a fact, and it is searched too, so "the
+Sunken Crown" matches from either field. `#` comments and blank lines are allowed.
+Unknown fields are preserved in `meta`, so the file format can grow without code
+changes; the loaders are split into `read_jsonl` + `*_from_records`, so a future
+CSV or SQLite source only has to produce records.
+
+### Templates
+
+Fillable slots: `{character}`, `{speaker}`, `{topic}`, `{fact}`, and any key from
+the matched item's `slots`. A template whose slots cannot all be filled is skipped
+rather than shown half-empty, and slot values containing braces are rejected so
+dataset content cannot inject placeholders. `{{` / `}}` are literal braces.
+
+From code:
+
+```python
+from ttrpg_chatbots.reply import Replier, load_world
+
+replier = Replier(load_world("data/my_world"))
+reply = replier.reply("who controls the dry docks?", "brannoc", speaker="Tav")
+print(reply.text, reply.tag, reply.knowledge_id, reply.known)
+```
+
 ## Test
 
 ```bash
@@ -138,8 +216,9 @@ malformed, and empty `.env` files; and garbage or out-of-range guild ids.
 ## Layout
 
 ```
-src/ttrpg_chatbots/   package source: cli.py, config.py, bot.py, stt/
-tests/                pytest suite: CLI, config, bot, stt, secrets guard
+src/ttrpg_chatbots/   package source: cli.py, config.py, bot.py, stt/, reply/
+tests/                pytest suite: CLI, config, bot, stt, reply, secrets guard
+examples/demo_world/  committed toy dataset; data/ and datasets/ are git-ignored
 .env.example          committed credential template; .env itself is ignored
 pyproject.toml        packaging, dependencies, entry points, pytest and ruff config
 ```

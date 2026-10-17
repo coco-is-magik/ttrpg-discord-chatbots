@@ -22,11 +22,14 @@ stt = [
     "faster-whisper>=1.2",
     "sherpa-onnx>=1.13",
 ]
+# Optional: only adds the zstd compressor. The reply engine itself is stdlib-only.
+reply = ["zstandard>=0.25"]
 
 [project.scripts]
 ttrpg-chatbots = "ttrpg_chatbots.cli:main"
 ttrpg-chatbots-bot = "ttrpg_chatbots.bot:main"
 ttrpg-chatbots-stt = "ttrpg_chatbots.stt.cli:main"
+ttrpg-chatbots-reply = "ttrpg_chatbots.reply.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

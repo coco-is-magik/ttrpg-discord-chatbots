@@ -1,0 +1,23 @@
+# In-character responses. `template` is a madlib: {character}, {speaker}, {topic},
+# {fact} and any key from the matched knowledge item's `slots` are fillable.
+# A template whose slots cannot all be filled is skipped, never half-rendered.
+{"id": "r-brannoc-relic-1", "character": "brannoc", "tags": ["lore:relic"], "template": "{subject}? Aye. {fact}"}
+{"id": "r-brannoc-relic-2", "character": "brannoc", "tags": ["lore:relic"], "template": "{fact} I have copied the account twice, {speaker}, and both copies agree."}
+{"id": "r-brannoc-guild-1", "character": "brannoc", "tags": ["lore:guild"], "template": "{fact} They count salt-marks the way other folk count breaths."}
+{"id": "r-brannoc-guild-2", "character": "brannoc", "tags": ["lore:guild"], "template": "The guild? {fact} Ask them for credit and they will ask your name twice."}
+{"id": "r-brannoc-history-1", "character": "brannoc", "tags": ["lore:history"], "template": "That is old ground. {fact}"}
+{"id": "r-brannoc-history-2", "character": "brannoc", "tags": ["lore:history"], "template": "{fact} My grandfather lost a boot there and never spoke of it again."}
+{"id": "r-brannoc-fallback-1", "character": "brannoc", "tags": ["fallback"], "template": "That is not in my ledgers, {speaker}. I will not invent it."}
+{"id": "r-brannoc-fallback-2", "character": "brannoc", "tags": ["fallback"], "template": "I keep to what is written, and that is not written."}
+{"id": "r-sable-geo-1", "character": "sable", "tags": ["lore:geography"], "template": "{fact} I can walk you there by the tide, not the road."}
+{"id": "r-sable-geo-2", "character": "sable", "tags": ["lore:geography"], "template": "You mean {place}? {fact}"}
+{"id": "r-sable-harbor-1", "character": "sable", "tags": ["lore:harbor"], "template": "{fact} Keep your purse shut on the quay."}
+{"id": "r-sable-ritual-1", "character": "sable", "tags": ["lore:ritual"], "template": "{fact} Say it at the ebb, not before."}
+{"id": "r-sable-fallback-1", "character": "sable", "tags": ["fallback"], "template": "Not my water, {speaker}. Ask Brannoc."}
+{"id": "r-sable-fallback-2", "character": "sable", "tags": ["fallback"], "template": "I have not walked that ground. I will not guess at it."}
+{"id": "r-orla-rumour-1", "character": "orla", "tags": ["lore:rumour"], "template": "{fact} You did not hear that from me."}
+{"id": "r-orla-rumour-2", "character": "orla", "tags": ["lore:rumour"], "template": "{fact} That is the talk, anyway."}
+{"id": "r-orla-harbor-1", "character": "orla", "tags": ["lore:harbor"], "template": "{fact} I water the ale down there myself."}
+{"id": "r-orla-fallback-1", "character": "orla", "tags": ["fallback"], "template": "I only know what is said over a cup, {speaker}."}
+{"id": "r-orla-fallback-2", "character": "orla", "tags": ["fallback"], "template": "Ask someone who reads. I only pour."}
+{"id": "r-any-fallback-1", "character": "*", "tags": ["fallback"], "template": "{character} has nothing to say about that."}
