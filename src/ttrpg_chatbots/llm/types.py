@@ -10,7 +10,31 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
-ROLES = ("system", "user", "assistant")
+ROLES = ("system", "user", "assistant", "tool")
+
+
+@dataclass(frozen=True)
+class ToolCall:
+    """A tool the model asked to run, in provider-neutral form.
+
+    ``arguments`` stays a JSON *string*: that is what every provider sends, it is what
+    gets echoed back verbatim on the chat wire, and parsing is the executor's job so a
+    malformed call can be reported to the model instead of crashing.
+    """
+
+    id: str
+    name: str
+    arguments: str = "{}"
+
+    def __post_init__(self) -> None:
+        if not self.id.strip():
+            raise ValueError("tool call id must not be empty")
+        if not self.name.strip():
+            raise ValueError("tool call name must not be empty")
+
+    def as_dict(self) -> dict[str, str]:
+        return {"id": self.id, "name": self.name, "arguments": self.arguments}
+
 
 
 class LlmError(RuntimeError):
@@ -55,16 +79,28 @@ class LlmProtocolError(LlmError):
 
 @dataclass(frozen=True)
 class ChatMessage:
-    """One turn of a conversation, in the shape every chat API expects."""
+    """One turn of a conversation, in the shape every chat API expects.
+
+    ``tool_calls`` marks an assistant turn that asked for tools (its text is usually
+    empty); ``tool_call_id`` marks the ``tool`` turn that answers one. Two wires express
+    these differently, so the neutral form lives here and each payload builder translates.
+    """
 
     role: str
-    content: str
+    content: str = ""
+    tool_calls: tuple[ToolCall, ...] = ()
+    tool_call_id: str = ""
+    name: str = ""
 
     def __post_init__(self) -> None:
         if self.role not in ROLES:
             raise ValueError(f"unknown message role {self.role!r}; expected one of {ROLES}")
-        if not self.content.strip():
+        if not self.content.strip() and not self.tool_calls:
             raise ValueError(f"{self.role} message must not be empty")
+        if self.role == "tool" and not self.tool_call_id.strip():
+            raise ValueError("a tool message must carry the tool_call_id it answers")
+        if self.tool_calls and self.role != "assistant":
+            raise ValueError("only an assistant message may carry tool calls")
 
     def as_dict(self) -> dict[str, str]:
         return {"role": self.role, "content": self.content}
@@ -90,14 +126,19 @@ class Persona:
 
 @dataclass(frozen=True)
 class Completion:
-    """A backend's raw answer, with enough provenance to log where it came from."""
+    """A backend's raw answer, with enough provenance to log where it came from.
+
+    ``tool_calls`` non-empty means the model wants tools run; ``text`` is then usually
+    empty, which is why the emptiness check allows it.
+    """
 
     text: str
     backend: str
     model: str
     truncated: bool = False
     usage: Mapping[str, Any] = field(default_factory=dict)
+    tool_calls: tuple[ToolCall, ...] = ()
 
     def __post_init__(self) -> None:
-        if not self.text.strip():
+        if not self.text.strip() and not self.tool_calls:
             raise ValueError("completion text must not be empty")

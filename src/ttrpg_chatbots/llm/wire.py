@@ -22,7 +22,7 @@ import json
 from typing import Any, Mapping
 
 from ttrpg_chatbots.llm.http import summarise
-from ttrpg_chatbots.llm.types import Completion, LlmConfigError, LlmProtocolError
+from ttrpg_chatbots.llm.types import Completion, LlmConfigError, LlmProtocolError, ToolCall
 
 WIRE_CHAT = "chat"
 WIRE_RESPONSES = "responses"
@@ -72,8 +72,10 @@ def _chat_completion(payload: Mapping[str, Any], backend: str) -> Completion:
     if not isinstance(choice, Mapping):
         raise LlmProtocolError(f"{backend} returned a malformed choice", backend=backend)
 
-    text = _message_text(choice.get("message")) or _legacy_text(choice)
-    if not text.strip():
+    message = choice.get("message")
+    calls = _chat_tool_calls(message, backend)
+    text = _message_text(message) or _legacy_text(choice)
+    if not text.strip() and not calls:
         raise LlmProtocolError(
             f"{backend} returned an empty answer ({_why(payload)})", backend=backend
         )
@@ -83,7 +85,50 @@ def _chat_completion(payload: Mapping[str, Any], backend: str) -> Completion:
         model=_model(body),
         truncated=choice.get("finish_reason") == "length",
         usage=_usage(body),
+        tool_calls=calls,
     )
+
+
+def _chat_tool_calls(message: Any, backend: str) -> tuple[ToolCall, ...]:
+    if not isinstance(message, Mapping):
+        return ()
+    raw = message.get("tool_calls")
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise LlmProtocolError(f"{backend} returned malformed tool calls", backend=backend)
+
+    calls: list[ToolCall] = []
+    for index, item in enumerate(raw):
+        if not isinstance(item, Mapping):
+            raise LlmProtocolError(f"{backend} returned a malformed tool call", backend=backend)
+        function = item.get("function")
+        if not isinstance(function, Mapping):
+            raise LlmProtocolError(
+                f"{backend} returned a tool call without a function", backend=backend
+            )
+        name = function.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise LlmProtocolError(
+                f"{backend} returned a tool call without a name", backend=backend
+            )
+        calls.append(
+            ToolCall(
+                id=str(item.get("id") or f"call-{index}"),
+                name=name.strip(),
+                arguments=_arguments_as_text(function.get("arguments")),
+            )
+        )
+    return tuple(calls)
+
+
+def _arguments_as_text(raw: Any) -> str:
+    """Arguments arrive as a JSON string; some proxies send an object instead."""
+    if raw is None:
+        return "{}"
+    if isinstance(raw, str):
+        return raw
+    return json.dumps(raw)
 
 def _responses_completion(payload: Mapping[str, Any], backend: str) -> Completion:
     status = payload.get("status")
@@ -94,10 +139,16 @@ def _responses_completion(payload: Mapping[str, Any], backend: str) -> Completio
 
     texts: list[str] = []
     refusals: list[str] = []
+    calls: list[ToolCall] = []
     output = payload.get("output")
     if isinstance(output, list):
         for item in output:
-            if not isinstance(item, Mapping) or item.get("type") != "message":
+            if not isinstance(item, Mapping):
+                continue
+            if item.get("type") == "function_call":
+                calls.append(_responses_tool_call(item, len(calls), backend))
+                continue
+            if item.get("type") != "message":
                 continue
             for part in _parts(item.get("content")):
                 kind = part.get("type")
@@ -114,7 +165,7 @@ def _responses_completion(payload: Mapping[str, Any], backend: str) -> Completio
         convenience = payload.get("output_text")
         if isinstance(convenience, str):
             text = convenience.strip()
-    if not text:
+    if not text and not calls:
         if refusals:
             raise LlmProtocolError(
                 f"{backend} refused to answer: {summarise(refusals[0])}", backend=backend
@@ -130,6 +181,18 @@ def _responses_completion(payload: Mapping[str, Any], backend: str) -> Completio
         # A truncated answer is still usable, but the caller should know.
         truncated=status == "incomplete",
         usage=_usage(payload),
+        tool_calls=tuple(calls),
+    )
+
+
+def _responses_tool_call(item: Mapping[str, Any], index: int, backend: str) -> ToolCall:
+    name = item.get("name")
+    if not isinstance(name, str) or not name.strip():
+        raise LlmProtocolError(f"{backend} returned a tool call without a name", backend=backend)
+    return ToolCall(
+        id=str(item.get("call_id") or item.get("id") or f"call-{index}"),
+        name=name.strip(),
+        arguments=_arguments_as_text(item.get("arguments")),
     )
 
 

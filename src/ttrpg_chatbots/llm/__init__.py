@@ -32,8 +32,15 @@ from ttrpg_chatbots.llm.backends import (
 from ttrpg_chatbots.llm.config import LlmConfig, load_llm_config
 from ttrpg_chatbots.llm.fallback import FallbackResponder, describe_failure
 from ttrpg_chatbots.llm.http import HttpResponse, Transport, UrllibTransport
-from ttrpg_chatbots.llm.prompt import build_messages, system_prompt
+from ttrpg_chatbots.llm.prompt import build_messages, persona_from, system_prompt
 from ttrpg_chatbots.llm.responder import LlmResponder
+from ttrpg_chatbots.llm.tools import (
+    Tool,
+    ToolBox,
+    ToolInvocation,
+    chat_schemas,
+    responses_schemas,
+)
 from ttrpg_chatbots.llm.types import (
     ChatMessage,
     Completion,
@@ -45,6 +52,7 @@ from ttrpg_chatbots.llm.types import (
     LlmRequestError,
     LlmUnavailable,
     Persona,
+    ToolCall,
 )
 from ttrpg_chatbots.respond import Answer, Responder
 
@@ -70,12 +78,19 @@ __all__ = [
     "OpenAiCompatibleBackend",
     "Persona",
     "Responder",
+    "Tool",
+    "ToolBox",
+    "ToolCall",
+    "ToolInvocation",
     "Transport",
     "UrllibTransport",
     "build_backend",
     "build_messages",
+    "chat_schemas",
     "describe_failure",
     "load_llm_config",
+    "persona_from",
+    "responses_schemas",
     "system_prompt",
     "wire",
 ]

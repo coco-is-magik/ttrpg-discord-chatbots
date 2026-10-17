@@ -453,6 +453,97 @@ It reuses the same ranking, so nothing new is invented. Off by default: a model 
 talks about what the dataset contains is a different product decision.
 
 
+## Dice: rolling, reading, and exposing it as a tool
+
+Game-neutral by construction: a roll is *N dice of S sides*, and a **mode** says what the
+table cares about. Nothing assumes a d20, a d10 pool or a d6 total.
+
+| mode | reads as | needs |
+| --- | --- | --- |
+| `sum` | the dice added up (default) | — |
+| `list` | the individual dice, plus the total | — |
+| `hits` | how many dice reached the target | `target` |
+| `check` | total vs a difficulty, meets-or-beats | `target` |
+
+Every mode still records the dice, the total and any target, so a `sum` roll can be
+re-read as a check later. A modifier (`+5`) is added after the dice.
+
+```bash
+ttrpg-chatbots-dice --roll 3d6 --character "Brannoc the Archivist"
+ttrpg-chatbots-dice --count 5 --sides 10 --mode hits --target 8 --character Sable
+ttrpg-chatbots-dice --data examples/demo_world --check stealth --character Sable
+ttrpg-chatbots-dice --data examples/demo_world --list-checks
+ttrpg-chatbots-dice --ask "roll sneak for Sable"      # the instruction path
+```
+
+```
+Brannoc the Archivist rolls 3d6: 4 + 5 + 4 = 13
+Sable rolls Stealth 1d20+5: 15 + 5 = 20 vs 15 -> success (margin +5)
+Sable rolls 5d10 (hits on 8+): [8, 9, 8, 8, 9] -> 5 hits
+Orla rolls 2d6: [4, 5] -> total 9
+```
+
+`--seed` makes a roll repeatable, which is what the tests and demos use; the bot does not
+seed. The random source is injectable for the same reason.
+
+### Named checks
+
+`checks.jsonl` sits beside the world's other datasets, so a table says "roll stealth"
+instead of "roll 1d20+5 against 15":
+
+```json
+{"id": "stealth", "label": "Stealth", "aliases": ["sneak", "hide"], "count": 1, "sides": 20, "modifier": 5, "mode": "check", "target": 15}
+{"id": "perception", "count": 5, "sides": 10, "mode": "hits", "target": 8}
+{"id": "brawn", "notation": "3d6", "mode": "sum"}
+```
+
+`notation` is shorthand for the pool. A missing file means "no named checks", not an
+error. Duplicate ids, duplicate names and a `hits`/`check` record without a target are
+refused at load with the file and line, because a silent fallback there would roll the
+wrong dice.
+
+### As a tool an LLM can call
+
+`ttrpg_chatbots.dice.tool_schema()` is provider-neutral JSON Schema; the LLM layer wraps
+it per wire format. `DiceTool.run()` executes a call and returns both speech-ready text
+and JSON:
+
+```python
+{"character": "Sable", "check": "stealth"}          # named pool
+{"character": "Sable", "notation": "3d6"}          # explicit pool
+{"character": "Sable", "count": 2, "sides": 8, "mode": "hits", "target": 6}
+```
+
+The executor is deliberately suspicious, because models send `"3"` as a string, `2.5` for
+a count, `true`, or a named check *and* a pool at once. Each gets a readable error the
+model can correct: whole floats and numeric strings are accepted, `2.5` and `"three"` are
+not, and a rejected call never consumes randomness. A tool that raises is reported to the
+model, not thrown at the caller — a tool must not end the conversation.
+
+`LlmResponder(tools=ToolBox(DiceTool(...)))` runs the loop: the model asks, the responder
+rolls, the result goes back, the model answers. It is bounded (`max_tool_rounds`, default
+3), and if the model then says nothing, **the roll itself becomes the message** rather
+than being dropped.
+
+### Without a model
+
+`DiceResponder` parses the instruction instead: a roll word, then either a dice
+expression or a named check, plus an optional `for <name>`. It is a heuristic and says so
+— the LLM path uses real tool calling, where the model decides. Anything that is not a
+roll instruction is passed through unchanged.
+
+The voice pipeline composes both, cheapest first:
+
+```
+--llm :  LLM (with the dice tool)  ->  dice (intent)  ->  classifier
+default: dice (intent)             ->  classifier
+```
+
+So `ttrpg-chatbots-voice --ask "roll stealth for sable"` speaks the roll in Sable's cast
+voice with no model involved, and with `--llm` a model that dies mid-session still leaves
+you able to roll dice.
+
+
 ## Test
 
 ```bash
@@ -470,9 +561,9 @@ malformed, and empty `.env` files; and garbage or out-of-range guild ids.
 
 ```
 src/ttrpg_chatbots/   package source: cli.py, config.py, bot.py, respond.py,
-                      stt/, reply/, llm/, audio/, tts/, voice/
-tests/                pytest suite: CLI, config, bot, stt, reply, llm, audio, tts,
-                      voice, secrets guard
+                      stt/, reply/, llm/, dice/, audio/, tts/, voice/
+tests/                pytest suite: CLI, config, bot, stt, reply, llm, dice, audio,
+                      tts, voice, secrets guard
 examples/demo_world/  committed toy dataset; data/ and datasets/ are git-ignored
 .env.example          committed credential template; .env itself is ignored
 pyproject.toml        packaging, dependencies, entry points, pytest and ruff config

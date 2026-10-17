@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 from ttrpg_chatbots.llm.http import HttpResponse
-from ttrpg_chatbots.llm.types import ChatMessage, Completion
+from ttrpg_chatbots.llm.types import ChatMessage, Completion, ToolCall
 from ttrpg_chatbots.respond import Answer
 
 
@@ -117,6 +117,7 @@ def completion(
     model: str = "fake-model",
     truncated: bool = False,
     usage: Mapping[str, Any] | None = None,
+    tool_calls: tuple[ToolCall, ...] = (),
 ) -> Completion:
     return Completion(
         text=text,
@@ -124,6 +125,7 @@ def completion(
         model=model,
         truncated=truncated,
         usage=usage if usage is not None else {},
+        tool_calls=tool_calls,
     )
 
 
@@ -136,9 +138,11 @@ class FakeBackend:
     def __init__(self, *results: Completion | Exception) -> None:
         self._results = list(results)
         self.requests: list[tuple[ChatMessage, ...]] = []
+        self.offered_tools: list[tuple[Mapping[str, Any], ...]] = []
 
-    def complete(self, messages):
+    def complete(self, messages, *, tools=()):
         self.requests.append(tuple(messages))
+        self.offered_tools.append(tuple(tools))
         if not self._results:
             raise AssertionError("FakeBackend ran out of queued results")
         result = self._results.pop(0)
@@ -150,6 +154,10 @@ class FakeBackend:
     def last_request(self) -> tuple[ChatMessage, ...]:
         assert self.requests, "no request was made"
         return self.requests[-1]
+
+    @property
+    def rounds(self) -> int:
+        return len(self.requests)
 
 
 class StaticResponder:

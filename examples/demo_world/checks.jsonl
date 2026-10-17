@@ -1,0 +1,8 @@
+# Named checks for the demo world. A check is a pool plus how the table reads it.
+# Mode: list | sum | hits | check. "hits" and "check" need a target.
+# Nothing here assumes a system: a d20 check, a d10 hit pool and a d6 total can coexist.
+{"id": "stealth", "label": "Stealth", "aliases": ["sneak", "hide"], "count": 1, "sides": 20, "modifier": 5, "mode": "check", "target": 15}
+{"id": "perception", "label": "Perception", "aliases": ["spot", "search", "listen"], "count": 5, "sides": 10, "mode": "hits", "target": 8}
+{"id": "brawn", "label": "Brawn", "aliases": ["strength", "lift"], "notation": "3d6", "mode": "sum"}
+{"id": "persuasion", "label": "Persuasion", "aliases": ["persuade", "sweet-talk"], "count": 1, "sides": 20, "modifier": 3, "mode": "check", "target": 12}
+{"id": "luck", "label": "Luck", "count": 2, "sides": 6, "mode": "list"}

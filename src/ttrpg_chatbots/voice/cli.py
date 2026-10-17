@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import random
 import sys
 import time
 from pathlib import Path
@@ -20,10 +21,16 @@ from dotenv import load_dotenv
 from ttrpg_chatbots.audio.pcm import DISCORD_FRAME_BYTES
 from ttrpg_chatbots.audio.wav import write_wav
 from ttrpg_chatbots.config import DEFAULT_ENV_FILE
+from ttrpg_chatbots.dice.checks import load_checks
+from ttrpg_chatbots.dice.responder import DiceResponder
+from ttrpg_chatbots.dice.roller import Roller
+from ttrpg_chatbots.dice.tool import DiceTool
+from ttrpg_chatbots.dice.types import DiceError
 from ttrpg_chatbots.llm import build_backend, load_llm_config
 from ttrpg_chatbots.llm.fallback import FallbackResponder
 from ttrpg_chatbots.llm.prompt import persona_from
 from ttrpg_chatbots.llm.responder import LlmResponder
+from ttrpg_chatbots.llm.tools import ToolBox
 from ttrpg_chatbots.llm.types import LlmError
 from ttrpg_chatbots.reply.datasets import load_world
 from ttrpg_chatbots.reply.replier import Replier
@@ -67,6 +74,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--engine", metavar="NAME", help="force a TTS engine")
     parser.add_argument("--voice", metavar="NAME", help="voice name (same as TTRPG_TTS_VOICE)")
     parser.add_argument("--out", type=Path, metavar="FILE", help="also write the speech as WAV")
+    parser.add_argument("--seed", type=int, default=None, help="seed dice rolls, for demos")
     parser.add_argument("--json", action="store_true", help="machine-readable output")
     return parser.parse_args(argv)
 
@@ -152,14 +160,28 @@ def _availability(*, as_json: bool) -> int:
     return 0
 
 
-def _answer(args: argparse.Namespace, classifier, character):
-    """Answer with the LLM when asked to, otherwise with the classifier.
+def _answer(args: argparse.Namespace, classifier, character, world):
+    """The answer chain: dice first, the model if asked, then the classifier.
 
-    The LLM half is opt-in: a bot that silently opens a socket on every question is a
-    surprise, and the classifier is already a complete answerer.
+    Dice come first because they are free and deterministic: "roll stealth" is answered by
+    rolling whether or not a model is configured. With ``--llm`` the model goes to the front
+    (it decides when a roll is wanted, via the tool) and everything else still unwinds to
+    the dice, then to the classifier.
     """
+    checks = load_checks(args.data)
+    roller = Roller(random.Random(args.seed) if args.seed is not None else None)
+    names = {
+        alias.lower(): who.name for who in world.characters for alias in who.aliases
+    }
+    dice = DiceResponder(
+        roller,
+        classifier,
+        checks=checks,
+        character=character.name,
+        characters=names,
+    )
     if not args.llm:
-        return classifier.answer(args.ask)
+        return dice.answer(args.ask)
     if DEFAULT_ENV_FILE.exists():
         load_dotenv(DEFAULT_ENV_FILE, override=False)
     config = load_llm_config()
@@ -169,8 +191,9 @@ def _answer(args: argparse.Namespace, classifier, character):
         lambda: build_backend(config),
         persona_from(character),
         name=f"llm:{config.backend}",
+        tools=ToolBox(DiceTool(roller, checks, default_character=character.name)),
     )
-    return FallbackResponder(primary, classifier).answer(args.ask)
+    return FallbackResponder(primary, dice).answer(args.ask)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -230,7 +253,7 @@ def main(argv: list[str] | None = None) -> int:
                 replier = Replier(world)
                 who = world.character(args.character or world.characters[0].id)
                 classifier = ClassifierResponder(replier, who.id, speaker=args.speaker)
-                answer = _answer(args, classifier, who)
+                answer = _answer(args, classifier, who, world)
                 text = answer.text
                 answerer = answer.source
                 degraded = answer.fallback_reason
@@ -268,7 +291,7 @@ def main(argv: list[str] | None = None) -> int:
             "out": str(out) if out else None,
         }
         return _report(payload, as_json=args.json)
-    except (SynthesisError, ReplyError, LlmError, ValueError, OSError) as error:
+    except (SynthesisError, ReplyError, LlmError, DiceError, ValueError, OSError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
     finally:

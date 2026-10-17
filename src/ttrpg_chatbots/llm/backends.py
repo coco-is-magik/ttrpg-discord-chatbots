@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 from ttrpg_chatbots.llm import wire
 from ttrpg_chatbots.llm.http import Transport, UrllibTransport, describe_response
+from ttrpg_chatbots.llm.tools import chat_schemas, responses_schemas
 from ttrpg_chatbots.llm.types import (
     ChatMessage,
     Completion,
@@ -122,34 +123,48 @@ class OpenAiCompatibleBackend:
             headers["Authorization"] = f"Bearer {self._api_key}"
         return headers
 
-    def payload(self, messages: Sequence[ChatMessage]) -> dict[str, Any]:
+    def payload(
+        self, messages: Sequence[ChatMessage], tools: Sequence[Mapping[str, Any]] = ()
+    ) -> dict[str, Any]:
         if self._wire == wire.WIRE_RESPONSES:
-            return self._responses_payload(messages)
-        return self._chat_payload(messages)
+            return self._responses_payload(messages, tools)
+        return self._chat_payload(messages, tools)
 
-    def _chat_payload(self, messages: Sequence[ChatMessage]) -> dict[str, Any]:
+    def _chat_payload(
+        self, messages: Sequence[ChatMessage], tools: Sequence[Mapping[str, Any]]
+    ) -> dict[str, Any]:
         body: dict[str, Any] = {
             "model": self.model,
-            "messages": [message.as_dict() for message in messages],
+            "messages": [_chat_message(message) for message in messages],
             self.max_tokens_field: self._max_tokens,
             "stream": False,
         }
+        if tools:
+            body["tools"] = chat_schemas(tools)
+            body["tool_choice"] = "auto"
         if self._temperature is not None:
             body["temperature"] = self._temperature
         return body
 
-    def _responses_payload(self, messages: Sequence[ChatMessage]) -> dict[str, Any]:
+    def _responses_payload(
+        self, messages: Sequence[ChatMessage], tools: Sequence[Mapping[str, Any]]
+    ) -> dict[str, Any]:
         # The system prompt belongs in ``instructions``; the rest becomes ``input``.
         instructions = "\n\n".join(
             message.content for message in messages if message.role == "system"
         )
-        turns = [message.as_dict() for message in messages if message.role != "system"]
+        items: list[dict[str, Any]] = []
+        for message in messages:
+            if message.role != "system":
+                items.extend(_responses_items(message))
         body: dict[str, Any] = {
             "model": self.model,
-            "input": turns,
+            "input": items,
             "max_output_tokens": self._max_tokens,
             "stream": False,
         }
+        if tools:
+            body["tools"] = responses_schemas(tools)
         if instructions:
             body["instructions"] = instructions
         if self._temperature is not None and self.temperature_on_responses:
@@ -158,13 +173,15 @@ class OpenAiCompatibleBackend:
 
     # -- the call ----------------------------------------------------------
 
-    def complete(self, messages: Sequence[ChatMessage]) -> Completion:
+    def complete(
+        self, messages: Sequence[ChatMessage], *, tools: Sequence[Mapping[str, Any]] = ()
+    ) -> Completion:
         """Send one turn to the model and return its answer."""
         if not messages:
             raise LlmRequestError(f"{self.name}: no messages to send", backend=self.name)
         try:
             response = self._transport.post_json(
-                self.url, self.payload(messages), self.headers(), self._timeout
+                self.url, self.payload(messages, tools), self.headers(), self._timeout
             )
         except LlmError as error:
             # Transport failures happen below this layer; stamp them with the backend
@@ -198,6 +215,52 @@ class OpenAiCompatibleBackend:
             f"{self.name} rejected the request ({detail})", backend=self.name, status=status
         )
 
+
+
+def _chat_message(message: ChatMessage) -> dict[str, Any]:
+    """A neutral message in Chat Completions shape."""
+    if message.role == "tool":
+        return {"role": "tool", "tool_call_id": message.tool_call_id, "content": message.content}
+    if message.tool_calls:
+        return {
+            "role": "assistant",
+            # Tool-calling turns carry no prose; ``null`` is what the API expects.
+            "content": message.content or None,
+            "tool_calls": [
+                {
+                    "id": call.id,
+                    "type": "function",
+                    "function": {"name": call.name, "arguments": call.arguments},
+                }
+                for call in message.tool_calls
+            ],
+        }
+    return message.as_dict()
+
+
+def _responses_items(message: ChatMessage) -> list[dict[str, Any]]:
+    """A neutral message as one or more Responses input items."""
+    if message.role == "tool":
+        return [
+            {
+                "type": "function_call_output",
+                "call_id": message.tool_call_id,
+                "output": message.content,
+            }
+        ]
+    items: list[dict[str, Any]] = []
+    if message.content.strip():
+        items.append({"role": message.role, "content": message.content})
+    items.extend(
+        {
+            "type": "function_call",
+            "call_id": call.id,
+            "name": call.name,
+            "arguments": call.arguments,
+        }
+        for call in message.tool_calls
+    )
+    return items
 
 
 class LocalBackend(OpenAiCompatibleBackend):
