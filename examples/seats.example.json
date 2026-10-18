@@ -1,0 +1,19 @@
+[
+  {
+    "id": "truman",
+    "kind": "human",
+    "character": "molly-macintosh",
+    "world_character": "brannoc",
+    "discord_id": 123456789012345678,
+    "permissions": ["edit_own_sheet"],
+    "meta": { "name": "Truman" }
+  },
+  {
+    "id": "dennis",
+    "kind": "bot",
+    "character": "robert-ross",
+    "world_character": "sable",
+    "voices": { "ic": "en_GB-alan-medium", "ooc": "en_US-amy-medium" },
+    "meta": { "name": "Dennis" }
+  }
+]

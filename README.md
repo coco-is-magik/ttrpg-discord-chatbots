@@ -1,8 +1,23 @@
 # ttrpg-chatbots
 
-TTRPG chatbot project. This is the initial scaffold: `src/` layout package,
-`pyproject.toml` (setuptools), a `tests/` suite, and a `hello world` CLI used to
-verify the environment end to end.
+A private Discord table: one human and three bots who are both **people in the group** and
+**characters at the table**. A non-conversational sheet portal for building and maintaining a
+character, and a conversational group that plays House Games on game night and chats in
+between. The humans do the choosing; the machines do the arithmetic and the remembering.
+
+**Where it is going**, and the rules it holds itself to:
+[`docs/DESIGN.md`](docs/DESIGN.md) — principles, cast, architecture, phases with exit
+criteria, risks, open decisions.
+
+**The sheet, as a UI**: [`docs/SHEET_UI.md`](docs/SHEET_UI.md) — the four message surfaces,
+why they live in a DM, and how edits stay safe when two things change at once.
+
+**Testing it against Discord by hand**: [`docs/MANUAL_TESTING.md`](docs/MANUAL_TESTING.md).
+
+What exists today is the substrate: sheet reading and creation, the 55-question interview,
+structured dice, the compression classifier, three LLM backends, TTS casting, voice playback,
+and eight slash commands behind one bot identity. Seats, sheet mutations, memory and ambient
+chat are the next phases.
 
 ## Install
 
@@ -106,10 +121,44 @@ Once it is running, the bot answers these slash commands:
 | `/ping` | `Pong!` — proves the gateway and the command sync |
 | `/voices` | the cast table, plus whether voice is usable on this machine |
 | `/ask question:… character:… speak:true` | answer as a character; `speak` also says it aloud |
-| `/roll dice:3d6` / `/roll check:stealth character:sable` | dice and named checks, attributed |
+| `/claim character:…` | claim an unclaimed character; this is how you get a seat |
+| `/sheet` | your own character (or any, with permission) |
+| `/spend trait:… to:… pool:…` | raise a trait; replies with the receipt and what is left |
+| `/options trait:…` | what the next point costs, or a list of everything raisable |
+| `/edit trait:… to:…` | set a trait directly (free; caps still apply) |
+| `/specialty ability:… text:…` | name or clear an ability specialty |
+| `/ungift name:…` | remove a Gift that should not be there |
+| `/hurt levels:…` / `/heal levels:…` | move along the health track |
+| `/undo` | reverse your last sheet edit |
+| `/gift name:… rating:…` | award a Gift (Harbinger's price; costs nothing) |
+| `/mission outcome:win\|loss gift:…` | settle a Game: 10 XP + a Gift, or 5 XP |
+| `/history limit:…` | every accepted change, with revision numbers |
+| `/answer number:… text:…` | rewrite one interview answer (draft only) |
+| `/done` / `/unlock reason:…` | seal the character, or reopen it for a Revision |
+| `/export` / `/import file:…` | download the character as JSON, or load it back |
+| `/roll count:… sides:… modifier:…` | dice as separate options, no notation to remember |
+| `/roll check:stealth character:sable` | named checks and attribution |
 | `/join` / `/leave` | join your voice channel and hold a playback stream open |
 | `/say text:… character:…` | speak arbitrary text in that character's voice |
 | `/stop` | clear the queue mid-sentence |
+
+Sheet management is a v1 loop, entirely inside Discord:
+
+```text
+/sheet                      → numbers, pools, revision, interview progress
+/spend trait:Stealth to:3   → "Stealth 2→3 — 2 freebies — 13 freebies left"
+/options                    → "Dexterity 2→3: 5 freebies" … (planning, no commitment)
+/unlock                     → reopen for a Revision (the rules' own word for it)
+/answer number:12 text:…    → rewrite one answer, recorded in history
+/done                       → seal; from then on changes are amendments
+/edit trait:Dexterity to:4   → "Dexterity 2→4" (free; /undo reverses it)
+/specialty ability:Melee text:Improvised
+/hurt levels:1              → "hurt 1: health 7/8"
+/export                     → edit 55 paragraphs in a real editor, then /import
+```
+
+Every write is a compare-and-swap on the character's `revision`, so a second device, a
+GM and a player cannot silently lose each other's changes.
 
 Voice needs `PyNaCl`, the DAVE library and a system `libopus`; the `voice` extra
 covers the first two, and `voice_readiness()` names whatever is missing.
@@ -119,9 +168,11 @@ is tested by hand. **[`docs/MANUAL_TESTING.md`](docs/MANUAL_TESTING.md)** is the
 script for that: creating the application, the invite URL, real credentials, and a
 step-by-step walkthrough with the expected output and a troubleshooting table.
 
-**Not wired yet:** the bot does not listen (no speech-to-text from Discord), the
-`character` package is not connected to any command, and there is no language model
-unless you configure one.
+**Not wired yet:** the bot does not listen (no speech-to-text from Discord), and there
+is no language model unless you configure one. The sheet portal is v1: it does not yet
+prompt for a whole character interactively (that is `ttrpg-chatbots-character --new`),
+and freebie pools are only known for characters built by the wizard — imported sheets
+start at 0, because the workbook never recorded what was left.
 
 ## Speech-to-text: measured engine selection
 
@@ -539,6 +590,19 @@ Orla rolls 2d6: [4, 5] -> total 9
 
 `--seed` makes a roll repeatable, which is what the tests and demos use; the bot does not
 seed. The random source is injectable for the same reason.
+
+### In Discord: one option per part
+
+The slash command does **not** take a notation string. Each part is its own option —
+`count`, `sides`, `modifier`, `mode`, `target`, `check`, `character` — with `notation` kept
+as an escape hatch for people who already know the shorthand. `check` and `character`
+autocomplete, `mode` is a picker, and a bare `/roll` is a d20 that says so.
+
+That is a deliberate split: a chat form collects structure, so the command builds a
+`RollSpec` directly (`dice/parts.py`); the free-text parser (`dice/intent.py`) is reserved
+for speech and for the language model, where text is the only input there is. Neither
+re-parses what the other produced. Every rejection names the fix — `mode:hits needs a
+target, for example target:8` — rather than the rule.
 
 ### Named checks
 

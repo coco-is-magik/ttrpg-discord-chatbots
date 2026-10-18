@@ -145,7 +145,7 @@ def house_cells(
     willpower: int | None = 5,
     willpower_remaining: int | None = 4,
     morality: int | None = 7,
-    powers: Mapping[str, int] | None = None,
+    gifts: Mapping[str, int] | None = None,
     backgrounds: Mapping[str, int] | None = None,
     merits: Mapping[str, int] | None = None,
 ) -> dict[str, Any]:
@@ -211,7 +211,7 @@ def house_cells(
         cells["E24"] = morality
     for row, label in HEALTH:
         cells[f"G{row}"] = label
-    for offset, (label, dots) in enumerate((powers or {}).items()):
+    for offset, (label, dots) in enumerate((gifts or {}).items()):
         cells[f"A{34 + offset}"] = label
         cells[f"B{34 + offset}"] = dots
     for offset, (label, dots) in enumerate((backgrounds or {}).items()):

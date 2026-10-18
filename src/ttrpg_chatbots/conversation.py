@@ -18,7 +18,8 @@ from pathlib import Path
 from typing import Sequence
 
 from ttrpg_chatbots.audio.pcm import PcmAudio
-from ttrpg_chatbots.dice.checks import load_checks
+from ttrpg_chatbots.dice.checks import Checkbook, load_checks
+from ttrpg_chatbots.dice.parts import RollParts, roll_parts
 from ttrpg_chatbots.dice.responder import DiceResponder
 from ttrpg_chatbots.dice.roller import Roller
 from ttrpg_chatbots.dice.tool import DiceTool
@@ -51,6 +52,8 @@ class Conversation:
     _world: World | None = field(default=None, repr=False)
     _cast: VoiceCast | None = field(default=None, repr=False)
     _synthesizer: object = field(default=None, repr=False)
+    _roller_instance: Roller | None = field(default=None, repr=False)
+    _checkbook_instance: Checkbook | None = field(default=None, repr=False)
     # Keyed by (character id, speaker): a responder is bound to one character's tags and
     # one speaker's name, so it must not be shared between them.
     _responders: dict[tuple[str, str | None], Responder] = field(
@@ -98,9 +101,9 @@ class Conversation:
                 for alias in who.aliases
             }
             self._responders[key] = DiceResponder(
-                Roller(random.Random(self.seed) if self.seed is not None else None),
+                self._roller(),
                 classifier,
-                checks=load_checks(self.data),
+                checks=self._checkbook(),
                 character=character.name,
                 characters=names,
             )
@@ -128,6 +131,35 @@ class Conversation:
             raise ConversationError("nothing to answer")
         who = self.resolve(character)
         return self._answers(who, speaker).answer(prompt)
+
+    def roll(self, parts: RollParts) -> Answer:
+        """Roll from structured options, attributed to a character.
+
+        This is the typed path the slash command uses; :meth:`answer` keeps the free-text
+        path for speech and for the model. Neither parses what the other produced.
+        """
+        who = self.resolve(parts.character)
+        return roll_parts(
+            parts,
+            roller=self._roller(),
+            checks=self._checkbook(),
+            character=who.name,
+        )
+
+    def check_names(self) -> tuple[str, ...]:
+        """The named checks this world offers, for autocomplete."""
+        return self._checkbook().names
+
+    def _roller(self) -> Roller:
+        if self._roller_instance is None:
+            seed = random.Random(self.seed) if self.seed is not None else None
+            self._roller_instance = Roller(seed)
+        return self._roller_instance
+
+    def _checkbook(self) -> Checkbook:
+        if self._checkbook_instance is None:
+            self._checkbook_instance = load_checks(self.data)
+        return self._checkbook_instance
 
     def speak(self, text: str, *, character: str | None = None) -> PcmAudio:
         """Synthesize ``text`` with the character's cast voice, or the default engine."""

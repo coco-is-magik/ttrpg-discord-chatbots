@@ -42,7 +42,7 @@ def test_a_summary_shows_the_blocks(tmp_path, capsys) -> None:
         abilities={"Stealth": 2},
         specialties={"Stealth": "alleys"},
         virtues={"Courage": 3},
-        powers={"Auspex": 2},
+        gifts={"Auspex": 2},
         merits={"Jaded": 2},
     )
     code, out, _ = run(capsys, "--xlsx", str(path))

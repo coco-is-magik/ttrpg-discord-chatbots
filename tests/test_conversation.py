@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from ttrpg_chatbots.conversation import Conversation, ConversationError
+from ttrpg_chatbots.dice.parts import RollParts
 
 DEMO = "examples/demo_world"
 
@@ -99,6 +100,45 @@ def test_two_speakers_do_not_share_a_responder() -> None:
     second = chat.answer("who controls the dry docks?", character="brannoc", speaker="Nia")
     assert first.text.strip() and second.text.strip()
     assert len(chat._responders) == 2
+
+
+def test_a_structured_roll_is_attributed_and_reproducible() -> None:
+    chat = conversation(seed=11)
+    parts = RollParts(count=4, sides=6, modifier=-1)
+    first = chat.roll(parts)
+    again = conversation(seed=11).roll(parts)
+
+    assert first.text.startswith("Brannoc the Archivist rolls 4d6-1:")
+    assert first.text == again.text
+    assert first.detail["hint"] == "`4d6-1`"
+
+
+def test_a_structured_roll_can_name_a_character_and_a_mode() -> None:
+    answer = conversation(seed=5).roll(
+        RollParts(count=5, sides=10, mode="hits", target=8, character="sable")
+    )
+    assert answer.text.startswith("Sable rolls 5d10 (hits on 8+):")
+    assert answer.detail["character"] == "Sable"
+
+
+def test_a_named_check_comes_from_the_world() -> None:
+    chat = conversation(seed=2)
+    assert "stealth" in chat.check_names()
+    answer = chat.roll(RollParts(check="stealth", character="sable"))
+    assert "Sable rolls Stealth 1d20+5:" in answer.text
+    assert "vs 15" in answer.text
+
+
+def test_the_structured_roll_does_not_reuse_the_text_parser() -> None:
+    """A regression guard: structured parts must reach the roller as a spec.
+
+    If this ever goes back through ``parse_instruction``, the count would come out of a
+    sentence rather than straight from the argument.
+    """
+    chat = conversation(seed=1)
+    detail = chat.roll(RollParts(count=7, sides=8)).detail["roll"]
+    assert (detail["count"], detail["sides"], detail["notation"]) == (7, 8, "7d8")
+    assert len(detail["dice"]) == 7
 
 
 def test_the_default_synthesizer_is_loaded_once_and_closed(monkeypatch) -> None:

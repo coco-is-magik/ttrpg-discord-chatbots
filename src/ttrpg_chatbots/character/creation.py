@@ -21,7 +21,7 @@ from ttrpg_chatbots.character.prompting import (
 from ttrpg_chatbots.character.types import Character
 from ttrpg_chatbots.sheets.interview import Interview, Question, Questionnaire
 from ttrpg_chatbots.sheets.systems import houseg
-from ttrpg_chatbots.sheets.types import Ability, Sheet, Trait
+from ttrpg_chatbots.sheets.types import Ability, Gift, Sheet, Trait
 
 GROUP_ATTEMPTS = 5
 MAX_TRAITS = 20
@@ -115,8 +115,9 @@ def ask_mechanics(prompter: Prompter, name: str, *, system=houseg) -> Sheet:
     )
     backgrounds = _ask_traits(prompter, "Background", budget=system.BACKGROUND_POINTS)
 
-    prompter.say("\nPowers/Paths: one at a time, blank name to finish.")
-    powers = _ask_traits(prompter, "Power")
+    prompter.say("\nGifts (optional): one at a time, blank name to finish.")
+    asks = _ask_traits(prompter, "Gift")
+    gifts = tuple(Gift(name=asked.name, rating=asked.dots) for asked in asks)
 
     willpower = virtues["Courage"]
     morality = virtues["Conscience/Conviction"] + virtues["Self-Control/Instinct"]
@@ -130,8 +131,10 @@ def ask_mechanics(prompter: Prompter, name: str, *, system=houseg) -> Sheet:
         willpower_remaining=willpower,
         morality=morality,
         health=system.HEALTH_LEVELS,
-        powers=powers,
+        gifts=gifts,
         backgrounds=backgrounds,
+        # 15 freebies, plus the value of any Flaws taken (rules: "15 + Flaw value").
+        freebies=system.FREEBIE_BASE,
     )
 
 

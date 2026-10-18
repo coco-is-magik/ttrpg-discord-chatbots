@@ -220,7 +220,47 @@ Failure: no commands in the picker. The bot is in the server but commands are no
 check the invite included `applications.commands`, and that `DISCORD_GUILD_ID` is the id of
 *this* server.
 
-### 7.2 The world and the cast
+### 7.2 Your seat and your sheet
+
+Before anything else, check that the bot knows who you are:
+
+`/sheet`
+
+* **Seated:** your character's numbers come back, with a revision number.
+* **Not seated yet:** the reply gives you your Discord id and the file to paste it into:
+  `no character is bound to you; your Discord id is 1234… Add a human seat with that id to
+  data/seats.json.`
+
+To seat yourself, copy the example and edit the two fields that matter:
+
+```bash
+cp examples/seats.example.json data/seats.json
+chmod 600 data/seats.json   # it contains Discord ids, not secrets, but it is yours
+```
+
+```json
+{
+  "id": "truman",
+  "kind": "human",
+  "character": "molly-macintosh",
+  "world_character": "brannoc",
+  "discord_id": YOUR_ID_HERE,
+  "permissions": ["edit_own_sheet"]
+}
+```
+
+`character` is the sheet in `data/characters`; `world_character` is who the classifier and
+voices answer as (the demo world has `brannoc`, `sable`, `orla`). Then `/sheet` again — your
+sheet should appear, and `/roll` with no options should now roll **your** character's dice.
+
+Two checks worth doing while you are here:
+
+* `/sheet character:<someone-else>` → refused, because your seat does not hold
+  `view_any_sheet`.
+* Add `view_any_sheet` to your permissions, restart, and the same command works, marked
+  `shown by …`.
+
+### 7.3 The world and the cast
 
 `/voices`
 
@@ -236,7 +276,7 @@ orla     Orla the Tavernkeep     piper:en_US-lessac-medium speed=1 volume=0.9
 This proves the dataset loaded, casting resolved and voice is usable — without joining a
 call.
 
-### 7.3 A text answer
+### 7.4 A text answer
 
 `/ask question:what is the sunken crown? character:brannoc`
 
@@ -255,7 +295,7 @@ That contrast is the whole point of the tag gating: Brannoc's tags let him know 
 Sable and Orla's do not, so they deflect instead of inventing. If every character gives the
 same answer, the gating is broken — say so, because it is a bug, not a setting.
 
-### 7.4 Refusals are supposed to be refusals
+### 7.5 Refusals are supposed to be refusals
 
 `/ask question:hello character:nobody` → `error: no such character 'nobody'; known: Brannoc
 the Archivist, Sable, Orla the Tavernkeep`
@@ -264,25 +304,42 @@ the Archivist, Sable, Orla the Tavernkeep`
 
 Nothing should crash the bot: errors come back as messages and the process stays up.
 
-### 7.5 Dice
+### 7.6 Dice
 
-Dice are attributed to the **character you name**, not to you. With no `character`, they go to
-the first character in the world (Brannoc here).
+Every part of a roll is its own option, so nothing depends on remembering shorthand:
 
-* `/roll dice:3d6` → `Brannoc the Archivist rolls 3d6: 5 + 3 + 6 = 14`
-* `/roll check:stealth character:sable` → `Sable rolls Stealth 1d20+5: 20 + 5 = 25 vs 15 ->
-  success (margin +10)`
-* `/roll check:brawn character:brannoc` → `Brannoc the Archivist rolls Brawn 3d6: 3 + 6 + 6 =
-  15`
+| Option | Meaning | Default |
+|---|---|---|
+| `count` | how many dice | 1 |
+| `sides` | sides per die: 6, 10, 20… | 20 |
+| `modifier` | added to the total; may be negative | 0 |
+| `mode` | `sum`, `list`, `hits`, `check` | sum |
+| `target` | difficulty or hit threshold (needed by `hits`/`check`) | – |
+| `check` | a named check instead of dice; autocompletes | – |
+| `character` | who is rolling; autocompletes | first character |
+| `notation` | shorthand instead: `4d6-1` | – |
 
-Numbers vary run to run; the shape and the attribution should not. Check names come from
-`examples/demo_world/checks.jsonl`: stealth, perception, brawn, persuasion, luck.
+* `/roll` — a bare d20; the reply says so
+* `/roll count:3 sides:6` → `Brannoc the Archivist rolls 3d6: 4 + 5 + 2 = 11`
+* `/roll count:4 sides:6 modifier:-1` → `... rolls 4d6-1: 5 + 5 + 2 + 3 - 1 = 14`
+* `/roll count:5 sides:10 mode:hits target:8 character:sable` → `Sable rolls 5d10 (hits on 8+):
+  [10, 8, 3, 8, 9] -> 4 hits`
+* `/roll check:stealth character:sable` → `Sable rolls Stealth 1d20+5: … vs 15 -> success`
+* `/roll check:stealth target:18` → the same check against a harder difficulty
+* `/roll notation:2d20+3` → the shorthand, for when you already know it
+
+`check` and `character` autocomplete, so you pick a name instead of typing one. Mixing
+shorthand with parts (`notation` plus `count`) is refused rather than silently resolved, and
+errors name the fix: `mode:hits needs a target, for example target:8`.
+
+The reply ends with the shorthand for what you just rolled (`-# answered by dice · 4d6-1`),
+so the notation becomes familiar from reading results rather than from memorising a tooltip.
 
 Big pools are summarised, not clipped: past twelve dice the list becomes `3 + 5 + 2 + … (30
 dice) = 96`. Every die is still rolled and counted — only the display is shortened, so a
 large pool stays readable in chat.
 
-### 7.6 Voice: join
+### 7.7 Voice: join
 
 1. Join a voice channel yourself.
 2. `/join` → `joined **General**; playback stream open (queue: 0)`
@@ -290,7 +347,7 @@ large pool stays readable in chat.
 The bot appears in the channel and **stays silent** — it holds an open stream so it can speak
 later without rejoining.
 
-### 7.7 Voice: speak a fixed line
+### 7.8 Voice: speak a fixed line
 
 `/say text:The night is cold and the ale is worse. character:orla`
 
@@ -303,19 +360,19 @@ a ~60 MB model), after which the same voice answers in well under a second. If t
 If you hear nothing: check your own output device, the bot's volume slider (right-click the
 bot in the channel), and the terminal for `queued … s of speech`.
 
-### 7.8 Voice: answer aloud
+### 7.9 Voice: answer aloud
 
 `/ask question:who controls the dry docks? character:brannoc speak:true`
 
 The text arrives first, speech follows, in Brannoc's voice.
 
-### 7.9 Interrupt, then leave
+### 7.10 Interrupt, then leave
 
 * `/say text:` something long, then `/stop` mid-sentence → silence; the stream stays open.
 * `/say text:` something short → still plays after a stop.
 * `/leave` → `left the voice channel`, and the bot leaves the channel.
 
-### 7.10 Restart behaviour
+### 7.11 Restart behaviour
 
 `Ctrl-C`, start again, re-run `/ping`, `/voices`, `/join`, `/say`. Commands should still be
 there (guild sync is idempotent) and voice should return cleanly. If `/join` cannot connect,

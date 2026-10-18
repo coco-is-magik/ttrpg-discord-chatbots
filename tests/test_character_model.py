@@ -11,6 +11,7 @@ from ttrpg_chatbots.character.store import CharacterStore, slug_for
 from ttrpg_chatbots.character.types import (
     EVENT_KINDS,
     Character,
+    CharacterConflict,
     CharacterError,
     Event,
     interview_digest,
@@ -204,6 +205,96 @@ def test_a_slug_collision_is_refused_rather_than_overwritten(tmp_path: Path) -> 
     other = Character(sheet=sheet(other_name), interview=interview(other_name))
     with pytest.raises(CharacterError, match="refusing to overwrite"):
         store.save(other.seal())
+
+
+def test_a_new_character_starts_at_revision_zero() -> None:
+    assert Character(sheet=sheet()).revision == 0
+
+
+def test_every_accepted_change_bumps_the_revision() -> None:
+    character = Character(sheet=sheet(), interview=interview())
+    assert character.revision == 0
+
+    noted = character.record("note", "a note", at=AT)
+    assert noted.revision == 1
+
+    resheeted = noted.with_sheet(sheet(), summary="raised Stealth", at=AT)
+    assert resheeted.revision == 2
+
+    sealed = resheeted.seal(at=AT)
+    assert sealed.revision == 3
+    # Sealing is one action, so it bumps once, not once for the flag and once for the event.
+    assert [event.kind for event in sealed.history] == ["note", "sheet", "sealed"]
+
+
+def test_sealing_twice_does_not_bump_again() -> None:
+    sealed = sealed_character()
+    assert sealed.seal().revision == sealed.revision
+
+
+def test_a_negative_revision_is_refused() -> None:
+    with pytest.raises(CharacterError, match="must not be negative"):
+        Character(sheet=sheet(), revision=-1)
+
+
+def test_the_revision_survives_a_round_trip() -> None:
+    character = sealed_character()
+    assert Character.from_json(character.to_json()).revision == character.revision
+
+
+def test_a_file_without_a_revision_reads_as_zero() -> None:
+    payload = json.loads(sealed_character().to_json())
+    payload.pop("revision")
+    assert Character.from_dict(payload).revision == 0
+
+
+def sealed_character() -> Character:
+    return Character(sheet=sheet(), interview=interview(), created=AT).seal(at=AT)
+
+
+# -- compare-and-swap ------------------------------------------------------
+
+
+def test_a_write_based_on_a_stale_revision_is_refused(tmp_path: Path) -> None:
+    store = CharacterStore(tmp_path)
+    saved = sealed_character()
+    store.save(saved)
+
+    stale = saved
+    first = saved.record("session", "session one", at=AT)
+    store.save(first, expect_revision=saved.revision)
+
+    with pytest.raises(CharacterConflict, match="changed while this view was open"):
+        other_device = stale.record("note", "from the other device", at=AT)
+        store.save(other_device, expect_revision=stale.revision)
+
+    # Nothing was written: the file still holds the first write.
+    assert store.load(saved.id).history[-1].summary == "session one"
+
+
+def test_a_write_at_the_current_revision_succeeds(tmp_path: Path) -> None:
+    store = CharacterStore(tmp_path)
+    saved = sealed_character()
+    store.save(saved)
+
+    updated = saved.record("session", "session one", at=AT)
+    store.save(updated, expect_revision=saved.revision)
+    assert store.load(saved.id).revision == updated.revision
+
+
+def test_compare_and_swap_reports_a_deleted_character(tmp_path: Path) -> None:
+    store = CharacterStore(tmp_path)
+    character = sealed_character()
+    with pytest.raises(CharacterConflict, match="no longer at"):
+        store.save(character, expect_revision=0)
+
+
+def test_an_unconditional_save_still_overwrites(tmp_path: Path) -> None:
+    store = CharacterStore(tmp_path)
+    saved = sealed_character()
+    store.save(saved)
+    store.save(saved.record("note", "overwrite", at=AT))
+    assert store.load(saved.id).history[-1].summary == "overwrite"
 
 
 def test_listing_and_deleting(tmp_path: Path) -> None:

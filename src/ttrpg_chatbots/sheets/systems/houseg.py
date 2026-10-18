@@ -23,6 +23,7 @@ from ttrpg_chatbots.sheets.types import (
     SKILL,
     TALENT,
     Ability,
+    Gift,
     Sheet,
     SheetError,
     Trait,
@@ -44,7 +45,9 @@ MAX_REROLLS = 100
 
 _INFO = {
     "name": "B2",
-    "player": "B3",
+    # "Player" (B3) is deliberately not read: who plays a character is a **seat**, and that
+    # cell has been used for numbers as often as for names. Importing it would copy a real
+    # person's name into the character file for no gain.
     "nature": "E2",
     "demeanor": "E3",
     "age_sex": "H2",
@@ -91,8 +94,10 @@ _ABILITY_FIRST_ROW = 12
 _ABILITY_LAST_ROW = 21
 
 # Lists run downward; the template leaves rows 34-80 merged and empty for more.
-_POWER_ROWS = (34, 80)
-_BACKGROUND_ROWS = (34, 80)
+_POWER_ROWS = (33, 80)
+# Row 32 is the "Backgrounds" header, so the first entry is row 33. Getting this wrong
+# silently drops a player's first background.
+_BACKGROUND_ROWS = (33, 80)
 # The merits block is the one cramped corner of this layout: "Powers/Paths" starts at
 # A32, so merits only get rows 24-31. A filled tab puts its first merit in row 24, where
 # the template has the "Name" header, so header rows are skipped rather than assumed.
@@ -117,8 +122,143 @@ VIRTUE_NAMES = ("Conscience/Conviction", "Self-Control/Instinct", "Courage")
 VIRTUE_POINTS = 7
 BACKGROUND_POINTS = 5
 FREEBIE_BASE = 15
-MAX_CREATION_TRAIT = 5
-MAX_CREATION_TRACKER = 10
+
+
+# -- Gifts -------------------------------------------------------------------
+#
+# House Games does not price Gifts: the rules award **one Gift per won Game** ("Characters
+# receive 10 XP and a Gift if they win. They get 5 XP but no Gift if they lose but survive")
+# and measure power level by how many a character holds. So a character's gift count *is*
+# their number of wins, and the portal counts rather than costs.
+#
+# The ladder is the rules document's own, and it has a wrinkle worth preserving: **Veteran is
+# not a count**. "Any non-Veteran with at least thirty Gifts is Very High Seasoned"; a Veteran
+# is a character who has taken the **Veteran Template** (earned by a solo Veteran Game with no
+# assistance) and may hold fewer than thirty.
+GIFT_TIERS = (
+    (30, "Very High Seasoned"),
+    (20, "High Seasoned"),
+    (10, "Seasoned"),
+    (0, "Novice"),
+)
+VETERAN = "Veteran"
+# The rules write Seasoned as "10 to 20" and High Seasoned as "at least 20", so 20 sits in
+# both. Taking the higher band is the only reading that keeps the ladder disjoint.
+GIFT_BALANCE_SPREAD = 5
+
+
+def gift_tier(count: int, *, veteran: bool = False) -> str:
+    """The rules' power level: Novice, Seasoned, High Seasoned, Very High Seasoned, Veteran.
+
+    ``veteran`` comes from the Veteran Template, not from the count: 30+ Gifts without the
+    template is Very High Seasoned.
+    """
+    if veteran:
+        return VETERAN
+    for threshold, name in GIFT_TIERS:
+        if count >= threshold:
+            return name
+    return GIFT_TIERS[-1][1]
+
+
+# -- the economy, straight from the rules ------------------------------------
+#
+# Creation and advancement costs are *rating dependent*, so they are encoded once here rather
+# than re-derived by guesswork in the mutation layer. Each advancement entry is
+# (cost of the first rank, or 0, multiplier of the current rating).
+FREEBIE_COSTS = {
+    "attribute": 5,
+    "ability": 2,
+    "virtue": 2,
+    "morality": 2,
+    "background": 1,
+    "willpower": 1,
+}
+ADVANCEMENT_COSTS = {
+    "attribute": (0, 4),    # Current Rating x4
+    "ability": (3, 2),      # 3 for the first rank, then Current Rating x2
+    "background": (7, 3),   # 7 for the first rank, then Current Rating x3
+    "virtue": (0, 2),       # Current Rating x2
+    "willpower": (0, 1),    # Current Rating x1
+    "pool": (0, 2),         # Current Rating x2
+    "merit": (0, 3),        # Rating x3 to acquire, two GMs' approval
+    "flaw": (0, 3),         # Rating x3 to buy off, two GMs' approval
+    "maneuver": (2, 0),     # 2 each
+    "ritual": (2, 0),       # 2 each
+    "power": (0, 6),        # Current Rating x6, x5 when dramatically flawed; max 5
+    "magic": (0, 7),        # Current Rating x7
+}
+# A Game's reward: "10 XP and a Gift if they win. 5 XP but no Gift if they lose but survive."
+XP_WIN = 10
+XP_LOSS = 5
+GIFTS_PER_WIN = 1
+GM_XP_PER_GAME = 10
+# Caps: 5 for traits (Morality and Willpower to 10); backgrounds 5, 8 as a Veteran, 8 with a
+# Gift (Seasoned) or 10 with a Gift (Veteran).
+TRAIT_CAP = 5
+TRACKER_CAP = 10
+# Creation uses the same ceilings as advancement; these aliases exist so the wizard reads in
+# the rules' language without a second, drift-prone copy of the numbers.
+MAX_CREATION_TRAIT = TRAIT_CAP
+MAX_CREATION_TRACKER = TRACKER_CAP
+BACKGROUND_CAP = 5
+BACKGROUND_CAP_VETERAN = 8
+BACKGROUND_CAP_GIFT = 10
+
+
+def advancement_cost(
+    kind: str, current: int = 0, *, flawed: bool = False, rating: int | None = None
+) -> int:
+    """Experience cost to raise one trait of ``kind`` by a point.
+
+    ``current`` is the rating before the raise (abilities and backgrounds also have a flat
+    first-rank cost). ``rating`` prices merits and flaws, which are costed by their own rating
+    rather than by a current value. Unknown kinds raise instead of guessing a number.
+    """
+    if kind not in ADVANCEMENT_COSTS:
+        known = ", ".join(sorted(ADVANCEMENT_COSTS))
+        raise ValueError(f"unknown advancement kind {kind!r}; known: {known}")
+    if kind in {"merit", "flaw"}:
+        points = rating if rating is not None else current
+        return points * ADVANCEMENT_COSTS[kind][1]
+    first, multiplier = ADVANCEMENT_COSTS[kind]
+    if current <= 0 and first:
+        return first
+    if kind == "power" and flawed:
+        return current * 5
+    return current * multiplier
+
+
+def freebie_cost(kind: str) -> int:
+    """Freebie points for one point of ``kind`` at creation."""
+    try:
+        return FREEBIE_COSTS[kind]
+    except KeyError:
+        known = ", ".join(sorted(FREEBIE_COSTS))
+        raise ValueError(f"unknown freebie kind {kind!r}; known: {known}") from None
+
+
+
+def balance_warnings(counts: Mapping[str, int]) -> tuple[str, ...]:
+    """Pairs more than five Gifts apart.
+
+    The rules say the spread "should be enforced" so that carries and the weight do not mix;
+    enforcement belongs to table composition (who sits down together), while a build-time
+    check should only report it. Hence: a function that names the problem, not one that edits
+    a character.
+    """
+    warnings = []
+    characters = sorted(counts)
+    for index, first in enumerate(characters):
+        for second in characters[index + 1 :]:
+            spread = abs(counts[first] - counts[second])
+            if spread > GIFT_BALANCE_SPREAD:
+                warnings.append(
+                    f"{first} ({counts[first]} gifts) and {second} ({counts[second]} gifts) "
+                    f"are {spread} apart; the house rule keeps a table within "
+                    f"{GIFT_BALANCE_SPREAD}"
+                )
+    return tuple(warnings)
 
 # The health track, from the sheet template (G24:G31).
 HEALTH_LEVELS = (
@@ -248,8 +388,9 @@ def read_sheet(grid, *, source: str = "", name: str | None = None) -> Sheet:
     )
     morality = grid.integer(_MORALITY) if grid.filled(_MORALITY) else None
     health = _read_health(grid)
-    powers = _read_traits(grid, _POWER_ROWS, "A", "B")
-    backgrounds = _read_traits(grid, _BACKGROUND_ROWS, "D", "E")
+    gifts, planned_gifts = _read_gifts(grid)
+    backgrounds, planned_backgrounds = _read_backgrounds(grid)
+    planned_wishlist = _read_wishlist(grid)
 
     if grid.notes:
         meta["notes"] = list(grid.notes)
@@ -264,7 +405,8 @@ def read_sheet(grid, *, source: str = "", name: str | None = None) -> Sheet:
         willpower_remaining=willpower_remaining,
         morality=morality,
         health=health,
-        powers=powers,
+        gifts=gifts,
+        planned=planned_gifts + planned_backgrounds + planned_wishlist,
         backgrounds=backgrounds,
         meta=meta,
         source=source or grid.name,
@@ -302,14 +444,177 @@ def _read_health(grid) -> tuple[str, ...]:
     return tuple(levels)
 
 
-def _read_traits(grid, rows: tuple[int, int], label_col: str, dots_col: str) -> tuple[Trait, ...]:
-    found: list[Trait] = []
-    for row in range(rows[0], rows[1] + 1):
-        label = grid.text(f"{label_col}{row}")
+# Sub-header cells that appear inside a trait block. The template has a second header row
+# ("background" / "# dots"); filled sheets usually overwrite it with a real entry, so a reader
+# has to tolerate both shapes.
+_TRAIT_HEADER_VALUES = frozenset({"# dots", "#dot", "#dots", "dots", "point cost/bonus"})
+# The planning block that sits below the mission log on a filled tab.
+_WISHLIST_HEADER = "things to get"
+# Players group their plans, so a single blank row does not end the list.
+_WISHLIST_GAP_TOLERANCE = 3
+
+
+def _is_trait_header(label: str, raw: str) -> bool:
+    """A row that labels the block rather than belonging to it."""
+    lowered = raw.strip().lower()
+    if lowered in _TRAIT_HEADER_VALUES:
+        return True
+    # Section titles repeat themselves across the two columns ("Missions" / "Missions",
+    # "Backgrounds" / "Backgrounds"), which is how a new block announces itself.
+    return lowered == label.strip().lower()
+
+
+# A mission log row is (mission name, player list). Player lists are terse ("Me, Cowboy,
+# Hikou"); a gift's description is a sentence. That length gap is the only reliable signal in
+# a freeform tab, so it is used explicitly -- and anything skipped is reported, never guessed.
+_MISSION_HEADERS = frozenset({"name", "mission", "missions"})
+_PLAYER_LIST_VALUES = frozenset({"players", "player", "me"})
+_MIN_GIFT_DESCRIPTION = 35
+
+
+def _is_mission_header(label: str, raw: str) -> bool:
+    """The row that starts the mission log: "name" beside "players"."""
+    return label.strip().lower() in _MISSION_HEADERS and raw.strip().lower() in _PLAYER_LIST_VALUES
+
+
+def _looks_like_player_list(raw: str) -> bool:
+    text = raw.strip()
+    if text.lower() in _PLAYER_LIST_VALUES:
+        return True
+    return "," in text and len(text) < _MIN_GIFT_DESCRIPTION
+
+
+def _read_gifts(grid) -> tuple[tuple[Gift, ...], tuple[Gift, ...]]:
+    """The Gifts column, in both of its legitimate shapes, with the mission log removed.
+
+    A Gift is whatever the GM offered, so this block holds levelled powers (a number beside
+    the name) *and* flat techniques (a sentence beside the name). Both are owned; only a
+    rating of zero means "planned".
+
+    Filled tabs also interleave a **mission log** into these columns: a "name | players"
+    header followed by mission names beside the people who played them. That is personal
+    data and it is not a Gift, so it is skipped and counted, and a note records how much was
+    passed over. A prose cell with a number in the third column is a labelled value rather
+    than a power -- "Vampire Gen | Caitiff | 13" is generation 13, not a Gift called Caitiff.
+    """
+    owned: list[Gift] = []
+    planned: list[Gift] = []
+    skipping_missions = False
+    skipped = 0
+    mission_row = 0
+
+    for row in range(_POWER_ROWS[0], _POWER_ROWS[1] + 1):
+        name = grid.text(f"A{row}")
+        raw = grid.text(f"B{row}")
+        note = grid.text(f"C{row}")
+        if not name:
+            continue
+        if not raw and not note:
+            continue
+        if _is_mission_header(name, raw):
+            skipping_missions = True
+            mission_row = row
+            continue
+        if skipping_missions:
+            if _looks_like_player_list(raw):
+                skipped += 1
+                continue
+            skipping_missions = False
+
+        if raw and _is_trait_header(name, raw):
+            continue
+        if _numeric(raw):
+            rating = int(round(float(raw)))
+            # The third column often just repeats the rating; that is not a description.
+            description = "" if _numeric(note) or note == raw else note
+            if rating > 0:
+                owned.append(Gift(name=name, rating=rating, description=description))
+            else:
+                planned.append(Gift(name=name, rating=0, description=description))
+            continue
+        if not raw:
+            continue
+        if _numeric(note):
+            # "Vampire Gen: Caitiff, 13" -- a labelled scalar, not a Gift.
+            continue
+        owned.append(Gift(name=name, description=note or raw))
+
+    if skipped:
+        grid.notes.append(
+            f"A{mission_row}: skipped a mission log ({skipped} rows); "
+            "missions and player names are not imported"
+        )
+    return tuple(owned), tuple(planned)
+
+
+def _read_backgrounds(grid) -> tuple[tuple[Trait, ...], tuple[Gift, ...]]:
+    """Backgrounds, plus the zero-rated ones the player is planning to buy.
+
+    Filled tabs grow past the template: below the backgrounds sits a **Missions** section,
+    below that a wishlist, below that merits with their full text in the same columns. So the
+    block skips its own header rows and stops at the first row that is neither a header nor a
+    rating.
+    """
+    owned: list[Trait] = []
+    planned: list[Gift] = []
+    for row in range(_BACKGROUND_ROWS[0], _BACKGROUND_ROWS[1] + 1):
+        label = grid.text(f"D{row}")
         if not label:
             continue
-        found.append(Trait(name=label, dots=grid.integer(f"{dots_col}{row}")))
-    return tuple(found)
+        raw = grid.text(f"E{row}")
+        if not raw:
+            continue
+        if not _numeric(raw):
+            if _is_trait_header(label, raw):
+                continue
+            break
+        dots = int(round(float(raw)))
+        if dots > 0:
+            owned.append(Trait(name=label, dots=dots))
+        else:
+            planned.append(Gift(name=label, rating=0, description="background, planned"))
+    return tuple(owned), tuple(planned)
+
+
+def _read_wishlist(grid) -> tuple[Gift, ...]:
+    """The "Things to get" block: purchases and advances the player intends to make.
+
+    It is a *plan*, not a possession, so it never counts toward the Gift total. Reading it
+    keeps the player's intentions instead of discarding them with the mission log that
+    precedes it. Short gaps are allowed (players group their plans); a run of blanks or a
+    section header ends the block.
+    """
+    start = None
+    for row in range(_BACKGROUND_ROWS[0], grid.max_row + 1):
+        if grid.text(f"D{row}").strip().lower().startswith(_WISHLIST_HEADER):
+            start = row + 1
+            break
+    if start is None:
+        return ()
+
+    planned: list[Gift] = []
+    blanks = 0
+    for row in range(start, grid.max_row + 1):
+        name = grid.text(f"D{row}")
+        if not name:
+            blanks += 1
+            if blanks >= _WISHLIST_GAP_TOLERANCE:
+                break
+            continue
+        blanks = 0
+        note = grid.text(f"E{row}")
+        if _is_trait_header(name, note):
+            break
+        planned.append(Gift(name=name, description=note))
+    return tuple(planned)
+
+
+def _numeric(text: str) -> bool:
+    try:
+        float(text)
+    except ValueError:
+        return False
+    return True
 
 
 def _read_merits(grid) -> list[dict[str, object]]:

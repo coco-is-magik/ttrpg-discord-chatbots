@@ -92,13 +92,31 @@ def test_setup_hook_publishes_every_command_to_the_guild(monkeypatch) -> None:
             await bot.close()
 
     assert asyncio.run(build()) == [
+        "answer",
         "ask",
+        "claim",
+        "done",
+        "edit",
+        "export",
+        "gift",
+        "heal",
+        "history",
+        "hurt",
+        "import",
         "join",
         "leave",
+        "mission",
+        "options",
         "ping",
         "roll",
         "say",
+        "sheet",
+        "specialty",
+        "spend",
         "stop",
+        "undo",
+        "ungift",
+        "unlock",
         "voices",
     ]
 

@@ -13,6 +13,7 @@ from ttrpg_chatbots.character.prompting import PrompterError
 from ttrpg_chatbots.character.store import CharacterStore
 from ttrpg_chatbots.character.types import Character, CharacterError
 from ttrpg_chatbots.sheets.interview import load_questionnaire
+from ttrpg_chatbots.sheets.systems import houseg
 from ttrpg_chatbots.sheets.types import SheetError
 
 DEFAULT_QUESTIONNAIRE = Path("examples/house_games/interview.json")
@@ -44,6 +45,11 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--rename", help="rename a premade when assigning it")
     parser.add_argument("--import-xlsx", type=Path, metavar="FILE")
     parser.add_argument("--all", action="store_true", help="with --import-xlsx: every character")
+    parser.add_argument(
+        "--interview-only",
+        action="store_true",
+        help="with --import-xlsx: import the prose but leave the mechanics to be rebuilt",
+    )
     parser.add_argument("--list", action="store_true")
     parser.add_argument("--show", metavar="ID")
     parser.add_argument("--event", metavar="ID", help="append an event to a character's history")
@@ -118,8 +124,12 @@ def _show(character: Character, *, as_json: bool) -> int:
     )
     if sheet.backgrounds:
         print("backgrounds: " + ", ".join(f"{t.name} {t.dots}" for t in sheet.backgrounds))
-    if sheet.powers:
-        print("powers: " + ", ".join(f"{t.name} {t.dots}" for t in sheet.powers))
+    if sheet.gifts:
+        print("gifts: " + ", ".join(g.label() for g in sheet.gifts))
+        tier = houseg.gift_tier(sheet.gift_count, veteran=sheet.veteran)
+        print(f"gift count {sheet.gift_count} ({tier})")
+    if sheet.planned:
+        print(f"planned: {len(sheet.planned)} not yet taken")
     if character.interview is not None:
         missing = character.interview.missing
         line = f"interview: {character.interview.answered}/{character.interview.total} answered"
@@ -180,8 +190,13 @@ def main(argv: list[str] | None = None) -> int:
                 found = ", ".join(importer.importable_names(args.import_xlsx)) or "none found"
                 raise CharacterError(f"give --name, or --all for every character ({found})")
             for name in names:
-                character = importer.import_character(args.import_xlsx, name)
-                print(f"imported {character.name} -> {store.save(character)}")
+                if args.interview_only:
+                    character = importer.import_interview(args.import_xlsx, name)
+                    print(f"imported the interview for {character.name} (mechanics pending)")
+                else:
+                    character = importer.import_character(args.import_xlsx, name)
+                    print(f"imported {character.name}")
+                print(f"  saved -> {store.save(character)}")
             return 0
 
         if args.new:

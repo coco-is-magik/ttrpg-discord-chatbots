@@ -31,7 +31,7 @@ wrong, re-export it rather than deleting rows in place.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -117,6 +117,36 @@ class Interview:
             for question in self.questions
             if normalise(question.section) == wanted
         )
+
+    def number_of(self, prompt: str) -> int:
+        """The 1-based position of a question, so people can refer to "answer 12"."""
+        resolved = self.question(prompt).prompt
+        for index, question in enumerate(self.questions, start=1):
+            if question.prompt == resolved:
+                return index
+        raise ValueError(f"no question {prompt!r}")
+
+    def at(self, number: int) -> Question:
+        """The question at a 1-based position, with the reason attached when it is out of range."""
+        if not 1 <= number <= self.total:
+            raise IndexError(
+                f"{self.character}: no question {number}; there are {self.total}, "
+                f"numbered 1..{self.total}"
+            )
+        return self.questions[number - 1]
+
+    def with_answer(self, number: int, answer: str) -> Interview:
+        """A copy with one answer replaced. Draft editing, not history."""
+        if not answer.strip():
+            raise ValueError("an answer cannot be blank")
+        target = self.at(number)
+        questions = tuple(
+            replace(question, answer=answer.strip())
+            if question.prompt == target.prompt and question.section == target.section
+            else question
+            for question in self.questions
+        )
+        return replace(self, questions=questions)
 
     def as_dict(self) -> dict[str, Any]:
         return {

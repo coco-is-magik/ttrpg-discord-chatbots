@@ -8,8 +8,10 @@ import pytest
 
 from ttrpg_chatbots.character.importer import (
     import_character,
+    import_interview,
     import_workbook,
     importable_names,
+    scrubbed_meta,
 )
 from ttrpg_chatbots.character.types import CharacterError
 
@@ -86,3 +88,60 @@ def test_prose_in_a_stat_cell_is_recorded_not_fatal() -> None:
     notes = character.sheet.meta.get("notes", [])
     assert any(note.startswith("B9:") for note in notes)
     assert character.ready is True
+
+
+# -- privacy ---------------------------------------------------------------
+
+
+def test_a_player_name_is_never_imported() -> None:
+    """The workbook's Player cell belongs to a person; identity is a seat, not a field."""
+    from ttrpg_chatbots.sheets.systems import houseg
+
+    assert "player" not in houseg._INFO
+    for name in importable_names(WORKBOOK):
+        meta = import_character(WORKBOOK, name).sheet.meta
+        assert "player" not in meta
+        assert "gm" not in meta
+        assert "missions" not in meta
+        assert "mission log" not in meta
+
+
+def test_the_scrubber_drops_person_names_and_keeps_character_content() -> None:
+    meta = {
+        "player": "Hikou",
+        "GM": "Sam",
+        "Missions": ["the vat under the city"],
+        "mission log": "...",
+        "things to get": "a bigger knife",
+        "nature": "Recognition Seeker",
+        "merits": [{"name": "Enemy: Camerilla", "points": 5}],
+    }
+    cleaned = scrubbed_meta(meta)
+    assert cleaned == {
+        "nature": "Recognition Seeker",
+        "merits": [{"name": "Enemy: Camerilla", "points": 5}],
+    }
+
+
+# -- interview only --------------------------------------------------------
+
+
+def test_an_interview_only_import_keeps_the_prose_and_no_mechanics() -> None:
+    character = import_interview(WORKBOOK, "Molly MacIntosh", clock=lambda: CLOCK)
+    assert character.interview is not None
+    assert character.interview.complete is True
+    assert character.interview.total == 55
+    assert character.sheet.attributes == {}
+    assert character.sheet.abilities == {}
+    assert character.sheet.backgrounds == ()
+    # A draft: the answers are in, the mechanics are not, so it is not ready to play.
+    assert character.sealed is False
+    assert character.ready is False
+    assert character.revision == 1
+    assert character.history[-1].detail["mechanics"] == "not imported"
+    assert "mechanics to be built" in character.history[-1].summary
+
+
+def test_an_interview_only_import_asks_for_a_real_tab() -> None:
+    with pytest.raises(CharacterError, match="no interview tab"):
+        import_interview(WORKBOOK, "Nobody At All")

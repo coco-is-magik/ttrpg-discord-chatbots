@@ -26,6 +26,8 @@ SCHEMA_VERSION = 1
 EVENT_KINDS = (
     "created",
     "assigned",
+    "answer",
+    "revision",
     "import",
     "sealed",
     "session",
@@ -40,6 +42,14 @@ EVENT_KINDS = (
 
 class CharacterError(RuntimeError):
     """Raised when a character cannot be built, sealed or updated."""
+
+
+class CharacterConflict(CharacterError):
+    """Raised when a write is based on a revision that is no longer current.
+
+    This is the compare-and-swap failing, not a bug: somebody else (or another device) wrote
+    first. Callers reload and retry rather than overwrite.
+    """
 
 
 def interview_digest(interview: Interview) -> str:
@@ -104,8 +114,15 @@ class Character:
     sealed: bool = False
     digest: str = ""
     created: str = ""
+    # Every accepted change bumps this. Writes are compare-and-swap on it, so two surfaces
+    # editing one character cannot silently overwrite each other.
+    revision: int = 0
 
     def __post_init__(self) -> None:
+        if isinstance(self.revision, bool) or not isinstance(self.revision, int):
+            raise CharacterError(f"revision must be a whole number, got {self.revision!r}")
+        if self.revision < 0:
+            raise CharacterError(f"revision must not be negative, got {self.revision}")
         if self.sealed and self.interview is None:
             raise CharacterError("a sealed character must carry its interview")
         if self.sealed and self.digest != interview_digest(self.interview):
@@ -144,7 +161,7 @@ class Character:
     ) -> Character:
         """Append one history event and return the new state."""
         event = Event(kind=kind, summary=summary, at=at, detail=dict(detail or {}))
-        return replace(self, history=self.history + (event,))
+        return replace(self, history=self.history + (event,), revision=self.revision + 1)
 
     def with_interview(self, interview: Interview) -> Character:
         """Attach an interview while the character is still being built."""
@@ -152,7 +169,36 @@ class Character:
             raise CharacterError(
                 "the interview is sealed; answer changes belong in the history, not the origin"
             )
-        return replace(self, interview=interview)
+        return replace(self, interview=interview, revision=self.revision + 1)
+
+    def with_answer(self, number: int, answer: str, *, at: str = "") -> Character:
+        """Rewrite one answer while the character is a draft."""
+        if self.interview is None:
+            raise CharacterError(f"{self.name} has no interview")
+        if self.sealed:
+            raise CharacterError(
+                f"{self.name} is sealed; run /unlock first, then amend the answer"
+            )
+        updated = self.interview.with_answer(number, answer)
+        return replace(self, interview=updated, revision=self.revision + 1).record(
+            "answer", f"amended answer {number}: {updated.at(number).prompt[:60]}", at=at
+        )
+
+    def unlock(self, *, reason: str = "", at: str = "") -> Character:
+        """Reopen a sealed character for a Revision.
+
+        The rules call this a Character Revision — offered at each level past Novice, and
+        taken whenever a GM and a player agree the character needs changing. Unsealing drops
+        the digest, so the next seal records a fresh one; the history keeps both.
+        """
+        if not self.sealed:
+            return self
+        reopened = replace(self, sealed=False, digest="").record(
+            "revision",
+            f"reopened for revision{': ' + reason if reason else ''}",
+            at=at,
+        )
+        return replace(reopened, revision=reopened.revision + 1)
 
     def seal(self, *, at: str = "") -> Character:
         """Lock the answers in, once they are complete."""
@@ -166,21 +212,42 @@ class Character:
             )
         if self.sealed:
             return self
-        sealed = replace(
-            self, sealed=True, digest=interview_digest(self.interview)
-        )
-        return sealed.record(
-            "sealed",
-            f"interview sealed with {self.interview.total} answers",
+        digest = interview_digest(self.interview)
+        event = Event(
+            kind="sealed",
+            summary=f"interview sealed with {self.interview.total} answers",
             at=at,
-            detail={"digest": sealed.digest},
+            detail={"digest": digest},
+        )
+        # One bump for one action: sealing is a single user decision, not two.
+        return replace(
+            self,
+            sealed=True,
+            digest=digest,
+            history=self.history + (event,),
+            revision=self.revision + 1,
         )
 
-    def with_sheet(self, sheet: Sheet, *, summary: str = "", at: str = "") -> Character:
-        """Replace the mechanics and log what changed."""
+    def with_sheet(
+        self,
+        sheet: Sheet,
+        *,
+        summary: str = "",
+        at: str = "",
+        detail: Mapping[str, Any] | None = None,
+    ) -> Character:
+        """Replace the mechanics and log what changed.
+
+        ``detail`` is what makes an edit reversible: recording ``{"trait": "Stealth",
+        "before": 2, "after": 3}`` lets ``/undo`` put the old value back without keeping a
+        snapshot of the whole sheet in history.
+        """
         if not summary:
             summary = f"sheet updated for {sheet.name}"
-        return replace(self, sheet=sheet).record("sheet", summary, at=at)
+        event = Event(kind="sheet", summary=summary, at=at, detail=dict(detail or {}))
+        return replace(
+            self, sheet=sheet, history=self.history + (event,), revision=self.revision + 1
+        )
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -191,6 +258,7 @@ class Character:
             "sealed": self.sealed,
             "digest": self.digest,
             "created": self.created,
+            "revision": self.revision,
             "sheet": self.sheet.as_dict(),
             "interview": self.interview.as_dict() if self.interview is not None else None,
             "history": [event.as_dict() for event in self.history],
@@ -237,8 +305,11 @@ class Character:
                 sealed=bool(data.get("sealed")),
                 digest=str(data.get("digest", "") or ""),
                 created=str(data.get("created", "") or ""),
+                # Files written before revisions existed are revision 0, which is also the
+                # revision a freshly created character has: nothing to migrate.
+                revision=int(data.get("revision", 0) or 0),
             )
-        except ValueError as error:
+        except (ValueError, CharacterError) as error:
             raise CharacterError(str(error)) from error
 
     @classmethod

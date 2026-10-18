@@ -11,6 +11,7 @@ one research project per system.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping
 
@@ -34,6 +35,19 @@ class UnknownTrait(SheetError, ValueError):
 def normalise(name: str) -> str:
     """Case- and whitespace-insensitive key, the way a player would type it."""
     return " ".join((name or "").split()).lower()
+
+
+_SLUG = re.compile(r"[^a-z0-9]+")
+
+
+def identifier(name: str) -> str:
+    """A filename-safe identifier: ``"Molly MacIntosh"`` -> ``"molly-macintosh"``.
+
+    One spelling for one thing: the id stored in a character file, the seat that names it and
+    the file on disk are all this string, so a comparison cannot disagree with a path.
+    """
+    slug = _SLUG.sub("-", normalise(name)).strip("-")
+    return slug or "unnamed"
 
 
 def resolve_name(name: str, candidates: Iterable[str]) -> str:
@@ -97,6 +111,73 @@ class Ability:
 
 
 @dataclass(frozen=True)
+class Gift:
+    """A power the character has been given.
+
+    House Games awards **one Gift per successful mission**, and a Gift is whatever the GM
+    offered: a levelled discipline, a flat technique, anything printed in an oWoD book. So
+    ``rating`` is optional — ``None`` means "flat, described only" — and ``source`` records
+    where it came from, because the same column in the workbook legitimately holds both
+    shapes. A rating of ``0`` is not a Gift; it is a *plan*, and lives in ``Sheet.planned``.
+    """
+
+    name: str
+    rating: int | None = None
+    source: str = ""
+    description: str = ""
+    approved: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.name.strip():
+            raise ValueError("a gift needs a name")
+        if self.rating is not None:
+            if isinstance(self.rating, bool) or not isinstance(self.rating, int):
+                raise ValueError(f"{self.name}: rating must be a whole number or None")
+            if not 0 <= self.rating <= MAX_RANK:
+                raise ValueError(
+                    f"{self.name}: rating must be in 0..{MAX_RANK}, got {self.rating}"
+                )
+
+    @property
+    def is_rated(self) -> bool:
+        return self.rating is not None
+
+    def label(self) -> str:
+        """``Thanatosis 1`` when it has levels, ``Walking Fire`` when it is flat."""
+        return f"{self.name} {self.rating}" if self.rating else self.name
+
+    def as_dict(self) -> dict[str, Any]:
+        data: dict[str, Any] = {"name": self.name}
+        if self.rating is not None:
+            data["rating"] = self.rating
+        if self.source:
+            data["source"] = self.source
+        if self.description:
+            data["description"] = self.description
+        if self.approved:
+            data["approved"] = self.approved
+        return data
+
+    @classmethod
+    def from_dict(cls, data: Any) -> Gift:
+        if not isinstance(data, Mapping):
+            raise ValueError("a gift must be an object")
+        name = data.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("a gift needs a string 'name'")
+        rating = data.get("rating")
+        if rating is not None and (isinstance(rating, bool) or not isinstance(rating, int)):
+            raise ValueError(f"{name}: 'rating' must be a whole number or absent")
+        return cls(
+            name=name.strip(),
+            rating=rating,
+            source=str(data.get("source", "") or ""),
+            description=str(data.get("description", "") or ""),
+            approved=str(data.get("approved", "") or ""),
+        )
+
+
+@dataclass(frozen=True)
 class Sheet:
     """One character, reduced to the parts a bot can use."""
 
@@ -110,8 +191,17 @@ class Sheet:
     willpower_remaining: int | None = None
     morality: int | None = None
     health: tuple[str, ...] = ()
-    powers: tuple[Trait, ...] = ()
+    gifts: tuple[Gift, ...] = ()
+    planned: tuple[Gift, ...] = ()
     backgrounds: tuple[Trait, ...] = ()
+    # The Veteran Template is a status earned by a solo Veteran Game, not a Gift count; it
+    # changes the tier and raises the Background cap. Kept separate for that reason.
+    veteran: bool = False
+    # The two currencies the rules actually spend: freebie points at creation and experience
+    # afterwards. Explicit fields, because a pool hidden in ``meta`` is how "why can't I
+    # afford this?" becomes unanswerable.
+    freebies: int = 0
+    xp: int = 0
     meta: Mapping[str, Any] = field(default_factory=dict)
     source: str = ""
 
@@ -122,9 +212,14 @@ class Sheet:
             raise ValueError("a sheet needs a system name")
 
     @property
+    def gift_count(self) -> int:
+        """Gifts held: House Games awards one per successful mission."""
+        return len(self.gifts)
+
+    @property
     def key(self) -> str:
-        """Stable identifier, defaulting to the normalised name."""
-        return self.id or normalise(self.name)
+        """The character id: filename-safe and stable, e.g. ``molly-macintosh``."""
+        return identifier(self.id or self.name)
 
     def attribute(self, name: str) -> int:
         resolved = resolve_name(name, self.attributes)
@@ -143,11 +238,18 @@ class Sheet:
             return None
 
     def trait(self, name: str) -> Trait:
-        for group in (self.powers, self.backgrounds):
-            for trait in group:
-                if normalise(trait.name) == normalise(name):
-                    return trait
+        """A rated, costed trait: backgrounds. Gifts are looked up with :meth:`gift`."""
+        for trait in self.backgrounds:
+            if normalise(trait.name) == normalise(name):
+                return trait
         raise UnknownTrait(f"{self.name} has no trait called {name!r}")
+
+    def gift(self, name: str) -> Gift:
+        """A Gift by name, rated or flat."""
+        for gift in self.gifts:
+            if normalise(gift.name) == normalise(name):
+                return gift
+        raise UnknownTrait(f"{self.name} has no gift called {name!r}")
 
     def as_dict(self) -> dict[str, Any]:
         """JSON-ready, for the CLI and for caching."""
@@ -169,7 +271,11 @@ class Sheet:
             "willpower_remaining": self.willpower_remaining,
             "morality": self.morality,
             "health": list(self.health),
-            "powers": [{"name": trait.name, "dots": trait.dots} for trait in self.powers],
+            "gifts": [gift.as_dict() for gift in self.gifts],
+            "veteran": self.veteran,
+            "freebies": self.freebies,
+            "xp": self.xp,
+            "planned": [gift.as_dict() for gift in self.planned],
             "backgrounds": [
                 {"name": trait.name, "dots": trait.dots} for trait in self.backgrounds
             ],
@@ -206,7 +312,7 @@ def sheet_from_dict(data: Any) -> Sheet:
     return Sheet(
         name=name.strip(),
         system=system.strip(),
-        id=str(data.get("id", "") or ""),
+        id=identifier(str(data.get("id", "") or "")),
         attributes={str(key): int(value) for key, value in attributes.items()},
         abilities=abilities,
         virtues={str(k): int(v) for k, v in (data.get("virtues") or {}).items()},
@@ -216,10 +322,11 @@ def sheet_from_dict(data: Any) -> Sheet:
         ),
         morality=None if data.get("morality") is None else int(data["morality"]),
         health=tuple(str(level) for level in (data.get("health") or ())),
-        powers=tuple(
-            Trait(name=str(entry["name"]), dots=int(entry.get("dots", 0)))
-            for entry in (data.get("powers") or ())
-        ),
+        gifts=tuple(Gift.from_dict(entry) for entry in (data.get("gifts") or ())),
+        planned=tuple(Gift.from_dict(entry) for entry in (data.get("planned") or ())),
+        veteran=bool(data.get("veteran", False)),
+        freebies=int(data.get("freebies", 0) or 0),
+        xp=int(data.get("xp", 0) or 0),
         backgrounds=tuple(
             Trait(name=str(entry["name"]), dots=int(entry.get("dots", 0)))
             for entry in (data.get("backgrounds") or ())

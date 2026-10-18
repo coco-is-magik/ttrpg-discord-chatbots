@@ -8,14 +8,15 @@ is why the importer refuses a name that has only one of them.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable, Mapping
 
 from ttrpg_chatbots.character.creation import now_utc
 from ttrpg_chatbots.character.types import Character, CharacterError
 from ttrpg_chatbots.sheets.interview import character_from_tab, read_interview
 from ttrpg_chatbots.sheets.systems import houseg
-from ttrpg_chatbots.sheets.types import SheetError, normalise
+from ttrpg_chatbots.sheets.types import Sheet, SheetError, normalise
 from ttrpg_chatbots.sheets.xlsx import WorkbookError, read_grid, sheet_names
 
 INTERVIEW_PREFIX = "AQ "
@@ -44,6 +45,26 @@ def importable_names(path: Path | str) -> tuple[str, ...]:
         if normalise(name) in interviews & mechanics:
             names[normalise(name)] = name
     return tuple(names[key] for key in sorted(names))
+
+
+PERSONAL_META_KEYS = frozenset(
+    {"player", "gm", "g.m.", "missions", "mission log", "things to get"}
+)
+
+
+def scrubbed_meta(meta: Mapping[str, Any]) -> dict[str, Any]:
+    """Drop anything that identifies a person rather than a character.
+
+    The workbook has a ``Player`` cell and a **mission log** whose rows name the GM and the
+    players ("Me, Hikou", "Me, Driver"). Those belong to the people at that table, not to the
+    character, and who plays this character is a **seat** now. Anything with one of these
+    names is removed rather than carried into the native file.
+    """
+    return {
+        str(key): value
+        for key, value in meta.items()
+        if str(key).strip().lower() not in PERSONAL_META_KEYS
+    }
 
 
 def import_character(
@@ -87,6 +108,10 @@ def import_character(
     except SheetError as error:
         raise CharacterError(str(error)) from error
 
+    # Nothing that identifies a person survives the import: seats own identity.
+    if sheet.meta:
+        sheet = replace(sheet, meta=scrubbed_meta(sheet.meta))
+
     created = clock()
     character = Character(sheet=sheet, interview=interview, created=created)
     character = character.record(
@@ -102,6 +127,73 @@ def import_character(
     if interview.complete:
         character = character.seal(at=created)
     return character
+
+
+def import_interview(
+    path: Path | str,
+    name: str,
+    *,
+    clock: Callable[[], str] = now_utc,
+) -> Character:
+    """Import only the interview: the prose, with no mechanics.
+
+    A workbook is a snapshot, and snapshots go stale — characters advance past the numbers
+    on the tab. The 55 answers are the expensive part (hours of writing, impossible to
+    reconstruct), while the mechanics are a few dozen numbers that the creation flow can set
+    again. So this produces a **draft** character with the answers and an empty sheet, ready
+    to be built mechanically in the portal rather than inheriting numbers nobody trusts.
+    """
+    source = Path(path)
+    tabs = _tabs(source)
+    wanted = normalise(name)
+    interview_tab = next(
+        (
+            tab
+            for tab in tabs
+            if tab.upper().startswith(INTERVIEW_PREFIX)
+            and normalise(character_from_tab(tab)) == wanted
+        ),
+        None,
+    )
+    if interview_tab is None:
+        available = ", ".join(importable_names(source)) or "none"
+        raise CharacterError(
+            f"{source.name} has no interview tab for {name!r}; importable: {available}"
+        )
+
+    try:
+        interview = read_interview(
+            read_grid(source, interview_tab),
+            character=name,
+            source=f"{source.name} [{interview_tab}]",
+        )
+    except SheetError as error:
+        raise CharacterError(str(error)) from error
+
+    created = clock()
+    sheet = Sheet(
+        name=name.strip(),
+        system=houseg.SYSTEM,
+        source=f"{source.name} [{interview_tab}] (interview only)",
+    )
+    character = Character(sheet=sheet, interview=interview, created=created)
+    return character.record(
+        "import",
+        f"imported the interview from {source.name} [{interview_tab}]; mechanics to be built",
+        at=created,
+        detail={
+            "workbook": str(source),
+            "interview_tab": interview_tab,
+            "mechanics": "not imported",
+        },
+    )
+
+
+def _tabs(source: Path) -> tuple[str, ...]:
+    try:
+        return sheet_names(source)
+    except WorkbookError as error:
+        raise CharacterError(str(error)) from error
 
 
 def import_workbook(

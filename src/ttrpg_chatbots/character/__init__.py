@@ -20,7 +20,13 @@ plus what has happened since.
 """
 
 from ttrpg_chatbots.character.creation import ask_interview, ask_mechanics, start_character
-from ttrpg_chatbots.character.importer import import_character, import_workbook, importable_names
+from ttrpg_chatbots.character.importer import (
+    import_character,
+    import_interview,
+    import_workbook,
+    importable_names,
+    scrubbed_meta,
+)
 from ttrpg_chatbots.character.prompting import Prompter, PrompterError
 from ttrpg_chatbots.character.randomiser import (
     assign_premade,
@@ -33,6 +39,7 @@ from ttrpg_chatbots.character.types import (
     EVENT_KINDS,
     SCHEMA_VERSION,
     Character,
+    CharacterConflict,
     CharacterError,
     Event,
     interview_digest,
@@ -42,6 +49,7 @@ __all__ = [
     "EVENT_KINDS",
     "SCHEMA_VERSION",
     "Character",
+    "CharacterConflict",
     "CharacterError",
     "CharacterStore",
     "Event",
@@ -51,11 +59,13 @@ __all__ = [
     "ask_mechanics",
     "assign_premade",
     "import_character",
+    "import_interview",
     "import_workbook",
     "importable_names",
     "interview_digest",
     "pool_by_system",
     "random_character",
     "random_mechanics",
+    "scrubbed_meta",
     "start_character",
 ]

@@ -97,7 +97,7 @@ def random_mechanics(
         willpower_remaining=virtues["Courage"],
         morality=virtues["Conscience/Conviction"] + virtues["Self-Control/Instinct"],
         health=system.HEALTH_LEVELS,
-        powers=(),
+        gifts=(),
         backgrounds=_random_traits(rng, system.BACKGROUND_SUGGESTIONS, system.BACKGROUND_POINTS),
     )
 

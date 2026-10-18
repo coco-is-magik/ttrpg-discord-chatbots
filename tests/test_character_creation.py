@@ -68,13 +68,13 @@ def test_trackers_are_derived_from_virtues() -> None:
     assert sum(virtues.values()) - 3 == 7
 
 
-def test_backgrounds_powers_and_health_are_recorded() -> None:
+def test_backgrounds_gifts_and_health_are_recorded() -> None:
     sheet = build().sheet
     assert [(trait.name, trait.dots) for trait in sheet.backgrounds] == [
         ("Mentor", 3),
         ("Contacts", 2),
     ]
-    assert [(trait.name, trait.dots) for trait in sheet.powers] == [("Auspex", 2)]
+    assert [(gift.name, gift.rating) for gift in sheet.gifts] == [("Auspex", 2)]
     assert sheet.health[0] == "Unharmed"
     assert len(sheet.health) == 8
 
@@ -191,3 +191,23 @@ def test_an_empty_form_is_refused() -> None:
     with pytest.raises(ValueError, match="at least one section"):
         Questionnaire(name="empty")
 
+
+
+# -- the creation and spending paths must agree ----------------------------
+
+
+def test_creation_seeds_the_freebie_pool() -> None:
+    from ttrpg_chatbots.sheets.systems import houseg
+
+    assert build().sheet.freebies == houseg.FREEBIE_BASE == 15
+
+
+def test_creation_and_the_portal_share_one_cap() -> None:
+    from ttrpg_chatbots.sheetportal.mutations import cap_for
+    from ttrpg_chatbots.sheets.systems import houseg
+
+    created = build().sheet
+    # The wizard refuses to exceed MAX_CREATION_TRAIT; the portal refuses to exceed cap_for.
+    # If those ever diverge, a character becomes legal in one path and illegal in the other.
+    for name in created.attributes:
+        assert cap_for(created, "attribute", name) == houseg.MAX_CREATION_TRAIT

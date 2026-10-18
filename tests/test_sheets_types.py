@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from ttrpg_chatbots.sheets.types import (
+    Gift,
     KNOWLEDGE,
     SKILL,
     TALENT,
@@ -14,6 +15,7 @@ from ttrpg_chatbots.sheets.types import (
     UnknownTrait,
     normalise,
     resolve_name,
+    sheet_from_dict,
 )
 
 
@@ -80,7 +82,7 @@ def sheet() -> Sheet:
             "Occult": Ability(name="Occult", rank=1, category=KNOWLEDGE),
             "Brawl": Ability(name="Brawl", rank=3, category=TALENT),
         },
-        powers=(Trait(name="Auspex", dots=2),),
+        gifts=(Gift(name="Auspex", rating=2),),
         backgrounds=(Trait(name="Mentor", dots=3),),
     )
 
@@ -107,9 +109,9 @@ def test_an_absent_ability_can_be_asked_about_without_raising() -> None:
         character.ability("Firearms")
 
 
-def test_traits_are_found_in_powers_and_backgrounds() -> None:
+def test_gifts_and_backgrounds_are_found_by_name() -> None:
     character = sheet()
-    assert character.trait("auspex").dots == 2
+    assert character.gift("auspex").rating == 2
     assert character.trait("Mentor").dots == 3
     with pytest.raises(UnknownTrait, match="no trait"):
         character.trait("Generation")
@@ -117,12 +119,66 @@ def test_traits_are_found_in_powers_and_backgrounds() -> None:
 
 def test_a_sheet_round_trips_to_json_ready_data() -> None:
     payload = sheet().as_dict()
-    assert payload["id"] == "brannoc the archivist"
+    assert payload["id"] == "brannoc-the-archivist"  # one spelling, filename-safe
     assert payload["system"] == "house-games"
     assert payload["abilities"]["Stealth"] == {
         "rank": 2,
         "category": SKILL,
         "specialty": "alleys",
     }
-    assert payload["powers"] == [{"name": "Auspex", "dots": 2}]
+    assert payload["gifts"] == [{"name": "Auspex", "rating": 2}]
     assert payload["health"] == []
+
+
+# -- gifts: rated, flat, or planned ---------------------------------------
+
+
+def test_a_gift_is_rated_or_flat() -> None:
+    rated = Gift(name="Thanatosis", rating=1, description="shroud of decay")
+    flat = Gift(name="Walking Fire", description="Moving x5, Charging")
+    assert rated.is_rated and rated.label() == "Thanatosis 1"
+    assert not flat.is_rated and flat.label() == "Walking Fire"
+    # Zero is a *plan*, not a flat gift, and not the same as absent.
+    assert Gift(name="Auspex", rating=0).is_rated
+    assert Gift(name="Auspex").rating is None
+
+
+def test_a_gift_rating_must_be_sane() -> None:
+    with pytest.raises(ValueError, match="rating must be in"):
+        Gift(name="Auspex", rating=-1)
+    with pytest.raises(ValueError, match="rating must be a whole number"):
+        Gift(name="Auspex", rating="two")  # type: ignore[arg-type]
+
+
+def test_gifts_survive_a_round_trip_including_flatness() -> None:
+    character = Sheet(
+        name="Robert Ross",
+        system="house-games",
+        gifts=(
+            Gift(name="Walking Fire", description="Moving x5"),
+            Gift(name="Fortitude", rating=2),
+        ),
+        planned=(Gift(name="Tough as nails", description="extra Bruised level"),),
+        veteran=True,
+    )
+    again = sheet_from_dict(character.as_dict())
+    assert [(gift.name, gift.rating) for gift in again.gifts] == [
+        ("Walking Fire", None),
+        ("Fortitude", 2),
+    ]
+    assert again.planned[0].name == "Tough as nails"
+    assert again.gift_count == 2
+    # The Veteran Template is a status, so it must survive the round trip independently of
+    # the Gift count.
+    assert again.veteran is True
+
+
+def test_a_sheet_finds_a_gift_by_name() -> None:
+    character = Sheet(
+        name="Molly MacIntosh",
+        system="house-games",
+        gifts=(Gift(name="Thanatosis", rating=1),),
+    )
+    assert character.gift("thanatosis").rating == 1
+    with pytest.raises(UnknownTrait, match="no gift"):
+        character.gift("Auspex")

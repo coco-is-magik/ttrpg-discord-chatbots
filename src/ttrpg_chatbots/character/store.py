@@ -16,20 +16,17 @@ import re
 import tempfile
 from pathlib import Path
 
-from ttrpg_chatbots.character.types import Character, CharacterError
-from ttrpg_chatbots.sheets.types import normalise
+from ttrpg_chatbots.character.types import Character, CharacterConflict, CharacterError
+from ttrpg_chatbots.sheets.types import identifier, normalise
 
 DEFAULT_ROOT = Path("data") / "characters"
 SUFFIX = ".json"
 
-_SLUG = re.compile(r"[^a-z0-9]+")
-
-
-def slug_for(identifier: str) -> str:
-    """A safe filename stem: ``"Molly MacIntosh"`` -> ``"molly-macintosh"``."""
-    slug = _SLUG.sub("-", normalise(identifier)).strip("-")
-    if not slug:
-        raise CharacterError(f"cannot make a filename from {identifier!r}")
+def slug_for(name: str) -> str:
+    """A filename stem, using the same rule as :func:`sheets.types.identifier`."""
+    slug = identifier(name or "")
+    if slug == "unnamed":  # punctuation only: there is no filename to make
+        raise CharacterError(f"cannot make a filename from {name!r}")
     return slug
 
 
@@ -88,11 +85,29 @@ class CharacterStore:
             characters.append(self.load(identifier))
         return tuple(characters)
 
-    def save(self, character: Character) -> Path:
+    def save(self, character: Character, *, expect_revision: int | None = None) -> Path:
+        """Write a character, optionally only if it is still at ``expect_revision``.
+
+        Passing ``expect_revision`` makes the write a compare-and-swap: if another surface
+        wrote first, this raises :class:`CharacterConflict` and nothing is touched. Callers
+        that are deliberately overwriting (an import, a repair) omit it.
+        """
         path = self.path(character.id)
         existing = None
         if path.is_file():
             existing = self.load(character.id)
+
+        if expect_revision is not None:
+            if existing is None:
+                raise CharacterConflict(
+                    f"{character.name!r} is no longer at {path}; it may have been deleted"
+                )
+            if existing.revision != expect_revision:
+                raise CharacterConflict(
+                    f"{character.name!r} changed while this view was open: expected "
+                    f"revision {expect_revision}, found {existing.revision}. Reload and retry."
+                )
+
         if existing is not None and existing.name != character.name:
             raise CharacterError(
                 f"refusing to overwrite {path.name}: it holds {existing.name!r}, "

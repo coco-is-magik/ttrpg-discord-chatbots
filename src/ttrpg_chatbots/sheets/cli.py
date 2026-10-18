@@ -97,8 +97,10 @@ def _report(sheet: Sheet) -> None:
 
     if sheet.health:
         print("health: " + " / ".join(sheet.health))
-    if sheet.powers:
-        print("powers: " + ", ".join(f"{trait.name} {trait.dots}" for trait in sheet.powers))
+    if sheet.gifts:
+        print("gifts: " + ", ".join(gift.label() for gift in sheet.gifts))
+        tier = houseg.gift_tier(sheet.gift_count, veteran=sheet.veteran)
+        print(f"gift count {sheet.gift_count} ({tier})")
     if sheet.backgrounds:
         print(
             "backgrounds: "

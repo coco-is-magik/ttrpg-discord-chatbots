@@ -14,6 +14,7 @@ Two ways in for a language model:
 from ttrpg_chatbots.dice.checks import Check, Checkbook, checks_from_records, load_checks
 from ttrpg_chatbots.dice.intent import RollRequest, parse_instruction
 from ttrpg_chatbots.dice.notation import is_notation, parse_notation
+from ttrpg_chatbots.dice.parts import RollParts, build_spec, roll_parts
 from ttrpg_chatbots.dice.responder import DiceResponder
 from ttrpg_chatbots.dice.roller import RandomSource, Roller
 from ttrpg_chatbots.dice.tool import TOOL_NAME, DiceTool, ToolOutcome, tool_schema
@@ -40,9 +41,11 @@ __all__ = [
     "RandomSource",
     "RollRequest",
     "RollResult",
+    "RollParts",
     "RollSpec",
     "Roller",
     "ToolOutcome",
+    "build_spec",
     "checks_from_records",
     "is_notation",
     "load_checks",
