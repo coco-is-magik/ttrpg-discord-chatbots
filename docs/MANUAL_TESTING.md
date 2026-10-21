@@ -174,7 +174,8 @@ Then try the edges, which are the point of the design:
 | `@TerrysTopGuy yoooo` | a greeting, not a refusal |
 | `@TerrysTopGuy what is the plot of dune?` | a short hedge (`?`, `say more?`) — not a paragraph |
 | `@TerrysTopGuy what is the sunken crown?` | an honest refusal — friends know no lore |
-| `@TerrysTopGuy hey` twice | two different greetings, not the same line |
+| `@TerrysTopGuy hey` twice | **the same or a different greeting** — with `TTRPG_CONVERSATION=greet`
+  he reuses lines deliberately (§2.5); repetition here is a pass, not a bug |
 | `hey, @friend-b` | silence: `friend-b` has `reply: off` |
 | a message that mentions no friend | silence |
 
@@ -221,6 +222,54 @@ Then check the things a table cannot:
 
 `friend-b` and `friend-c` are deliberately still neutral. Asking them `do you like hockey?` must
 produce a plain "I don't know", not one of TopGuy's lines.
+
+### 2.5 The greet phase on its own (module ladder)
+
+`TTRPG_CONVERSATION=greet` in `.env` hands **greetings only** to the new ladder; every other message
+still goes to the old classifier. This is the first phase proved in isolation, and this script is how
+you decide whether the module split is working.
+
+Setup, once:
+
+```bash
+./start-bot.sh --status          # exactly one process
+.venv/bin/python -m ttrpg_chatbots.conv.cli --harness
+# attempts 144  said 144  abstained 0
+# words: median 1, max 3
+# distinct: 7% (10 of 144)
+# ends on a beat: 0%
+```
+
+Then in Discord, in `#general`. **Success is not "that was clever"** — success is the pattern below.
+
+| # | Do this | Pass looks like | If it fails, the fault is in |
+|---|---|---|---|
+| 1 | `@TerrysTopGuy hey` at your local morning | one to three words, recognises you | `decide/family` (warmth) or `perceive/clock` |
+| 2 | same at 20:00 local | evening wording, not morning | `perceive/clock` or `decide/family` |
+| 3 | `@TerrysTopGuy hey` **three times over a day** | **he repeats himself**. Reused phrasings are the target, not a defect | `decide/variant` (if he invents a new line every time) |
+| 4 | `@TerrysTopGuy hey man, how have you been, it has been ages` | short: he does not answer length with length | `decide/length` or `render/trim` |
+| 5 | `@TerrysTopGuy thanks` | unchanged old behaviour (acknowledgement) | the flag did not reach `supervisor` |
+| 6 | `@TerrysTopGuy hey` at 03:00 local | **silence**, and `stayed quiet: he is asleep` in the log | `life/schedule` or `decide/floor` |
+| 7 | read four greetings aloud as a person | nothing ends on a punchline beat, nothing explains itself | `decide/persona_fit` |
+| 8 | ask him a non-greeting (`anyone around?`) | unchanged old behaviour | the ladder overreaching |
+
+Log lines that correspond to each pass:
+
+```bash
+./start-bot.sh --status && grep -aE 'greeted|stayed quiet on a greeting' data/logs/bot.log | tail
+# friend-a greeted (intent=greet > phase=opening > length=Budget(max_words=3, max_sentences=1) >
+#   floor=Speak(reason='addressed') > job=greet > who=friend > form=clause > family=time_morning >
+#   variant=morning > trim=morning > audition=ok)
+```
+
+**What would mean the approach is wrong** — write it down before you start, so this is a real test:
+
+* he produces a **new** greeting nearly every time (familiarity is the goal; novelty is the old bug),
+* he is **silent** in an addressed, awake, budget-fine case (the ladder is abstaining to protect itself),
+* any greeting runs **longer than four words** or explains something,
+* he answers a **non-greeting** through the ladder.
+
+Any of the four is a reason to re-open the decomposition rather than tune the phrasebook.
 
 ### 2.2 Re-inviting an app that is already in the server
 

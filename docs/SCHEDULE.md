@@ -73,7 +73,51 @@ mon 20:15 -> 20:15-20:30 got the game on, or a book…     progress 0%
 sat 09:00 -> 09:00-09:15 out on the water                progress 0%
 ```
 
-## 5. Dynamics — deliberately later
+## 5. The year, above the day
+
+A weekly pattern cannot say that Christmas is not a Tuesday, that hockey is over for the summer, or
+that he is away the second week of March. Those are **dated facts**, and they live in
+`calendar.json`, resolved most-specific-first:
+
+| Kind | Example | Beats |
+|---|---|---|
+| `oneoff` | away 10–17 March 2027 | everything |
+| `annual-day` | 25 December | ranges and seasons |
+| `annual-range` | 15 September – 15 June (wraps the new year) | seasons |
+| `season` | December–February: cold, dark by five | — |
+
+An entry can **remove** blocks by id (`"*"` clears the day for a trip), **add** blocks that belong
+to that *date* rather than a weekday, and **rename** the day's fallback via `doing`. `overlay()`
+applies a day's entries to the weekly schedule and returns the day he is actually having:
+
+```python
+day = calendar.on(date(2026, 12, 25))
+plan = overlay(schedule, day)      # errands gone, dinner at 13:00, family in the house
+```
+
+### Recall, which is the other half
+
+A calendar is only useful if it can answer temporal questions, because that is what a friend's
+inferences are made of:
+
+| Question | Call |
+|---|---|
+| what is on today? | `calendar.on(day).titles` |
+| what is coming? | `calendar.upcoming(today, days=14)` → "the season opener on wednesday" |
+| what just happened? | `calendar.recent(today, days=7)` → "the truck was in the shop yesterday" |
+| what is in this window? | `calendar.between(a, b)` |
+| what is true right now? | `calendar.ongoing(today)` — a season is *on*, not *upcoming* |
+| what might he bring up? | `calendar.topic_on(day)` — the subjects the day leans towards |
+
+*Upcoming* deliberately means *starting soon*: a six-month hockey season is on, not upcoming, or it
+would top every list forever.
+
+Built: `life/calendar.py`, `examples/friends_world/calendar.json` (8 entries), and 15 tests —
+Christmas changing the day, a range wrapping the new year, a one-off staying in its own year, added
+blocks not leaking to the next Friday, `"*"` clearing a day, and the phrases (`today`, `tomorrow`,
+`on wednesday`, `in 2 weeks`).
+
+## 6. Dynamics — deliberately later
 
 A schedule says what *occupies* time. It cannot say what *happens*. These are the worthwhile
 sidequests, in the order they'd pay off:

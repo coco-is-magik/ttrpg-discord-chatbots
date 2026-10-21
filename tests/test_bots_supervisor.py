@@ -505,3 +505,35 @@ def test_a_classifier_failure_is_logged_not_raised(caplog) -> None:
     assert message.replies == []
     assert friend.replied == 0
     assert "cannot answer" in caplog.text or "dataset on fire" in caplog.text
+
+
+def test_the_greet_ladder_takes_over_only_when_asked(monkeypatch) -> None:
+    # TTRPG_CONVERSATION=greet is the switch: with it off the old classifier answers, with it on
+    # the ladder answers greetings and leaves everything else to the old path.
+    monkeypatch.setenv("TTRPG_CONVERSATION", "greet")
+    chat = _Chat()
+    friend = _MentionedFriend(_friend(reply="mention"), chat=chat)
+    message = _mention(friend)
+
+    asyncio.run(friend.on_message(message))
+
+    assert chat.calls == []  # the old path was not consulted
+    assert len(message.replies) == 1
+    said, _ = message.replies[0]
+    assert len(said.split()) <= 3
+    assert friend.replied == 1
+
+
+def test_the_greet_ladder_leaves_non_greetings_to_the_old_path() -> None:
+    import os
+
+    os.environ["TTRPG_CONVERSATION"] = "greet"
+    try:
+        chat = _Chat()
+        friend = _MentionedFriend(_friend(reply="mention"), chat=chat)
+
+        asyncio.run(friend.on_message(_mention(friend, "<@1> thanks")))
+
+        assert chat.calls == [("thanks", "friend-a", "Tav")]
+    finally:
+        os.environ.pop("TTRPG_CONVERSATION", None)

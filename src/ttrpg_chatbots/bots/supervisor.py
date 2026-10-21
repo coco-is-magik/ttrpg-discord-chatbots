@@ -17,18 +17,26 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 import discord
 
+from ttrpg_chatbots.bots.greeter import Greeter
 from ttrpg_chatbots.bots.identity import ROLE_FRIEND, BotSpec
 from ttrpg_chatbots.bots.memory import FriendMemory, MemoryError
 from ttrpg_chatbots.bots.permissions import audit, log_findings
 from ttrpg_chatbots.bots.roster import Roster, RosterError
 from ttrpg_chatbots.reply.context import DEFAULT_WINDOW, Context, Turn
-from ttrpg_chatbots.reply.intents import SOCIAL_AGREEMENT, SOCIAL_PLANS, match_intent
+from ttrpg_chatbots.conv.types import Abstain, Line
+from ttrpg_chatbots.reply.intents import (
+    SOCIAL_AGREEMENT,
+    SOCIAL_GREETING,
+    SOCIAL_PLANS,
+    match_intent,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -72,6 +80,9 @@ class FriendBot(discord.Client):
         self.answered: deque[int] = deque(maxlen=200)
         # What survives a restart: who this person is, when they last spoke, and anything left
         # hanging (an invitation they have not answered).
+        # Which phase, if any, is being proved on real traffic. Empty means the old path only.
+        self.conversation = os.environ.get("TTRPG_CONVERSATION", "").strip().lower()
+        self._greeter: Greeter | None = None
         try:
             self.memory = FriendMemory.load(spec.id)
         except MemoryError as error:
@@ -84,6 +95,15 @@ class FriendBot(discord.Client):
     def context(self) -> Context:
         """What was said before the message currently being answered."""
         return Context.of(self.history, window=DEFAULT_WINDOW)
+
+    @property
+    def greeter(self) -> Greeter | None:
+        """The greet stage, when it is switched on; ``None`` keeps the old path."""
+        if self.conversation != "greet":
+            return None
+        if self._greeter is None:
+            self._greeter = Greeter(friend=self.spec.id, style=self.style)
+        return self._greeter
 
     @property
     def style(self):
@@ -202,6 +222,43 @@ class FriendBot(discord.Client):
             text = text.replace(mention, " ")
         return " ".join(text.split()) or "hey"
 
+    async def _answer_greeting(
+        self, message: discord.Message, text: str, speaker: str | None
+    ) -> None:
+        """Answer a greeting through the ladder, or stay quiet for the reason it gives."""
+        greeter = self.greeter
+        if greeter is None:  # pragma: no cover - guarded by the caller
+            return
+        try:
+            out = await asyncio.to_thread(
+                greeter.line, text=text, memory=self.memory, speaker=speaker or ""
+            )
+        except Exception as error:  # noqa: BLE001 - never take the bot down for a greeting
+            LOGGER.warning("%s could not greet: %s", self.spec.id, error)
+            return
+        if isinstance(out, Abstain):
+            self.stayed_quiet += 1
+            LOGGER.info("%s stayed quiet on a greeting: %s", self.spec.id, out.reason)
+            return
+        assert isinstance(out, Line)
+        try:
+            await message.reply(out.text, mention_author=False)
+        except discord.HTTPException as error:
+            LOGGER.warning("%s could not send its greeting: %s", self.spec.id, error)
+            return
+        identifier = getattr(message, "id", None)
+        if identifier is not None:
+            self.answered.append(identifier)
+        self.replied += 1
+        self.last_reply = out.text
+        self._remember_reply(out.text, "social:greeting")
+        self.memory.remember_topic("social:greeting")
+        try:
+            self.memory.save()
+        except MemoryError as error:
+            LOGGER.warning("%s could not save its memory: %s", self.spec.id, error)
+        LOGGER.info("%s greeted (%s)", self.spec.id, out.trail.describe())
+
     async def _answer(self, message: discord.Message) -> None:
         """Ask the classifier off the event loop, then reply in the same channel.
 
@@ -217,6 +274,9 @@ class FriendBot(discord.Client):
         # another "sounds good". This is the smallest honest use of long-term memory: the plan
         # survives a restart because it is in his file, not in RAM.
         intent = match_intent(text)
+        if self.greeter is not None and intent == SOCIAL_GREETING:
+            await self._answer_greeting(message, text, speaker)
+            return
         force_tag = None
         if self.memory.pending_plan and intent == SOCIAL_AGREEMENT:
             force_tag = "social:confirm"

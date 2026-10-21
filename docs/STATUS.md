@@ -12,11 +12,12 @@ lands; it should never be more than one slice out of date.
 
 | | |
 |---|---|
-| Tests | **1552 passing**, ~28 s, no network, no GPU |
+| Tests | **1655 passing**, ~30 s, no network, no GPU |
 | Bots live | 4 applications: `ttrpg-bot` (helper) + `friend-a/b/c` |
 | Permissions | **8/8 each** in `#general` |
 | Slash commands | **51/51** synced to guild 1364544268609523762 |
 | Who speaks | `friend-a` only, `reply: mention`; `friend-b`/`friend-c` are `reply: off` |
+| Conversation | **greet phase on the module ladder**, live behind `TTRPG_CONVERSATION=greet`; everything else still the old classifier |
 | Personality | **friend-a is TopGuy** (`docs/PERSONA.md`); b and c deliberately neutral |
 | Typing | friend-a types lower-case with dropped apostrophes and the odd slip; b and c stay tidy |
 | Memory | short-term: last 8 turns in RAM. long-term: `data/friends/friend-a.json` |

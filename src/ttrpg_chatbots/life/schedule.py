@@ -56,6 +56,9 @@ class Block:
     days: tuple[str, ...] = WEEKDAYS
     topics: tuple[str, ...] = ()
     asleep: bool = False
+    # A block that belongs to one date only (Christmas dinner, a day at the garage). It is not
+    # part of the weekly pattern, so `day()` never sees it and a weekday cannot leak it.
+    only: object = None
 
     def __post_init__(self) -> None:
         if not self.id.strip():
@@ -72,8 +75,12 @@ class Block:
             if day not in WEEKDAYS:
                 raise ScheduleError(f"block {self.id!r}: {day!r} is not a weekday")
 
-    def covers(self, day: str, minute: int) -> bool:
-        return day in self.days and self.start <= minute < self.end
+    def covers(self, day: str, minute: int, on: object = None) -> bool:
+        if not self.start <= minute < self.end:
+            return False
+        if self.only is not None:
+            return on == self.only
+        return day in self.days
 
 
 @dataclass(frozen=True)
@@ -119,7 +126,7 @@ class Schedule:
         """What he is doing now, snapped down to the quarter hour."""
         point = _point(moment)
         minute = point.minute_of_day
-        block = _covering(self.blocks, point.weekday, minute)
+        block = _covering(self.blocks, point.weekday, minute, point.now.date())
         if block is None:
             start = minute - minute % SLOT_MINUTES
             return Slot(
@@ -202,9 +209,11 @@ def _point(moment: Moment | datetime | None) -> Moment:
     return read_clock()
 
 
-def _covering(blocks: tuple[Block, ...], day: str, minute: int) -> Block | None:
+def _covering(
+    blocks: tuple[Block, ...], day: str, minute: int, on: object = None
+) -> Block | None:
     for block in blocks:
-        if block.covers(day, minute):
+        if block.covers(day, minute, on):
             return block
     return None
 

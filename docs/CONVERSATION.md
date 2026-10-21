@@ -3,8 +3,12 @@
 Why the conversation layer is being rebuilt as ~45 single-purpose modules instead of one `reply()`
 function, and the rules that keep it that way.
 
-**Status: design accepted, not yet built.** Nothing in the live bot changes until the ladder and the
-harness exist. The day model is the first piece and is already built (`docs/SCHEDULE.md`).
+**Status: design accepted, partially built.** Nothing in the live bot changes until the ladder and
+the harness exist. The context pieces are built and wired to nothing: `docs/SCHEDULE.md` (the week)
+and its calendar (the year). The plan itself is `src/ttrpg_chatbots/conv/manifest.py` —
+**11 of 50 modules built**, with a test that fails if a module is marked built and does not import,
+or marked planned and exists anyway. See it with
+`python -c "from ttrpg_chatbots.conv import summary, check; print(summary()); print(check())"`.
 
 ## 1. The failure being fixed
 
@@ -73,11 +77,12 @@ personas/base/…                    the neutral friends
 personas/friend-a/
   persona.json                     brief: name, voice, style, values
   lexicon/{intents,tone,sentiment,entities}.jsonl
-  phrasebooks/greeting/{families.json, warm.jsonl, casual.jsonl, time_aware.jsonl}
+  phrasebooks/greeting/{families.json, warm.jsonl, casual.jsonl, time_morning.jsonl, time_evening.jsonl}
   phrasebooks/{pleasantries,hook,substance}/…
   knowledge/{subjects,stances,stories}.jsonl     # depth-tagged
   life/{activities,grievances,plans}.jsonl
-  schedule.json
+  schedule.json                  # the week, in 15-minute blocks
+  calendar.json                  # the year: seasons, holidays, one-offs
   cast/character.json
 ```
 
@@ -89,14 +94,45 @@ even addressable.
 > Today's worlds live in `examples/friends_world/`, where `knowledge.jsonl` is read by the matcher,
 > the renderer *and* the subject vocabulary. That is the coupling this layout removes.
 
-## 6. Slice 0, before anything else
+## 6. Slice 0 — done, and what it proved
 
-`govern/trace.py` (every reply carries its eight rungs) + a **conversation harness** that plays a
-scripted ten-turn exchange and reports: length ratio vs the human, clause count, lines ending in a
-beat, greeting repetition, and expositions at depth 0. The audit numbers above become the failing
-test.
+`govern/trace.py` (every reply carries its eight rungs) and `govern/harness.py` (a matrix through one
+phase, reporting words, distinctness, beat rate and why anything stayed quiet) both exist. The audit
+numbers are now a test:
+`tests/test_greeter.py::test_the_harness_answers_every_time_and_never_sounds_like_a_caption`.
 
-Only then build the ladder for one job — greeting — across all eight rungs, with one phrase file.
+```bash
+.venv/bin/python -m ttrpg_chatbots.conv.cli --harness
+# phase: greet
+# attempts 144  said 144  abstained 0
+# words: median 1, max 3
+# distinct: 7% (10 of 144)
+# ends on a beat: 0%
+```
+
+Under the old corpus: median 7 words, 51% of lines two sentences, 29% ended on a beat, 100% novelty.
+The first phase on the ladder: 1 word, 0% beats, 7% distinct — i.e. **repetition**, which is what
+familiarity sounds like.
+
+`ttrpg-chatbots-conv --greet "hey" --explain` prints the eight rungs for a single message.
+
+### What the harness caught that review did not
+
+1. **A long variant silenced a whole family.** Twenty of 144 greetings were dropped as "over budget"
+   because `decide/variant` offered a six-word line for a three-word budget and `render/trim` then
+   refused it. Fixed at the rung that chose it: a line that cannot fit is not a candidate.
+2. **A missing family borrowed another family's lines**, so a stranger got "there he is". Removed:
+   no family, no lines.
+3. **The greet phrasebook answered other jobs** (`offer_hook`, `acknowledge`) because the loop never
+   checked. It now abstains: `the greet phrasebook does not do acknowledge`. That is the phase
+   boundary, enforced rather than documented.
+
+### Proving it on a person
+
+The ladder runs live for greetings only, behind `TTRPG_CONVERSATION=greet`; everything else still
+goes to the old classifier. The script is `docs/MANUAL_TESTING.md` §2.5: eight checks, each naming
+the module that owns a failure, plus four outcomes that would mean the decomposition is wrong rather
+than the phrasebook.
 
 ## 7. Risks
 
