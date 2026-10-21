@@ -24,10 +24,11 @@ from datetime import datetime, timezone
 import discord
 
 from ttrpg_chatbots.bots.identity import ROLE_FRIEND, BotSpec
+from ttrpg_chatbots.bots.memory import FriendMemory, MemoryError
 from ttrpg_chatbots.bots.permissions import audit, log_findings
 from ttrpg_chatbots.bots.roster import Roster, RosterError
 from ttrpg_chatbots.reply.context import DEFAULT_WINDOW, Context, Turn
-from ttrpg_chatbots.reply.intents import match_intent
+from ttrpg_chatbots.reply.intents import SOCIAL_AGREEMENT, SOCIAL_PLANS, match_intent
 
 LOGGER = logging.getLogger(__name__)
 
@@ -67,6 +68,15 @@ class FriendBot(discord.Client):
         self.replied = 0
         self.stayed_quiet = 0
         self.last_reply = ""
+        # Message ids already answered, so a redelivered event cannot produce a second reply.
+        self.answered: deque[int] = deque(maxlen=200)
+        # What survives a restart: who this person is, when they last spoke, and anything left
+        # hanging (an invitation they have not answered).
+        try:
+            self.memory = FriendMemory.load(spec.id)
+        except MemoryError as error:
+            LOGGER.warning("%s: %s; starting with an empty memory", spec.id, error)
+            self.memory = FriendMemory(spec.id)
         # The last few turns as this friend heard them. Volatile and per-process on purpose:
         # durable memory is a later slice, and a restart starting from silence is correct.
         self.history: deque[Turn] = deque(maxlen=DEFAULT_WINDOW)
@@ -74,6 +84,12 @@ class FriendBot(discord.Client):
     def context(self) -> Context:
         """What was said before the message currently being answered."""
         return Context.of(self.history, window=DEFAULT_WINDOW)
+
+    @property
+    def style(self):
+        """How this friend types, from the persona; ``None`` means tidy text."""
+        persona = self.spec.persona
+        return persona.style if persona is not None else None
 
     def _remember_human(self, message: discord.Message, content: str) -> None:
         """Record a human turn, with the act it looked like at the time."""
@@ -104,6 +120,9 @@ class FriendBot(discord.Client):
             )
         else:
             LOGGER.info("%s is listening and answers when mentioned", self.spec.id)
+        if self.spec.persona is not None:
+            LOGGER.info("%s is %s", self.spec.id, self.spec.persona.describe())
+        LOGGER.info("%s", self.memory.describe())
         await self.check_permissions()
 
     async def on_message(self, message: discord.Message) -> None:
@@ -159,6 +178,15 @@ class FriendBot(discord.Client):
             return False
         if self.user is None or self.user not in getattr(message, "mentions", ()):
             return False
+        # A gateway can redeliver an event after a resume. Answering the same message twice is
+        # the one failure a reader sees as "the bot is broken", so it is refused here rather than
+        # deduplicated afterwards.
+        identifier = getattr(message, "id", None)
+        if identifier is not None and identifier in self.answered:
+            LOGGER.info(
+                "%s already answered message %s; ignoring the redelivery", self.spec.id, identifier
+            )
+            return False
         allowed = self.spec.channels
         if not allowed:
             return True
@@ -184,6 +212,17 @@ class FriendBot(discord.Client):
         text = self._query(message)
         speaker = getattr(message.author, "display_name", None)
         context = self.context()
+
+        # An invitation he offered and the person has just accepted gets a confirmation, not
+        # another "sounds good". This is the smallest honest use of long-term memory: the plan
+        # survives a restart because it is in his file, not in RAM.
+        intent = match_intent(text)
+        force_tag = None
+        if self.memory.pending_plan and intent == SOCIAL_AGREEMENT:
+            force_tag = "social:confirm"
+            self.memory.clear_plan()
+
+        self.memory.note(person=speaker or "")
         try:
             answer = await asyncio.to_thread(
                 self.chat.reply,
@@ -192,6 +231,8 @@ class FriendBot(discord.Client):
                 speaker=speaker,
                 context=context,
                 addressed=True,
+                style=self.style,
+                force_tag=force_tag,
             )
         except Exception as error:  # noqa: BLE001 - a bad dataset must not kill the bot
             LOGGER.warning("%s could not answer: %s", self.spec.id, error)
@@ -212,7 +253,19 @@ class FriendBot(discord.Client):
             return
         self.replied += 1
         self.last_reply = answer.text
-        self._remember_reply(answer.text, answer.detail.get("tag"))
+        identifier = getattr(message, "id", None)
+        if identifier is not None:
+            self.answered.append(identifier)
+        tag = answer.detail.get("tag")
+        self.memory.remember_topic(tag)
+        if tag == SOCIAL_PLANS:
+            # He asked them out. Whether they say yes is the next message, possibly tomorrow.
+            self.memory.remember_plan()
+        try:
+            self.memory.save()
+        except MemoryError as error:
+            LOGGER.warning("%s could not save its memory: %s", self.spec.id, error)
+        self._remember_reply(answer.text, tag)
         after = answer.detail.get("after")
         LOGGER.info(
             "%s replied to %s (%s, %s%s)",

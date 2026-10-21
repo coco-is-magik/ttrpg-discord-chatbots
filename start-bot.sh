@@ -97,6 +97,32 @@ running_pid() {
     printf '%s\n' "$pid"
 }
 
+# Every process running this bot, not just the one the pid file knows about.
+#
+# The pid file was not enough: a foreground run left behind by a closed terminal kept a full set
+# of gateway connections alive, and two processes sharing one token fight over the session and
+# both answer the same message. The user sees double replies; the log, written by both, looks
+# almost normal. So the script asks the process table instead of trusting one file.
+all_pids() {
+    {
+        running_pid || true
+        pgrep -f -- "$BOT" 2>/dev/null || true
+    } | sort -u | while read -r pid; do
+        [ -n "$pid" ] || continue
+        kill -0 "$pid" 2>/dev/null && printf '%s\n' "$pid"
+    done
+}
+
+require_single_process() {
+    local pids
+    pids=$(all_pids || true)
+    [ -n "$pids" ] || return 0
+    printf 'start-bot: already running (pid%s %s); stop it first: ./start-bot.sh --stop\n' \
+        "$(printf '%s' "$pids" | wc -l | grep -qx 1 || printf 's')" \
+        "$(printf '%s' "$pids" | tr '\n' ' ')" >&2
+    exit 1
+}
+
 case "${1:-}" in
     -h|--help)
         usage
@@ -108,28 +134,40 @@ case "${1:-}" in
         exec "$BOT" --check
         ;;
     --status)
-        if pid=$(running_pid); then
-            printf 'running (pid %s), logging to %s\n' "$pid" "$LOG"
-        else
+        pids=$(all_pids || true)
+        if [ -z "$pids" ]; then
             printf 'not running\n'
             exit 1
+        fi
+        count=$(printf '%s\n' "$pids" | wc -l)
+        printf 'running (%s process%s: pid %s), logging to %s\n' \
+            "$count" "$([ "$count" -eq 1 ] && printf '' || printf 'es')" \
+            "$(printf '%s' "$pids" | tr '\n' ' ')" "$LOG"
+        if [ "$count" -gt 1 ]; then
+            printf 'WARNING: several processes are using the same tokens. That is what produces double replies; run ./start-bot.sh --stop\n' >&2
         fi
         exit 0
         ;;
     --stop)
-        if pid=$(running_pid); then
-            kill -TERM "$pid" 2>/dev/null || true
-            for _ in $(seq 1 20); do
-                kill -0 "$pid" 2>/dev/null || break
-                sleep 0.25
-            done
-            kill -0 "$pid" 2>/dev/null && kill -KILL "$pid" 2>/dev/null || true
-            rm -f "$PIDFILE"
-            printf 'stopped (pid %s)\n' "$pid"
-        else
+        pids=$(all_pids || true)
+        if [ -z "$pids" ]; then
             rm -f "$PIDFILE"
             printf 'not running\n'
+            exit 0
         fi
+        for pid in $pids; do
+            kill -TERM "$pid" 2>/dev/null || true
+        done
+        for _ in $(seq 1 20); do
+            still=$(all_pids || true)
+            [ -n "$still" ] || break
+            sleep 0.25
+        done
+        for pid in $(all_pids || true); do
+            kill -KILL "$pid" 2>/dev/null || true
+        done
+        rm -f "$PIDFILE"
+        printf 'stopped (pid %s)\n' "$(printf '%s' "$pids" | tr '\n' ' ')"
         exit 0
         ;;
     --logs)
@@ -139,9 +177,7 @@ case "${1:-}" in
     -d|--background)
         require_sane_venv
         require_secret_hygiene
-        if pid=$(running_pid); then
-            die "already running (pid $pid); stop it with: ./start-bot.sh --stop"
-        fi
+        require_single_process
         mkdir -p "$LOG_DIR"
         printf '\n=== %s starting ===\n' "$(date -Iseconds)" >> "$LOG"
         nohup "$BOT" >> "$LOG" 2>&1 &

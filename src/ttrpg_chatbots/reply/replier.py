@@ -21,7 +21,9 @@ from typing import Any, Mapping, Sequence
 from ttrpg_chatbots.reply import compression, madlib
 from ttrpg_chatbots.reply import intents as social
 from ttrpg_chatbots.reply.context import Context
+from ttrpg_chatbots.reply.entities import EntityIndex
 from ttrpg_chatbots.reply.ncd import DEFAULT_TOP_K, Classification, classify, normalise
+from ttrpg_chatbots.reply.style import Style, apply_style
 from ttrpg_chatbots.reply.transitions import TransitionModel
 from ttrpg_chatbots.reply.types import (
     Character,
@@ -37,15 +39,17 @@ from ttrpg_chatbots.reply.types import (
 WILDCARD = "*"
 
 
+
+
 def _humanise(tag: str) -> str:
     """``lore:tide_gates`` -> ``tide gates``, for templates that echo the topic."""
     tail = tag.rsplit(":", 1)[-1]
     return tail.replace("_", " ").replace("-", " ")
 
 
-def _sentence_case(text: str) -> str:
-    """Capitalise the opening letter; templates often start with a slot."""
-    return text[:1].upper() + text[1:]
+def _render(text: str, style: Style | None) -> str:
+    """Type the line the way this character types; tidy text when nobody has decided."""
+    return apply_style(text, style)
 
 
 class Replier:
@@ -62,6 +66,7 @@ class Replier:
         seed: str = "",
         rotate: bool = False,
         transitions: TransitionModel | None = None,
+        assured: float | None = None,
     ) -> None:
         if top_k < 1:
             raise ValueError("top_k must be at least 1")
@@ -79,12 +84,19 @@ class Replier:
         # the priority order below decides alone. A table only ever *vetoes* an act that
         # is rarer after the previous one than chance would predict.
         self._transitions = transitions
+        # How close a match must be before a character states an opinion rather than hedging.
+        # ``None`` means "no hedge tier": every match under ``max_distance`` is answered, which
+        # is what the demo world was calibrated for. The friends world passes a value, because
+        # answering a specific question with a general stance is how "who was the best roman
+        # general?" got a paragraph about the fall of Rome.
+        self._assured = assured
         # Rotation is opt-in: a replay or a test wants the same query to give the same line,
         # but a conversation wants "hey" twice not to sound like a broken record. The last
         # template per (character, tag) is skipped while another candidate remains.
         self._rotate = rotate
         self._last: dict[tuple[str, str], str] = {}
         self._items = {item.id: item for item in world.knowledge}
+        self._entities = EntityIndex(world.knowledge)
         self._index: dict[tuple[str, str], list[ResponseTemplate]] = {}
         for template in world.responses:
             for target in self._targets(template.character):
@@ -116,6 +128,8 @@ class Replier:
         speaker: str | None = None,
         context: Context | None = None,
         addressed: bool = True,
+        style: Style | None = None,
+        force_tag: str | None = None,
     ) -> Reply | None:
         """Answer ``query`` as ``character``, deflect in character, or stay quiet.
 
@@ -137,13 +151,35 @@ class Replier:
         """
         who = self._world.character(character)
         matches = social.match_all(query)
-        tag = self._choose_act(matches, context)
+        # Several moves can match ("doing anything later?" is plans *and* presence). Prefer the
+        # ones this character can answer, so a friend that does not know a move still answers the
+        # one it does instead of falling through to a refusal.
+        answerable = tuple(tag for tag in matches if tag in who.known_tags)
+        tag = self._choose_act(answerable or matches, context)
         answer = self._compose(
-            who, tag, query, speaker, context=context, addressed=addressed
+            who,
+            tag,
+            query,
+            speaker,
+            context=context,
+            addressed=addressed,
+            style=style,
+            force_tag=force_tag,
         )
         if answer is None:
             return None
         return self._annotate(answer, context, matches)
+
+    def choose(self, query: str, character: str, context: Context | None = None) -> str | None:
+        """Which social move this message is, for this character, in this context.
+
+        Public because the life layer needs the same answer the classifier would reach -- a
+        move that the context rules out must not be resurrected by a different renderer.
+        """
+        who = self._world.character(character)
+        matches = social.match_all(query)
+        answerable = tuple(tag for tag in matches if tag in who.known_tags)
+        return self._choose_act(answerable or matches, context)
 
     def _compose(
         self,
@@ -154,21 +190,38 @@ class Replier:
         *,
         context: Context | None,
         addressed: bool,
+        style: Style | None = None,
+        force_tag: str | None = None,
     ) -> Reply | None:
         """Render the chosen move, or fall through to the knowledge classifier."""
+        if force_tag is not None and force_tag in who.known_tags:
+            rendered = self._answer_intent(who, force_tag, query, speaker, style=style)
+            if rendered is not None:
+                return rendered
+
         if tag is not None and tag in who.known_tags:
             if self._declines(query, tag, context, addressed):
                 return None
-            rendered = self._answer_intent(who, tag, query, speaker)
+            rendered = self._answer_intent(who, tag, query, speaker, style=style)
             if rendered is not None:
                 return rendered
 
         classification = self.classify(query)
-        chosen = self._select(who, classification)
+        named = self._entities.tags_for(query)
+        chosen = self._select(who, classification, prefer=named)
         if chosen is None:
-            return self._deflect(who, classification, speaker)
+            return self._deflect(who, classification, speaker, style=style)
+        # A named subject is evidence enough on its own; anything else has to be close before it
+        # is worth an opinion, and a hedge is better than a confident answer to a different
+        # question.
+        if (
+            self._assured is not None
+            and chosen.tag not in named
+            and chosen.distance > self._assured
+        ):
+            return self._deflect(who, classification, speaker, style=style)
         item = self._items[chosen.ref]
-        return self._answer(who, chosen.tag, item, classification, speaker)
+        return self._answer(who, chosen.tag, item, classification, speaker, style=style)
 
     def _choose_act(
         self, matches: tuple[str, ...], context: Context | None
@@ -222,7 +275,13 @@ class Replier:
         return replace(reply, detail={**detail, **reply.detail}) if detail else reply
 
     def _answer_intent(
-        self, who: Character, tag: str, query: str, speaker: str | None
+        self,
+        who: Character,
+        tag: str,
+        query: str,
+        speaker: str | None,
+        *,
+        style: Style | None = None,
     ) -> Reply | None:
         """Render a social reply, with no fact behind it -- the move is the message."""
         values: dict[str, str] = {"character": who.name, "topic": _humanise(tag)}
@@ -239,7 +298,7 @@ class Replier:
             return None
         template, text = filled
         return Reply(
-            text=_sentence_case(text),
+            text=_render(text, style),
             character=who.id,
             tag=tag,
             knowledge_id=None,
@@ -248,22 +307,31 @@ class Replier:
             known=True,
         )
 
-    def _select(self, who: Character, classification: Classification) -> TagScore | None:
+    def _select(
+        self,
+        who: Character,
+        classification: Classification,
+        prefer: frozenset[str] = frozenset(),
+    ) -> TagScore | None:
         """Best tag that this character may speak about.
 
-        Only tags tied with (or within ``margin`` of) the winning distance are
-        considered. Without that guard a character could answer a ritual question
-        with the one rumour item that happens to rank fifth, which is worse than
-        deflecting.
+        ``prefer`` is the set of subjects the message *named*, which outranks distance: a
+        message that says "rangers" is about the Rangers however it is phrased. Without a name,
+        only tags tied with (or within ``margin`` of) the winning distance are considered --
+        otherwise a character could answer a ritual question with the one rumour item that
+        happens to rank fifth, which is worse than deflecting.
         """
         if not classification.tags:
             return None
+        known = [score for score in classification.tags if score.tag in who.known_tags]
+        if prefer:
+            named = [score for score in known if score.tag in prefer]
+            if named:
+                return named[0]
         limit = classification.tags[0].distance + self._margin
-        for score in classification.tags:
+        for score in known:
             if score.distance > limit:
                 break
-            if score.tag not in who.known_tags:
-                continue
             if self._max_distance is not None and score.distance > self._max_distance:
                 continue
             return score
@@ -276,10 +344,12 @@ class Replier:
         item: KnowledgeItem,
         classification: Classification,
         speaker: str | None,
+        *,
+        style: Style | None = None,
     ) -> Reply:
         values = {
             "character": who.name,
-            "fact": item.text,
+            "fact": item.spoken,
             "topic": item.slots.get("topic") or _humanise(tag),
             **item.slots,
         }
@@ -294,11 +364,11 @@ class Replier:
         )
         if filled is None:
             # Nothing for this tag could be filled; do not leak the fact.
-            return self._deflect(who, classification, speaker)
+            return self._deflect(who, classification, speaker, style=style)
 
         template, text = filled
         return Reply(
-            text=_sentence_case(text),
+            text=_render(text, style),
             character=who.id,
             tag=tag,
             knowledge_id=item.id,
@@ -312,6 +382,8 @@ class Replier:
         who: Character,
         classification: Classification | None,
         speaker: str | None,
+        *,
+        style: Style | None = None,
     ) -> Reply:
         """Say "not my field" without handing over the fact."""
         best = classification.best_tag if classification is not None else None
@@ -335,7 +407,7 @@ class Replier:
             )
         template, text = filled
         return Reply(
-            text=_sentence_case(text),
+            text=_render(text, style),
             character=who.id,
             tag=None,
             knowledge_id=None,

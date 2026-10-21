@@ -29,3 +29,78 @@
 {"id": "r-fallback-2", "character": "*", "tags": ["fallback"], "template": "No idea, sorry."}
 {"id": "r-fallback-3", "character": "*", "tags": ["fallback"], "template": "I can't help with that."}
 {"id": "r-fallback-4", "character": "*", "tags": ["fallback"], "template": "Not something I know."}
+
+# --- friend-a: TopGuy --------------------------------------------------------------------------
+# His own pool. Owned templates come before the wildcard ones in `_candidates`, so these replace
+# the neutral lines entirely for him -- friend-b and friend-c are untouched.
+#
+# Typed, not written. Lower case, contractions, no full stops on short lines, and the odd dropped
+# apostrophe (handled by `reply/style.py`, not by hand). The register is a big warm guy in his
+# fifties texting from the workshop: short bursts, "ya", "bud", no essay cadences. The firmness is
+# aimed at the world; every line is warm to the person being answered.
+{"id": "r-a-greeting-1", "character": "friend-a", "tags": ["social:greeting"], "template": "hey hey, good to see ya {speaker}"}
+{"id": "r-a-greeting-2", "character": "friend-a", "tags": ["social:greeting"], "template": "there he is. come on in"}
+{"id": "r-a-greeting-3", "character": "friend-a", "tags": ["social:greeting"], "template": "yo. now the day's looking up"}
+{"id": "r-a-greeting-4", "character": "friend-a", "tags": ["social:greeting"], "template": "evening. sit down, tell me what's new"}
+{"id": "r-a-greeting-5", "character": "friend-a", "tags": ["social:greeting"], "template": "morning. coffee's hot, ice is cold, what do you need"}
+{"id": "r-a-greeting-6", "character": "friend-a", "tags": ["social:greeting"], "template": "ah, {speaker}. just the guy i wanted to see"}
+{"id": "r-a-presence-1", "character": "friend-a", "tags": ["social:presence"], "template": "i'm here. been here, will be here, what do you need"}
+{"id": "r-a-presence-2", "character": "friend-a", "tags": ["social:presence"], "template": "yep, right here {speaker}. pull up a chair"}
+{"id": "r-a-presence-3", "character": "friend-a", "tags": ["social:presence"], "template": "always. you're not rid of me that easy"}
+{"id": "r-a-presence-4", "character": "friend-a", "tags": ["social:presence"], "template": "present and accounted for"}
+{"id": "r-a-presence-5", "character": "friend-a", "tags": ["social:presence"], "template": "i'm around. say the word"}
+{"id": "r-a-howareyou-1", "character": "friend-a", "tags": ["social:howareyou"], "template": "better than i deserve and twice as loud, you?"}
+{"id": "r-a-howareyou-2", "character": "friend-a", "tags": ["social:howareyou"], "template": "can't complain, and i've tried. how about you {speaker}"}
+{"id": "r-a-howareyou-3", "character": "friend-a", "tags": ["social:howareyou"], "template": "strong as an ox and twice as stubborn. you?"}
+{"id": "r-a-howareyou-4", "character": "friend-a", "tags": ["social:howareyou"], "template": "good. real good. what's on your mind"}
+{"id": "r-a-howareyou-5", "character": "friend-a", "tags": ["social:howareyou"], "template": "living the dream. my dream, mind you, but a good one"}
+{"id": "r-a-thanks-1", "character": "friend-a", "tags": ["social:thanks"], "template": "any time"}
+{"id": "r-a-thanks-2", "character": "friend-a", "tags": ["social:thanks"], "template": "don't mention it, you'd do the same for me"}
+{"id": "r-a-thanks-3", "character": "friend-a", "tags": ["social:thanks"], "template": "hah. no thanks needed, just pay it forward"}
+{"id": "r-a-thanks-4", "character": "friend-a", "tags": ["social:thanks"], "template": "you're welcome. now go do something good with it"}
+{"id": "r-a-thanks-5", "character": "friend-a", "tags": ["social:thanks"], "template": "glad to help, seriously"}
+{"id": "r-a-goodbye-1", "character": "friend-a", "tags": ["social:goodbye"], "template": "go on then, get some rest"}
+{"id": "r-a-goodbye-2", "character": "friend-a", "tags": ["social:goodbye"], "template": "night {speaker}. you did good today"}
+{"id": "r-a-goodbye-3", "character": "friend-a", "tags": ["social:goodbye"], "template": "see ya. look after yourself"}
+{"id": "r-a-goodbye-4", "character": "friend-a", "tags": ["social:goodbye"], "template": "off you go, i'll be here"}
+{"id": "r-a-goodbye-5", "character": "friend-a", "tags": ["social:goodbye"], "template": "take care of yourself, and be good to your people"}
+{"id": "r-a-apology-1", "character": "friend-a", "tags": ["social:apology"], "template": "forget it. already forgotten"}
+{"id": "r-a-apology-2", "character": "friend-a", "tags": ["social:apology"], "template": "don't give it another thought, we're square"}
+{"id": "r-a-apology-3", "character": "friend-a", "tags": ["social:apology"], "template": "no harm done. happens to the best of us"}
+{"id": "r-a-apology-4", "character": "friend-a", "tags": ["social:apology"], "template": "water under the bridge {speaker}"}
+{"id": "r-a-apology-5", "character": "friend-a", "tags": ["social:apology"], "template": "it's fine, truly"}
+{"id": "r-a-agreement-1", "character": "friend-a", "tags": ["social:agreement"], "template": "now you're talking. that's the right call"}
+{"id": "r-a-agreement-2", "character": "friend-a", "tags": ["social:agreement"], "template": "damn right. let's move"}
+{"id": "r-a-agreement-3", "character": "friend-a", "tags": ["social:agreement"], "template": "that's what i like to hear"}
+{"id": "r-a-agreement-4", "character": "friend-a", "tags": ["social:agreement"], "template": "agreed. and i'll hold you to it"}
+{"id": "r-a-agreement-5", "character": "friend-a", "tags": ["social:agreement"], "template": "good. decided. onwards"}
+{"id": "r-a-smalltalk-1", "character": "friend-a", "tags": ["social:smalltalk"], "template": "not much. working with my hands, best kind of thinking"}
+{"id": "r-a-smalltalk-2", "character": "friend-a", "tags": ["social:smalltalk"], "template": "same as ever. coffee, a project, and opinions"}
+{"id": "r-a-smalltalk-3", "character": "friend-a", "tags": ["social:smalltalk"], "template": "quiet one. i like quiet, gives a man room to think"}
+{"id": "r-a-smalltalk-4", "character": "friend-a", "tags": ["social:smalltalk"], "template": "plugging away. you?"}
+{"id": "r-a-smalltalk-5", "character": "friend-a", "tags": ["social:smalltalk"], "template": "sharpening tools and sharpening arguments, you know me"}
+{"id": "r-a-comfort-1", "character": "friend-a", "tags": ["social:comfort"], "template": "hey. look at me. you're gonna be all right, and i'll be right here while you find out"}
+{"id": "r-a-comfort-2", "character": "friend-a", "tags": ["social:comfort"], "template": "that's a real worry and it's allowed. so what's the first small thing we can do"}
+{"id": "r-a-comfort-3", "character": "friend-a", "tags": ["social:comfort"], "template": "you're not the first to feel that and you won't be the last. doesn't make it smaller. i've got you"}
+{"id": "r-a-comfort-4", "character": "friend-a", "tags": ["social:comfort"], "template": "courage isn't the absence of nerves {speaker}. it's doing it anyway, and you've done harder"}
+{"id": "r-a-comfort-5", "character": "friend-a", "tags": ["social:comfort"], "template": "steady. breathe. one step at a time, i'm not going anywhere"}
+{"id": "r-a-comfort-6", "character": "friend-a", "tags": ["social:comfort"], "template": "come here. whatever it is, we'll face it together and we'll do it properly"}
+
+# Framing for anything in his subjects: the fact is the content, these are the delivery. Every
+# template carries all ten topic tags, so whichever subject matched can borrow any of the framings.
+{"id": "r-a-fallback-1", "character": "friend-a", "tags": ["fallback"], "template": "?"}
+{"id": "r-a-fallback-2", "character": "friend-a", "tags": ["fallback"], "template": "huh?"}
+{"id": "r-a-fallback-3", "character": "friend-a", "tags": ["fallback"], "template": "what do you need"}
+{"id": "r-a-fallback-4", "character": "friend-a", "tags": ["fallback"], "template": "say more?"}
+{"id": "r-a-fallback-5", "character": "friend-a", "tags": ["fallback"], "template": "you have lost me"}
+{"id": "r-a-fallback-6", "character": "friend-a", "tags": ["fallback"], "template": "no idea, honestly"}
+{"id": "r-a-plans-1", "character": "friend-a", "tags": ["social:plans"], "template": "nothin yet. you free?"}
+{"id": "r-a-plans-2", "character": "friend-a", "tags": ["social:plans"], "template": "nothin planned. what were you thinking"}
+{"id": "r-a-plans-3", "character": "friend-a", "tags": ["social:plans"], "template": "workshop, probably. why, you free later"}
+{"id": "r-a-plans-4", "character": "friend-a", "tags": ["social:plans"], "template": "no plans. say the word"}
+{"id": "r-a-plans-5", "character": "friend-a", "tags": ["social:plans"], "template": "free after 7. you?"}
+{"id": "r-a-confirm-1", "character": "friend-a", "tags": ["social:confirm"], "template": "good. say 8, and i will bring the good stuff"}
+{"id": "r-a-confirm-2", "character": "friend-a", "tags": ["social:confirm"], "template": "settled then. when works for you"}
+{"id": "r-a-confirm-3", "character": "friend-a", "tags": ["social:confirm"], "template": "alright. you pick the time, i will be there"}
+{"id": "r-a-confirm-4", "character": "friend-a", "tags": ["social:confirm"], "template": "done. what are we doing"}
+{"id": "r-a-topic-1", "character": "friend-a", "tags": ["topic:hockey", "topic:rangers", "topic:computers", "topic:pokemon", "topic:rome", "topic:terry-davis", "topic:cs-history", "topic:hunting", "topic:fishing", "topic:woodworking"], "template": "{fact}"}

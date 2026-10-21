@@ -186,14 +186,30 @@ def app_id(bot: BotSpec, env=os.environ) -> int | None:
 
 
 def _read_token_file(path: Path, bot: BotSpec) -> str:
+    """Read a file that holds one token, and diagnose the two ways that goes wrong.
+
+    The common mistake is pointing ``<VAR>_FILE`` at a dotenv file, which looks like a token
+    store and is not: the roster cannot know which line is the token. It is worth saying so
+    plainly, because otherwise the failure reads as "your token is malformed" and sends people
+    to regenerate a perfectly good token.
+    """
     try:
-        token = path.read_text(encoding="utf-8").strip()
+        raw = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as error:
         raise RosterError(
             f"{bot.id}: {bot.token_file_var} is not a readable text file: {path}"
         ) from error
+    token = raw.strip()
     if not token:
         raise RosterError(f"{bot.id}: {bot.token_file_var} file is empty: {path}")
+    if any(character.isspace() for character in token):
+        lines = len([line for line in raw.splitlines() if line.strip()])
+        raise RosterError(
+            f"{bot.id}: {bot.token_file_var} points at {path}, which holds {lines} non-blank "
+            "line(s). That variable wants a file containing exactly one token, not an env file. "
+            "Point it at a one-line secret, or name a dotenv file with \"env_file\" in bots.json "
+            "and put <VAR> inside it instead"
+        )
     return token
 
 

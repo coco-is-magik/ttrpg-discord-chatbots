@@ -106,6 +106,22 @@ def test_an_unreadable_token_file_names_the_bot(tmp_path) -> None:
         )
 
 
+def test_a_token_file_pointing_at_a_dotenv_file_says_so(tmp_path) -> None:
+    # The mistake people actually make: a *_FILE variable wants one token, not an env file.
+    # The message must name the fix, or it reads as "your token is broken".
+    dotenv = tmp_path / ".env.frienda"
+    dotenv.write_text("DISCORD_TOKEN=abc\nAPP_ID=123\n", encoding="utf-8")
+    friend = BotSpec(id="friend-a", role="friend")
+
+    with pytest.raises(RosterError) as caught:
+        resolve_token(friend, env={"TTRPG_FRIEND_A_TOKEN_FILE": str(dotenv)})
+
+    message = str(caught.value)
+    assert "2 non-blank line(s)" in message
+    assert "exactly one token" in message
+    assert "env_file" in message
+
+
 def test_two_helpers_are_refused(tmp_path) -> None:
     _write(
         tmp_path / "bots.json",

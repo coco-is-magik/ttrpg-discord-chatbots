@@ -1,6 +1,9 @@
-# The three friends, as people. `known_tags` gates what they can answer; right now they
-# know only social intents, so a lore question deflects honestly instead of inventing.
-# `name` is a placeholder until the friends are actually named; templates avoid it.
-{"id": "friend-a", "name": "Friend A", "known_tags": ["social:greeting", "social:presence", "social:thanks", "social:goodbye", "social:howareyou", "social:smalltalk", "social:agreement", "social:apology"], "tags": [], "fallback_tag": "fallback"}
+# The three friends, as people. `known_tags` gates what they can answer: a question whose tag is
+# not listed is refused honestly instead of answered with a guess. `tags` describe the character
+# rather than what they know, and are what voice casting matches on.
+#
+# friend-a has a personality (docs/PERSONA.md). friend-b and friend-c are still the neutral
+# placeholder: they know only the social moves, so anything else gets an honest "I don't know".
+{"id": "friend-a", "name": "TopGuy", "known_tags": ["social:greeting", "social:presence", "social:thanks", "social:goodbye", "social:howareyou", "social:smalltalk", "social:agreement", "social:apology", "social:comfort", "social:plans", "social:confirm", "topic:hockey", "topic:rangers", "topic:computers", "topic:pokemon", "topic:rome", "topic:terry-davis", "topic:cs-history", "topic:hunting", "topic:fishing", "topic:woodworking"], "tags": ["style:bombastic", "tone:warm", "role:elder", "voice:deep-bass"], "fallback_tag": "fallback"}
 {"id": "friend-b", "name": "Friend B", "known_tags": ["social:greeting", "social:presence", "social:thanks", "social:goodbye", "social:howareyou", "social:smalltalk", "social:agreement", "social:apology"], "tags": [], "fallback_tag": "fallback"}
 {"id": "friend-c", "name": "Friend C", "known_tags": ["social:greeting", "social:presence", "social:thanks", "social:goodbye", "social:howareyou", "social:smalltalk", "social:agreement", "social:apology"], "tags": [], "fallback_tag": "fallback"}

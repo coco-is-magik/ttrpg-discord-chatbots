@@ -1,0 +1,11 @@
+# Voice casting for the friends. A rule names characters (id or display name), names character
+# tags, or is the default. Resolution: character > tags (most matches) > default.
+#
+# friend-a is voiced but not yet *spoken*: the friends have no audio path until GROUP.md slice 6.
+# This rule exists now so the voice is pinned data -- docs/PERSONA.md and tests/test_persona.py
+# both compare against it, and a mismatch is a failing test rather than a surprise on game night.
+#
+# The brief: deep, American, clear and cheerful -- a bass Santa Claus. `en_US-ryan-high` is the
+# deepest of the piper American male voices at high quality; speed below 1.0 gives it room to
+# rumble. UNVERIFIED: no piper model is installed on this box, so nobody has listened to it yet.
+{"id": "cast-topguy", "characters": ["friend-a", "TopGuy"], "engine": "piper", "voice": "en_US-ryan-high", "speed": 0.92, "volume": 1.0}

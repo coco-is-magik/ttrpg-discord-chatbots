@@ -34,6 +34,15 @@ class KnowledgeItem:
     ``slots`` holds the madlib vocabulary that goes with the fact ("the Sunken
     Crown", "Greyfall"); it is also searched, so a question about the crown
     matches even when the prose alone would not.
+
+    ``reply`` is what the character *says* when this item is matched, and it is
+    deliberately not what gets searched. Compression distance rewards an item that
+    is shaped like the question, while a person in a mood speaks in sentences
+    shaped like a person in a mood -- measured on the friends world, a spoken
+    stance as the search text scored 0.69-0.86 against the questions it answered,
+    while a question-shaped anchor plus a separate reply scored 0.18-0.50. So the
+    anchor does the matching and ``spoken`` does the talking; when ``reply`` is
+    absent the two are the same thing, which is what every lore item wants.
     """
 
     id: str
@@ -41,6 +50,7 @@ class KnowledgeItem:
     tags: frozenset[str]
     slots: Mapping[str, str] = field(default_factory=dict)
     meta: Mapping[str, Any] = field(default_factory=dict)
+    reply: str | None = None
 
     def __post_init__(self) -> None:
         if not self.id.strip():
@@ -49,12 +59,19 @@ class KnowledgeItem:
             raise ValueError(f"knowledge {self.id!r} has no text")
         if not self.tags or any(not tag.strip() for tag in self.tags):
             raise ValueError(f"knowledge {self.id!r} must have non-blank tags")
+        if self.reply is not None and not self.reply.strip():
+            raise ValueError(f"knowledge {self.id!r} has an empty reply")
 
     @property
     def search_text(self) -> str:
         """Prose plus slot values -- what compression distance is measured on."""
         parts = [self.text, *self.slots.values()]
         return " ".join(part for part in parts if part)
+
+    @property
+    def spoken(self) -> str:
+        """What to say when this item is matched: the reply, else the text itself."""
+        return self.reply.strip() if self.reply else self.text
 
 
 @dataclass(frozen=True)

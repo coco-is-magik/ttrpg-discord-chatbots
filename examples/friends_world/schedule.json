@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "note": "What each friend is doing, in 15-minute blocks. Wall-clock times, system locale. Edit freely: gaps fall back to `default`, and `Schedule.check()` reports overlaps, off-grid times and holes. Sleep is just a block with asleep:true.",
+  "default": { "doing": "pottering about the house", "topics": [] },
+  "friends": {
+    "friend-a": {
+      "timezone": "system",
+      "blocks": [
+        { "id": "sleep", "start": "00:00", "end": "06:30", "doing": "asleep", "days": ["mon", "tue", "wed", "thu", "fri"], "asleep": true },
+        { "id": "coffee", "start": "06:30", "end": "07:30", "doing": "coffee and the news", "days": ["mon", "tue", "wed", "thu", "fri"] },
+        { "id": "workshop-morning", "start": "07:30", "end": "09:00", "doing": "out in the workshop", "days": ["mon", "tue", "wed", "thu", "fri"], "topics": ["topic:woodworking"] },
+        { "id": "errands", "start": "09:00", "end": "11:00", "doing": "running errands", "days": ["mon", "tue", "wed", "thu", "fri"] },
+        { "id": "workshop-late-morning", "start": "11:00", "end": "12:30", "doing": "back out in the workshop", "days": ["mon", "tue", "wed", "thu", "fri"], "topics": ["topic:woodworking"] },
+        { "id": "lunch", "start": "12:30", "end": "13:15", "doing": "having lunch", "days": ["mon", "tue", "wed", "thu", "fri"] },
+        { "id": "reading", "start": "13:15", "end": "15:00", "doing": "reading", "days": ["mon", "tue", "wed", "thu", "fri"], "topics": ["topic:rome", "topic:cs-history"] },
+        { "id": "out-back", "start": "15:00", "end": "17:00", "doing": "out the back, fixing something", "days": ["mon", "tue", "wed", "thu", "fri"], "topics": ["topic:woodworking", "topic:hunting"] },
+        { "id": "dinner-prep", "start": "17:00", "end": "18:00", "doing": "making dinner", "days": ["mon", "tue", "wed", "thu", "fri"] },
+        { "id": "dinner", "start": "18:00", "end": "19:00", "doing": "eating dinner", "days": ["mon", "tue", "wed", "thu", "fri"] },
+        { "id": "game-or-book", "start": "19:00", "end": "21:30", "doing": "got the game on, or a book if it is a bad one", "days": ["mon", "tue", "wed", "thu", "fri"], "topics": ["topic:rangers", "topic:hockey"] },
+        { "id": "reading-late", "start": "21:30", "end": "23:00", "doing": "reading in the chair", "days": ["mon", "tue", "wed", "thu", "fri"], "topics": ["topic:rome"] },
+        { "id": "sleep-late", "start": "23:00", "end": "24:00", "doing": "asleep", "days": ["mon", "tue", "wed", "thu", "fri"], "asleep": true },
+
+        { "id": "weekend-sleep", "start": "00:00", "end": "07:30", "doing": "asleep", "days": ["sat", "sun"], "asleep": true },
+        { "id": "weekend-breakfast", "start": "07:30", "end": "08:30", "doing": "a slow breakfast", "days": ["sat", "sun"] },
+        { "id": "saturday-water", "start": "08:30", "end": "12:00", "doing": "out on the water", "days": ["sat"], "topics": ["topic:fishing"] },
+        { "id": "sunday-workshop", "start": "08:30", "end": "12:00", "doing": "out in the workshop", "days": ["sun"], "topics": ["topic:woodworking"] },
+        { "id": "weekend-lunch", "start": "12:00", "end": "13:00", "doing": "having lunch", "days": ["sat", "sun"] },
+        { "id": "weekend-project", "start": "13:00", "end": "16:00", "doing": "on some project or other", "days": ["sat", "sun"], "topics": ["topic:woodworking", "topic:computers"] },
+        { "id": "yard", "start": "16:00", "end": "17:30", "doing": "out in the yard", "days": ["sat", "sun"], "topics": ["topic:woodworking"] },
+        { "id": "weekend-dinner", "start": "17:30", "end": "19:00", "doing": "making something on the grill", "days": ["sat", "sun"] },
+        { "id": "weekend-evening", "start": "19:00", "end": "22:00", "doing": "hockey or a film", "days": ["sat", "sun"], "topics": ["topic:rangers", "topic:hockey"] },
+        { "id": "weekend-reading", "start": "22:00", "end": "23:30", "doing": "reading", "days": ["sat", "sun"], "topics": ["topic:rome"] },
+        { "id": "weekend-sleep-late", "start": "23:30", "end": "24:00", "doing": "asleep", "days": ["sat", "sun"], "asleep": true }
+      ]
+    }
+  }
+}

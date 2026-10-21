@@ -25,6 +25,7 @@ from ttrpg_chatbots.bots.permissions import (
     requirements_for,
     summarise,
 )
+from ttrpg_chatbots.bots.persona import Persona, PersonaError, VoiceSpec
 from ttrpg_chatbots.bots.roster import (
     BOTS_ENV,
     DEFAULT_ROSTER_FILE,
@@ -45,6 +46,9 @@ __all__ = [
     "ROLES",
     "BotSpec",
     "BotSpecError",
+    "Persona",
+    "PersonaError",
+    "VoiceSpec",
     "Finding",
     "PermissionsError",
     "Requirement",

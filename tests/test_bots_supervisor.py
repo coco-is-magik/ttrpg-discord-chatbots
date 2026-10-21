@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import itertools
+
 import asyncio
 import logging
 from types import SimpleNamespace
@@ -280,10 +282,19 @@ def test_a_friend_ignores_other_bots() -> None:
 class _Chat:
     """A stand-in for FriendChat: records the question, answers without a dataset."""
 
-    def __init__(self, *, fail: BaseException | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        fail: BaseException | None = None,
+        tag: str = "social:greeting",
+        text: str = "hey back",
+    ) -> None:
         self.calls: list[tuple[str, str, str | None]] = []
         self.contexts: list[object] = []
+        self.forced: list[str | None] = []
         self.fail = fail
+        self.tag = tag
+        self.text = text
 
     def reply(
         self,
@@ -293,14 +304,25 @@ class _Chat:
         speaker: str | None = None,
         context=None,
         addressed: bool = True,
+        style=None,
+        force_tag=None,
     ):
         self.calls.append((text, friend, speaker))
         self.contexts.append(context)
+        self.forced.append(force_tag)
         if self.fail is not None:
             raise self.fail
-        return Answer(
-            text="hey back", source=f"reply:{friend}", detail={"tag": "social:greeting"}
-        )
+        return Answer(text=self.text, source=f"reply:{friend}", detail={"tag": self.tag})
+
+
+@pytest.fixture(autouse=True)
+def _memory_dir(tmp_path, monkeypatch):
+    """Every friend's memory lives in a temporary directory, never in data/."""
+    monkeypatch.setenv("TTRPG_FRIENDS_MEMORY_DIR", str(tmp_path / "friends"))
+    return tmp_path / "friends"
+
+
+_MESSAGE_IDS = itertools.count(1000)
 
 
 class _MentionedFriend(FriendBot):
@@ -317,6 +339,7 @@ class _MentionedFriend(FriendBot):
 
 def _mention(friend, text: str = "<@1> hey", *, mentioned: bool = True, bot_author=False):
     message = SimpleNamespace(
+        id=next(_MESSAGE_IDS),
         author=SimpleNamespace(display_name="Tav", id=5, bot=bot_author),
         channel=SimpleNamespace(name="general", id=7),
         guild=object(),
@@ -353,6 +376,77 @@ def test_a_message_that_does_not_mention_the_friend_gets_no_reply() -> None:
 
     assert chat.calls == []
     assert friend.replied == 0
+
+
+def test_a_redelivered_message_is_never_answered_twice() -> None:
+    # Gateways redeliver events after a resume, and two processes sharing a token each answer
+    # once. Either way the reader sees double texts, so the same message id is answered once.
+    chat = _Chat()
+    friend = _MentionedFriend(_friend(reply="mention"), chat=chat)
+    message = _mention(friend)
+
+    asyncio.run(friend.on_message(message))
+    asyncio.run(friend.on_message(message))
+
+    assert len(message.replies) == 1
+    assert chat.calls == [("hey", "friend-a", "Tav")]
+    assert friend.replied == 1
+
+
+def test_two_different_messages_still_get_two_replies() -> None:
+    chat = _Chat()
+    friend = _MentionedFriend(_friend(reply="mention"), chat=chat)
+
+    asyncio.run(friend.on_message(_mention(friend, "<@1> hey")))
+    asyncio.run(friend.on_message(_mention(friend, "<@1> hey again")))
+
+    assert friend.replied == 2
+
+
+# --- an invitation, and the memory that keeps it -------------------------------------------
+
+
+def test_offering_plans_leaves_an_invitation_open() -> None:
+    chat = _Chat(tag="social:plans", text="nothin yet. you free?")
+    friend = _MentionedFriend(_friend(reply="mention"), chat=chat)
+
+    asyncio.run(friend.on_message(_mention(friend, "<@1> doing anything later?")))
+
+    assert friend.memory.pending_plan is True
+    assert friend.memory.path.is_file(), "an open invitation must survive a restart"
+
+
+def test_accepting_the_invitation_confirms_instead_of_agreeing() -> None:
+    chat = _Chat(tag="social:agreement", text="sounds good")
+    friend = _MentionedFriend(_friend(reply="mention"), chat=chat)
+    friend.memory.remember_plan()
+
+    asyncio.run(friend.on_message(_mention(friend, "<@1> yeah sure")))
+
+    assert chat.forced == ["social:confirm"]
+    assert friend.memory.pending_plan is False
+
+
+def test_no_invitation_means_a_plain_agreement() -> None:
+    chat = _Chat(tag="social:agreement", text="sounds good")
+    friend = _MentionedFriend(_friend(reply="mention"), chat=chat)
+
+    asyncio.run(friend.on_message(_mention(friend, "<@1> yeah sure")))
+
+    assert chat.forced == [None]
+
+
+def test_memory_survives_a_restart() -> None:
+    chat = _Chat()
+    first = _MentionedFriend(_friend(reply="mention"), chat=chat)
+    asyncio.run(first.on_message(_mention(first, "<@1> hey", )))
+    first.memory.remember_plan()
+    first.memory.save()
+
+    second = _MentionedFriend(_friend(reply="mention"), chat=_Chat())
+
+    assert second.memory.person == "Tav"
+    assert second.memory.pending_plan is True
 
 
 def test_a_friend_with_reply_off_stays_silent() -> None:

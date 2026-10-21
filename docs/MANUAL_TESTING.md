@@ -151,16 +151,29 @@ Content is off for that application. The probe deletes its own lines before exit
 Tav    @TerrysTopGuy hey
 ```
 ```text
-TerrysTopGuy   Hey, Tav.
+TerrysTopGuy   there he is. come on in
+```
+
+Before you start, check there is exactly one bot process — two processes sharing a token is what
+sends every reply twice:
+
+```bash
+./start-bot.sh --status
+# running (1 process: pid 3174323), logging to …/data/logs/bot.log
 ```
 
 Then try the edges, which are the point of the design:
 
 | Message | Expected |
 |---|---|
-| `@TerrysTopGuy anyone around tonight?` | a presence reply (`I'm around for a bit.`) |
-| `@TerrysTopGuy thanks` | a short acknowledgement |
-| `@TerrysTopGuy what is the sunken crown?` | "I don't know" — friends know no lore yet |
+| `@TerrysTopGuy anyone around tonight?` | a presence reply in his voice (`i'm here. been here, will be here, what do you need`) |
+| `@TerrysTopGuy thanks` | `any time` or similar |
+| `@TerrysTopGuy doing anything later?` | an invitation: `nothin yet. you free?` — **never a goodbye** |
+| then `yeah` | a confirmation with a time (`done. what are we doing`), not `sounds good` |
+| `@TerrysTopGuy howre the rangers doing?` | an opinion about the Rangers, despite the phrasing |
+| `@TerrysTopGuy yoooo` | a greeting, not a refusal |
+| `@TerrysTopGuy what is the plot of dune?` | a short hedge (`?`, `say more?`) — not a paragraph |
+| `@TerrysTopGuy what is the sunken crown?` | an honest refusal — friends know no lore |
 | `@TerrysTopGuy hey` twice | two different greetings, not the same line |
 | `hey, @friend-b` | silence: `friend-b` has `reply: off` |
 | a message that mentions no friend | silence |
@@ -171,14 +184,43 @@ a time is deliberate while the classifier's voice is still being tuned.
 
 The classifier is also the fallback when a model is configured and fails, so it is not a stub.
 This command reproduces exactly what the bot runs — note the ceiling, which is what turns a lore
-question into an honest refusal instead of a greeting:
+question into an honest refusal:
 
 ```bash
 .venv/bin/ttrpg-chatbots-reply --data examples/friends_world --character friend-a \
   --max-distance 0.65 --ask "what is the sunken crown?"
-# Friend A [no knowledge, d=0.870 (deflected)]:
-# I can't help with that.
+# TopGuy [no knowledge, d=0.759 (deflected)]:
+# I would be lying if I answered that. Let us find something I do know.
 ```
+
+### 2.4 The personality holds (friend-a only)
+
+`friend-a` is **TopGuy**, and he has a written brief (`docs/PERSONA.md`) that the dataset is
+tested against. Four questions catch most mistakes:
+
+| Message | Expected |
+|---|---|
+| `@TerrysTopGuy do you like hockey?` | a strong opinion about hockey, in his voice — never a refusal |
+| `@TerrysTopGuy what about the rangers?` | the Rangers, with feeling. Original Six will come up |
+| `@TerrysTopGuy i'm nervous about tomorrow` | encouragement, and a next step. Not "I don't know" |
+| `@TerrysTopGuy what is the plot of dune?` | an honest refusal, still warm: `i'd be lying if i answered that` |
+
+Then check the things a table cannot:
+
+* **He is typed, not written.** Lower case, no full stop, few apostrophes, the odd transposition
+  ("jsut"). If a line arrives perfectly punctuated, the style layer did not reach it — that is a
+  wiring bug, not a wording one.
+* He is **firm about the world and warm to you.** No line should make you feel small; if one does,
+  it is a template bug, and `tests/test_persona.py::test_no_template_is_ever_cold…` should have
+  caught it.
+* He **does not invent.** Ask about something he half-knows ("what about the roman navy?"). A
+  refusal is the correct answer; a confident wrong answer is the failure that matters.
+* His subjects all work: hockey, the Rangers, computers, Pokémon, Rome, Terry Davis, the history of
+  computing, hunting, fishing, woodworking. One refusal among those is a missing anchor.
+* He sounds like the same person every time — that is the point of one pool per character.
+
+`friend-b` and `friend-c` are deliberately still neutral. Asking them `do you like hockey?` must
+produce a plain "I don't know", not one of TopGuy's lines.
 
 ### 2.2 Re-inviting an app that is already in the server
 

@@ -260,7 +260,19 @@ def test_a_template_needing_the_speaker_is_skipped_when_absent() -> None:
 
 def test_max_distance_turns_a_weak_match_into_a_deflection() -> None:
     strict = Replier(make_world(), max_distance=0.01)
-    assert strict.reply("tell me about the crown", "ann").known is False
+    # Deliberately does not *name* the subject: naming it is evidence the ceiling does not
+    # override (see test_a_named_subject_is_answered_even_past_the_ceiling).
+    assert strict.reply("tell me about something old and iron", "ann").known is False
+
+
+def test_a_named_subject_is_answered_even_past_the_ceiling() -> None:
+    # "the crown" is in the message, so the question is about the crown however it is phrased.
+    strict = Replier(make_world(), max_distance=0.01)
+
+    reply = strict.reply("tell me about the crown", "ann")
+
+    assert reply is not None and reply.known is True
+    assert reply.tag == "lore:relic"
 
 
 def test_empty_query_is_rejected(replier) -> None:

@@ -13,12 +13,14 @@ worth having because they measure *what follows what*, and that is now a first-c
 
 | Layer | Module | Decides | Deterministic |
 |---|---|---|---|
-| Social intents | `reply/intents.py` | is this a greeting / thanks / goodbye / … | yes, regex |
-| Knowledge | `reply/ncd.py`, `reply/replier.py` | which tagged fact is this about | yes, compression distance |
+| Typing normalisation | `reply/text.py` | what the words *are* ("yoooo" → "yo", "howre" → "how are") | yes |
+| Social intents | `reply/intents.py` | is this a greeting / thanks / goodbye / plans / … | yes, regex |
+| Entity naming | `reply/entities.py` | which subject did they name, however they phrased it | yes, word lookup |
+| Knowledge | `reply/ncd.py`, `reply/replier.py` | which tagged fact is this about, and is it close enough to answer | yes, compression distance |
 | Context | `reply/context.py`, `reply/transitions.py` | does that reading fit here, and should we speak at all | yes, a count table |
 
-Everything is inspectable: a regex list, a distance number, an integer table. No weights are
-learned at runtime and nothing is hidden inside a vector.
+Everything is inspectable: a regex list, a word list, a distance number, an integer table. No
+weights are learned at runtime and nothing is hidden inside a vector.
 
 ## 2. What context is allowed to do
 
@@ -34,6 +36,49 @@ Exactly two things, both in `Replier`:
 
 `context=None` reproduces the old behaviour exactly, which is why every earlier test still passes
 unchanged.
+
+## 2a. Naming beats phrasing
+
+Compression distance is a shape metric, and people do not phrase things the way a corpus writes
+them. On 2026-10-21 the bot refused **"howre the rangers doing?"** — score **0.651**, one
+thousandth past the 0.65 ceiling — with the word *rangers* in the message.
+
+So there are two signals now, and they answer different questions:
+
+| Signal | Answers | Fails at |
+|---|---|---|
+| distance | *does this read like that?* | anything shaped unlike the anchor |
+| entity naming | *did they name the thing?* | nothing, but it says nothing about the fact |
+
+`reply/entities.py` builds a vocabulary from the tags and slot values already in the dataset
+(`topic:rangers` → "rangers"; slot "New York Rangers" → "york", "rangers") and matches whole
+words. A named subject is answered **even past the ceiling**, because naming it is evidence the
+ceiling exists to protect against *unrelated* questions. Within the subject, distance still picks
+the fact — so "who was the best roman general?" can reach an item about generals rather than the
+one about the fall of Rome.
+
+## 2b. Hedge before opining
+
+There is a band where a match is real but not specific: for the friends world, **0.45 – 0.65**.
+The old behaviour answered everything in that band with the subject's stock stance, which is how
+"who was the best roman general and why is it agrippa?" got a paragraph about the fall of Rome.
+
+`Replier(assured=...)` now splits the band. Below it, state the view. Inside it, hedge — "?",
+"say more?", "what do you need" — because a short non-answer costs nothing and a confident answer
+to a different question costs trust. The demo world passes no `assured` value, so its calibrated
+behaviour is untouched.
+
+## 2c. Two kinds of memory
+
+| Kind | Lives in | Dies with | Holds |
+|---|---|---|---|
+| short-term | `reply/context.py` | the process | the last 8 turns, their acts, who spoke |
+| long-term | `bots/memory.py` → `data/friends/<id>.json` | nothing | the person's name, last seen, subjects raised, and an unanswered invitation |
+
+Long-term memory is one small readable JSON file per friend. It exists so an invitation survives
+a restart: he asks "you free?" on Tuesday, and on Thursday the "yeah" still gets a time rather
+than a blank "sounds good". Nothing in it is a summary or an embedding, because memory you cannot
+read in ten seconds is memory that will surprise you on game night.
 
 **Not** in scope, deliberately:
 

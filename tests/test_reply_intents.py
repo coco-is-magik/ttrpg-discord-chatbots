@@ -41,11 +41,31 @@ def test_social_moves_are_recognised(text: str, tag: str) -> None:
         "roll stealth",
         "",
         "   ",
+        # A closing is a whole message. These are questions that happen to contain a word a
+        # closing uses, and answering them with a farewell ends the conversation by accident.
+        "is the game on later?",
     ],
 )
 def test_questions_and_commands_are_not_social_moves(text: str) -> None:
     """The lexicon must not steal a real question; that is what the fact classifier is for."""
     assert match_intent(text) is None
+
+
+@pytest.mark.parametrize(
+    ("text", "tag"),
+    [
+        ("later", "social:goodbye"),
+        ("ok later", "social:goodbye"),
+        ("alright, night", "social:goodbye"),
+        ("night bud", "social:goodbye"),
+        ("doing anything later?", "social:plans"),
+        ("got plans tonight?", "social:plans"),
+        ("what are you doing tonight?", "social:plans"),
+        ("any plans later tonight?", "social:plans"),
+    ],
+)
+def test_a_closing_is_recognised_only_when_it_leads(text: str, tag: str) -> None:
+    assert match_intent(text) == tag
 
 
 def test_presence_beats_greeting_when_a_message_has_both() -> None:

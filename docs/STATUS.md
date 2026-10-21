@@ -12,11 +12,15 @@ lands; it should never be more than one slice out of date.
 
 | | |
 |---|---|
-| Tests | **1465 passing**, ~27 s, no network, no GPU |
+| Tests | **1552 passing**, ~28 s, no network, no GPU |
 | Bots live | 4 applications: `ttrpg-bot` (helper) + `friend-a/b/c` |
 | Permissions | **8/8 each** in `#general` |
 | Slash commands | **51/51** synced to guild 1364544268609523762 |
 | Who speaks | `friend-a` only, `reply: mention`; `friend-b`/`friend-c` are `reply: off` |
+| Personality | **friend-a is TopGuy** (`docs/PERSONA.md`); b and c deliberately neutral |
+| Typing | friend-a types lower-case with dropped apostrophes and the odd slip; b and c stay tidy |
+| Memory | short-term: last 8 turns in RAM. long-term: `data/friends/friend-a.json` |
+| Life | `examples/friends_world/life.json`: 5 activities, 4 grievances, day-stable |
 | Model | **none** — classifier only, by choice, until a persona exists |
 | Working tree | **uncommitted** (see §4) |
 
@@ -34,6 +38,10 @@ lands; it should never be more than one slice out of date.
   `docs/CLASSIFIER.md` is the full account.
 - **Context** — the last 8 turns; a transition table vetoes a reading that cannot follow the
   previous turn, and an unaddressed repeat is met with silence.
+- **One personality, fully written** — `friend-a` is TopGuy: ten subjects, his own pool for every
+  social move, his own way of refusing, and a voice pinned in the casting table. The brief lives in
+  `bots.json`; the lines live in `examples/friends_world/`; `tests/test_persona.py` refuses to let
+  the two disagree. `docs/PERSONA.md` is the whole story, including how to write the next one.
 
 ## 3. Verified how
 
@@ -42,6 +50,18 @@ lands; it should never be more than one slice out of date.
 | All four bots connect, audit 8/8, sync 51 commands | `data/logs/bot.log`, 2026-10-21 12:30 |
 | A mention gets a classifier reply | live, plus `tests/test_bots_supervisor.py` |
 | A lore question deflects instead of inventing | live, plus `tests/test_friends_chat.py` |
+| Every one of TopGuy's ten subjects gets an answer in his own voice | `tests/test_persona.py`, distances 0.18–0.55 |
+| He refuses what he does not know, warmly | `test_a_question_outside_his_subjects_is_refused_honestly` |
+| He answers somebody who is struggling | `test_he_can_be_moved_by_somebody_having_a_bad_day` |
+| No line is contemptuous of the human | `test_no_template_is_ever_cold_to_the_person_being_answered` |
+| friend-b and friend-c stay neutral | `test_the_other_friends_stay_neutral_for_now` |
+| A redelivered message is never answered twice | `test_a_redelivered_message_is_never_answered_twice` |
+| A closing is only a closing at the start of a message | `test_a_closing_is_recognised_only_when_it_leads` |
+| His lines are typed, not written | `test_his_replies_are_typed_not_written` |
+| Texting spellings are understood | `test_reply_text.py`, `test_reply_entities.py` |
+| A named subject is answered past the ceiling | `test_a_named_subject_is_answered_even_past_the_ceiling` |
+| An invitation remembered across a restart | `test_memory_survives_a_restart` |
+| An accepted invitation gets a confirmation | `test_accepting_the_invitation_confirms_instead_of_agreeing` |
 | Context changes the reading (`presence` vs `greeting` after a goodbye) | `test_the_table_vetoes_a_reading_that_cannot_follow` |
 | Silence is possible and is not an error | `test_an_unaddressed_repeat_is_left_alone` |
 | Switchboard imports in 1.24 s at **86%** coverage | run by hand, numbers in `CLASSIFIER.md` §6 |
@@ -50,12 +70,17 @@ lands; it should never be more than one slice out of date.
 
 ## 4. Uncommitted work (as of this snapshot)
 
-Everything since commit `a1b5215` is in the working tree: **14 modified and 14 untracked paths** —
-`bots/chat.py`, `bots/identity.py`, `bots/supervisor.py`,
-`reply/{context,transitions,importers,intents,responder,replier,cli,types}.py`,
-`examples/friends_world/`, `corpora/README.md`, the five new test files, and the docs
-(`GROUP.md`, `CLASSIFIER.md`, `STATUS.md`, `MANUAL_TESTING.md`, `README.md`, `.gitignore`,
-`.env.example`).
+The persona slice, on top of `b04ca1c`: **22 modified and 6 new paths** — new are
+`bots/persona.py`, `reply/style.py`, `docs/PERSONA.md`, `tests/test_persona.py`,
+`tests/test_reply_style.py`, `tests/test_reply_text.py`, `tests/test_reply_entities.py`,
+`reply/text.py`, `reply/entities.py`, `bots/memory.py`, `examples/friends_world/voices.jsonl`; modified are the dataset (`characters`, `knowledge`,
+`responses`, `world`), `reply/{types,datasets,replier,intents}.py`,
+`bots/{identity,roster,supervisor,__init__}.py`, `tests/test_bots_roster.py`, and the docs
+(`PERSONA.md`, `GROUP.md`, `STATUS.md`, `MANUAL_TESTING.md`, `README.md`,
+`examples/bots.example.json`).
+
+Earlier slices are committed: `a1b5215` (four applications), `b6387bf` (per-bot env files,
+`/friendcheck`), `c121968` (classifier + corpora docs), `b04ca1c` (ignore rules).
 
 Committing is the only thing that makes a handover real; the docs are the content, the commit is
 the timestamp.
@@ -98,8 +123,14 @@ The corpus it came from is already at `corpora/switchboard/`; to rebuild the tab
   lists a megabyte of `.jsonl`, something bypassed the rule.
 - **The helper must not request Message Content.** It is a test: `tests/test_bot.py` asserts the
   helper's intents stay at `discord.Intents.default()`.
-- **A token cannot hold two gateway sessions.** Stop the bot before `--friendcheck` /
-  `--friendcheck` probes, or you get two half-connected clients and confusing logs.
+- **A token cannot hold two gateway sessions, and two processes are worse than that.** They
+  fight over the session and both answer every mention, which reads as double texts. `--status`
+  now counts *every* process, not just the pid file, and says so; `--stop` kills them all.
+  Stop the bot before a `--friendcheck` probe for the same reason.
+- **`<VAR>_FILE` wants a file with one token, not an env file.** Pointing
+  `TTRPG_FRIEND_A_TOKEN_FILE` at `.env.frienda` fails with "holds N non-blank line(s)"; the fix is
+  `"env_file": ".env.frienda"` in `bots.json`. This actually happened on 2026-10-21 and the error
+  now names it.
 - **`pytest` already passes `-q`.** Adding your own `-q` gives `-qq` and suppresses the summary
   line; run plain `pytest` when you want the count.
 - **`./start-bot.sh` with no argument runs in the foreground.** Use `-d` / `--background`.
@@ -121,5 +152,6 @@ The corpus it came from is already at `corpora/switchboard/`; to rebuild the tab
 | Which act follows which | `reply/transitions.py` |
 | Reading a corpus into that table | `reply/importers.py` |
 | The classifier's full account | `docs/CLASSIFIER.md` |
+| Who a friend is, and how the brief is enforced | `docs/PERSONA.md`, `bots/persona.py` |
 | The group's design and invariants | `docs/GROUP.md` |
 | Testing against Discord by hand | `docs/MANUAL_TESTING.md` |

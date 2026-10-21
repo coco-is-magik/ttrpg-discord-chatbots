@@ -632,43 +632,47 @@ The walkthrough, including the per-application Message Content toggle, is in
 `applications.commands`: they own no commands, and the absent scope says so.
 
 
-### 8.4 The person's slot: personality is not decided yet
+### 8.4 The person's slot: one written, two still open
 
-A friend is a seat with a persona *block*, and the block is deliberately empty of character.
-The slots exist so the wiring can be finished; filling them in is a writing decision, made
-later, and it changes no code.
+A friend is a bot with a persona *block*. The block started empty of character on purpose: the
+slots existed so the wiring could be finished before anybody wrote a personality.
+
+**As of `docs/PERSONA.md`, friend-a (TopGuy) is written.** The brief lives in
+`data/bots.json` → `persona`, the behaviour lives in the reply dataset, and
+`tests/test_persona.py` refuses to let them drift: every subject must be a tag the character
+knows, every catchphrase must appear in one of their templates, every voice must match the casting
+table. friend-b and friend-c are still empty, and a test fails if one of them gains a persona
+before that is a decision.
+
+The shape, as implemented (`bots/persona.py`):
 
 ```json
-{
-  "id": "dennis",
-  "kind": "bot",
-  "character": "robert-ross",
-  "world_character": "sable",
-  "voices": { "ic": "en_GB-alan-medium", "ooc": "en_US-amy-medium" },
-  "meta": {
-    "name": "Dennis",
-    "persona": {
-      "role": "",
-      "humour": "",
-      "verbosity": "short",
-      "interjection_rate": 0.5,
-      "question_rate": 0.2,
-      "topics": {},
-      "quiet": "00:00-08:30",
-      "tz": "America/Toronto",
-      "model": "cheap"
-    }
-  }
+"persona": {
+  "name": "TopGuy",
+  "summary": "one or two lines for humans and logs",
+  "traits": ["bombastic", "paternal"],       // prose; the brief, not enforced
+  "values": ["honour", "honesty", "integrity"],
+  "topics": ["topic:hockey"],                 // enforced against known_tags
+  "signature": ["That is the truth of it"],   // enforced against the templates
+  "voice": { "engine": "piper", "voice": "en_US-ryan-high", "speed": 0.92 }
 }
 ```
 
-Empty strings are not placeholders for a personality we have in mind; they mean *nobody has
-chosen one*. The neutral defaults are the polite ones: short messages, equal willingness to
-speak, few questions, no topics weighted above others.
+Two things changed from the original sketch, both because the classifier cannot read a prompt:
 
-`examples/seats.example.json` already has the `voices` shape; it gains this `persona` block,
-and the example becomes the documentation. New environment variables, all optional and all
-defaulting to "off, exactly as today":
+1. **Persona belongs to the bot, not to the seat.** A seat is a participant with a character at the
+   table; the friends have no sheets. Keying it to the bot id keeps `seats.json` about people.
+2. **Traits are not instructions.** With no model in the loop, "bombastic" can only become true by
+   being written into the lines a character can say, so the brief is a spec checked against data
+   rather than a string handed to a model. When a model arrives, the same block becomes its system
+   prompt — and the dataset stays as the fallback.
+
+The ambient knobs from the original design (`verbosity`, `interjection_rate`, `question_rate`,
+`quiet`, `tz`, `model`) are still unwritten on purpose: they describe *when and how often* a friend
+speaks, which is `social/` and `ambient/` in slice 3b. Writing them now would be a number nobody
+has measured.
+
+New environment variables, all optional and all defaulting to "off, exactly as today":
 
 | Variable | Meaning |
 |---|---|
@@ -897,11 +901,12 @@ Each has a recommendation, because a plan with no opinion is a menu.
 10. **Drift outreach: how long is silence, and who breaks it?** Recommended: one week, one friend,
     and only with a ritual attached ("game night is Thursday") rather than a bare "hey". Which
     friend breaks it is a personality question, so it waits for §13.11.
-11. **What the friends are like — deliberately deferred.** Names, humour, topics, how much they
-    interrupt: all slots in the seat's `meta.persona`, all empty. Nothing in the code may assume
-    a role until those are filled in. This is the one decision worth making *last*, because it
-    is the one that decides what the group feels like, and it is much easier to write once the
-    plumbing is quiet.
+11. **What the friends are like — one decided, two still open.** friend-a is written: see
+    `docs/PERSONA.md` and `bots/persona.py`. His brief, subjects, catchphrases and voice are data,
+    and the tests refuse to let them drift. friend-b and friend-c remain empty slots, and the code
+    still may not assume a role until theirs is filled in. This was the decision worth making
+    *last* for the group as a whole and *per friend* in practice: one at a time, each written
+    against a working classifier, is how the first one actually got done.
 
 ---
 

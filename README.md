@@ -23,6 +23,16 @@ and when, the ambient rhythm, the table's scene and floor, and the contract for 
 three inputs, what context is allowed to do, which published dialogue-act corpora fit and on what
 licence, and how to import one.
 
+**How conversation is being rebuilt**: [`docs/CONVERSATION.md`](docs/CONVERSATION.md) — the ~45
+module decomposition, the specificity ladder, the dataset layout. **The day**:
+[`docs/SCHEDULE.md`](docs/SCHEDULE.md) — the 15-minute NPC schedule he draws on.
+
+**What the friends are doing**: [`docs/LIFE.md`](docs/LIFE.md) — why the old opinion bank read
+like forum posts, the three phases of an actual conversation, and the life a friend draws on.
+
+**Who the friends are**: [`docs/PERSONA.md`](docs/PERSONA.md) — the brief for each written friend,
+the schema, and the tests that stop the brief and the dataset drifting apart.
+
 **Testing it against Discord by hand**: [`docs/MANUAL_TESTING.md`](docs/MANUAL_TESTING.md).
 
 What exists today is the substrate and the sheet: reading, creation and mutation of a
@@ -186,14 +196,19 @@ each with its own token, and a friend with no token is *dormant* rather than an 
 itself when it connects, and logs each missing permission with the setting that fixes it.
 
 **friend-a answers when mentioned**, using the compression classifier — deterministic social
-intents (greeting, presence, thanks, goodbye, apology, agreement, smalltalk) in front of tagged
-knowledge, with no model and no API key. It also knows what was just said: a small act-transition
-table vetoes a reading that cannot follow the previous turn, and an unaddressed remark is left
-alone rather than answered twice. `friend-b` and `friend-c` are connected and listening but
-switched off (`reply: off`). Personalities are deliberately unwritten: every line is plain and
-short, and the fallback is an honest "I don't know" rather than an invented one. The design, and
-what waits for a model, is in [`docs/GROUP.md`](docs/GROUP.md); the corpus and licensing picture
-is in [`docs/CLASSIFIER.md`](docs/CLASSIFIER.md).
+intents (greeting, presence, thanks, goodbye, apology, agreement, smalltalk, comfort) in front of
+tagged knowledge, with no model and no API key. It also knows what was just said: a small
+act-transition table vetoes a reading that cannot follow the previous turn, and an unaddressed
+remark is left alone rather than answered twice.
+
+**friend-a is a person called TopGuy**, not a generic assistant: bombastic, warm, and willing to
+tell you what he thinks about hockey (the Rangers), computers, Pokémon, Rome, Terry Davis, the
+history of computing, hunting, fishing or woodworking — and to say plainly when he does not know
+something. `friend-b` and `friend-c` are connected and listening but switched off
+(`reply: off`), and are still deliberately neutral. The brief and the tests that hold it are in
+[`docs/PERSONA.md`](docs/PERSONA.md); the group's design and what waits for a model is in
+[`docs/GROUP.md`](docs/GROUP.md); the corpus and licensing picture is in
+[`docs/CLASSIFIER.md`](docs/CLASSIFIER.md).
 
 To prove the whole pipe — tokens, gateway, Message Content, sending, receiving — with the bot
 stopped:

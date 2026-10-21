@@ -18,6 +18,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from ttrpg_chatbots.bots.persona import Persona, PersonaError
+
 ROLE_HELPER = "helper"
 ROLE_FRIEND = "friend"
 ROLES = (ROLE_HELPER, ROLE_FRIEND)
@@ -60,6 +62,7 @@ class BotSpec:
     commands: bool = False
     reply: str = "off"
     enabled: bool = True
+    persona: Persona | None = None
 
     def __post_init__(self) -> None:
         identifier = (self.id or "").strip()
@@ -93,6 +96,13 @@ class BotSpec:
             raise BotSpecError(
                 f"bot {identifier!r}: friends own no commands; slash commands belong to the helper"
             )
+        if self.role == ROLE_HELPER and self.persona is not None:
+            raise BotSpecError(
+                f"bot {identifier!r}: the helper has no personality; it is the tool, not one of "
+                "the people. Give a persona to a friend"
+            )
+        if self.persona is not None and not isinstance(self.persona, Persona):
+            raise BotSpecError(f"bot {identifier!r}: persona must be a Persona, not {self.persona!r}")
         if self.user_id is not None:
             if isinstance(self.user_id, bool) or not isinstance(self.user_id, int):
                 raise BotSpecError(f"bot {identifier!r}: user_id must be a whole number")
@@ -185,6 +195,14 @@ def bots_from_records(records, *, source: str = "bots") -> tuple[BotSpec, ...]:
             else:
                 raise BotSpecError(f"{where}: channel {channel!r} is not a Discord id")
 
+        persona_record = record.get("persona")
+        persona = None
+        if persona_record is not None:
+            try:
+                persona = Persona.from_record(persona_record, where=f"{where}: persona")
+            except PersonaError as error:
+                raise BotSpecError(str(error)) from error
+
         try:
             bots.append(
                 BotSpec(
@@ -199,6 +217,7 @@ def bots_from_records(records, *, source: str = "bots") -> tuple[BotSpec, ...]:
                     commands=bool(record.get("commands", role.strip().lower() == ROLE_HELPER)),
                     reply=str(record.get("reply", "off")).strip().lower(),
                     enabled=bool(record.get("enabled", True)),
+                    persona=persona,
                 )
             )
         except BotSpecError as error:
