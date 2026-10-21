@@ -14,6 +14,7 @@ quotes are from the rules document, section "0. Action Resolution".
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from ttrpg_chatbots.dice.roller import Roller
@@ -122,6 +123,10 @@ VIRTUE_NAMES = ("Conscience/Conviction", "Self-Control/Instinct", "Courage")
 VIRTUE_POINTS = 7
 BACKGROUND_POINTS = 5
 FREEBIE_BASE = 15
+MAX_FLAW_POINTS = 7  # "maximum of 7 points of Flaws, or two Flaws totaling any amount"
+# A single flaw's value is not capped at 5: the index has Blind at 6, and a custom flaw is
+# allowed "any amount" the group accepts. The *total* rule above is what balances it.
+MAX_FLAW_RATING = 10
 
 
 # -- Gifts -------------------------------------------------------------------
@@ -295,7 +300,90 @@ def ability_names(category: str) -> tuple[str, ...]:
     return ABILITY_LISTS[category]
 
 
-# -- vocabulary ------------------------------------------------------------
+# -- which attribute an ability is rolled with -------------------------------
+#
+# House Games rolls "Attribute + Ability" (see *Action Resolution*), but a player says "roll
+# Stealth", not "roll Dexterity + Stealth". These are the World of Darkness defaults, keyed by
+# the ability vocabulary on the sheet. A player can always override the attribute explicitly,
+# and an ability nobody has mapped falls back to its category's usual pairings rather than
+# refusing to roll.
+ABILITY_ATTRIBUTE = {
+    # Talents
+    "Alertness": "Perception",
+    "Athletics": "Dexterity",
+    "Brawl": "Strength",
+    "Dodge": "Dexterity",
+    "Empathy": "Perception",
+    "Expression": "Charisma",
+    "Intimidation": "Charisma",
+    "Intuition": "Perception",
+    "Leadership": "Charisma",
+    "Legerdemain": "Dexterity",
+    "Streetwise": "Manipulation",
+    "Subterfuge": "Manipulation",
+    "Endurance": "Stamina",
+    # Skills
+    "Animal Ken": "Charisma",
+    "Crafts": "Dexterity",
+    "Engineering": "Intelligence",
+    "Etiquette": "Charisma",
+    "Firearms": "Dexterity",
+    "Melee": "Dexterity",
+    "Meditation": "Wits",
+    "Performance": "Charisma",
+    "Pilot": "Dexterity",
+    "Stealth": "Dexterity",
+    "Survival": "Wits",
+    # Knowledges
+    "Academics": "Intelligence",
+    "Computers": "Intelligence",
+    "Culture": "Intelligence",
+    "Investigation": "Perception",
+    "Linguistics": "Intelligence",
+    "Management": "Manipulation",
+    "Medicine": "Intelligence",
+    "Occult": "Intelligence",
+    "Pyschology": "Perception",
+    "Psychology": "Perception",
+    "Science": "Intelligence",
+    "Thanatology": "Intelligence",
+}
+# When an ability is not in the table: the attribute its category is usually rolled with.
+CATEGORY_ATTRIBUTE = {TALENT: "Perception", SKILL: "Dexterity", KNOWLEDGE: "Intelligence"}
+
+
+def attribute_for(sheet: Sheet, ability: str) -> tuple[str, bool]:
+    """The attribute an ability rolls with, and whether that pairing was a guess.
+
+    ``(attribute, guessed)`` — the caller can tell the player when it fell back, so an unusual
+    homebrew ability does not silently roll the wrong stat.
+    """
+    name, category = _kind(sheet, ability)
+    for known, attribute in ABILITY_ATTRIBUTE.items():
+        if normalise(known) == normalise(name):
+            return resolve_name(attribute, sheet.attributes), False
+    return CATEGORY_ATTRIBUTE.get(category, "Intelligence"), True
+
+
+def wound_penalty(sheet: Sheet) -> int:
+    """The health penalty currently in force, as a positive number (0 when unhurt).
+
+    Levels name their own penalty (``Hurt (-1)``), and the deeper of the levels reached is the
+    one that applies, so walking the track from the top is what produces the right number.
+    """
+    levels = sheet.health or HEALTH_LEVELS
+    raw = sheet.meta.get("health_current")
+    try:
+        current = int(raw) if raw is not None else 0
+    except (TypeError, ValueError):
+        current = 0
+    current = max(0, min(current, len(levels) - 1))
+    worst = 0
+    for level in levels[: current + 1]:
+        match = re.search(r"\(-(\d+)\)", str(level))
+        if match:
+            worst = max(worst, int(match.group(1)))
+    return worst
 
 
 # The template's own ability names, by category. Kept here so an ability the character

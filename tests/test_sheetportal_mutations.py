@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from ttrpg_chatbots.sheetportal import mutations as mutate
 from ttrpg_chatbots.sheetportal.mutations import (
     MutationError,
     award_gift,
@@ -215,4 +216,55 @@ def test_options_prices_by_pool() -> None:
 def test_explain_names_the_trait_and_its_cap() -> None:
     assert explain(sheet(), "Stealth") == "Stealth: 2 of 5 (skill)"
     assert explain(sheet(), "Alertness") == "Alertness: 4 of 5 (talent, in the dark)"
+# -- creation: budgets pay before freebies ---------------------------------
 
+from ttrpg_chatbots.character.build import Build  # noqa: E402
+
+
+def test_a_new_ability_spends_its_category_budget_first() -> None:
+    receipt = mutate.add_ability(
+        sheet(freebies=15), "Sailing", rank=3, category="skill", pool="auto", build=Build()
+    )
+    assert receipt.sheet.freebies == 15  # the skill budget paid, not freebies
+    assert "creation budget" in str(receipt)
+
+
+def test_a_new_ability_tops_up_with_freebies_when_the_budget_runs_out() -> None:
+    # Skill budget is 9, and these two hold all of it.
+    spent = sheet(
+        freebies=15,
+        abilities={
+            "Stealth": Ability("Stealth", rank=5, category="skill"),
+            "Crafts": Ability("Crafts", rank=4, category="skill"),
+        },
+    )
+    receipt = mutate.add_ability(
+        spent, "Pilot", rank=2, category="skill", pool="auto", build=Build()
+    )
+    assert "from freebies" in str(receipt)
+    assert receipt.sheet.freebies == 11  # 2 points x 2 freebies each
+
+
+def test_an_unpayable_add_names_both_pools() -> None:
+    broke = sheet(
+        freebies=0,
+        abilities={
+            "Stealth": Ability("Stealth", rank=5, category="skill"),
+            "Crafts": Ability("Crafts", rank=4, category="skill"),
+        },
+    )
+    with pytest.raises(MutationError, match="unpayable"):
+        mutate.add_ability(broke, "Pilot", rank=2, category="skill", build=Build())
+
+
+def test_a_new_background_spends_the_background_budget() -> None:
+    receipt = mutate.add_background(
+        sheet(freebies=15), "Haven", dots=2, build=Build()
+    )
+    assert receipt.sheet.freebies == 15
+    assert "creation budget" in str(receipt)
+
+
+def test_without_a_build_an_add_pays_freebies() -> None:
+    receipt = mutate.add_ability(sheet(freebies=15), "Sailing", rank=2, category="skill")
+    assert receipt.sheet.freebies == 11

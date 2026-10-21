@@ -293,6 +293,9 @@ def embed_spec(
         if value:
             fields.append(EmbedField(label, value))
 
+    if sheet.merits or sheet.flaws:
+        fields.append(EmbedField("Merits & Flaws", _trait_lines(sheet.merits, sheet.flaws)))
+
     if sheet.gifts:
         fields.append(EmbedField("Gifts", _gift_lines(sheet), inline=False))
 
@@ -380,6 +383,20 @@ def _ability_block(sheet: Sheet, category: str) -> str:
     return fenced.format(rendered.rstrip())
 
 
+def _trait_lines(merits: tuple, flaws: tuple) -> str:
+    """Merits and flaws as one code block; flaws are prefixed so the two read apart."""
+    rows = [f"{trait.name} {trait.dots}" for trait in merits]
+    rows += [f"({trait.name} {trait.dots})" for trait in flaws]
+    width = max((len(row) for row in rows), default=0)
+    body = "\n".join(
+        row if row.startswith("(") else f"{row}".ljust(width) for row in rows
+    )
+    if len(body) > FIELD_LIMIT:
+        kept = body[: FIELD_LIMIT - 12].rsplit("\n", 1)[0]
+        return kept + "\n… and more"
+    return f"```\n{body}\n```"
+
+
 def _gift_lines(sheet: Sheet) -> str:
     """Gifts as a code block, one per line, ratings aligned."""
     rows = []
@@ -398,3 +415,110 @@ def _gift_lines(sheet: Sheet) -> str:
     if hidden:
         body += chr(10) + f"… and {hidden} more"
     return fenced.format(body.rstrip())
+
+
+# -- the two creation surfaces ------------------------------------------------
+
+QUESTIONS_PER_PAGE = 12
+BUILD_COLOUR = 0x2F6F4F
+
+
+def creation_pages(character) -> int:
+    """How many pages the questionnaire takes, at least one."""
+    total = character.interview.total if character.interview is not None else 0
+    return max(1, -(-total // QUESTIONS_PER_PAGE))
+
+
+def questionnaire_embed(character, *, page: int = 0) -> EmbedSpec:
+    """One page of the interview: numbered prompts, their answers, and progress.
+
+    Answers are truncated for display — the sheet remembers them whole, and /story or /export
+    is where long prose is read.
+    """
+    interview = character.interview
+    if interview is None or not interview.questions:
+        return EmbedSpec(
+            title=f"{character.name} — questionnaire",
+            description="No questionnaire attached yet.",
+            colour=BUILD_COLOUR,
+        )
+    pages = creation_pages(character)
+    page = max(0, min(page, pages - 1))
+    start = page * QUESTIONS_PER_PAGE
+    chunk = interview.questions[start : start + QUESTIONS_PER_PAGE]
+
+    lines: list[str] = []
+    for offset, question in enumerate(chunk, start=start + 1):
+        answer = " ".join(question.answer.split())
+        if len(answer) > 180:
+            answer = answer[:177] + "..."
+        lines.append(f"**{offset}.** {question.prompt}")
+        lines.append(answer or "_unanswered — /answer " + str(offset) + " text:_")
+        lines.append("")
+    return EmbedSpec(
+        title=f"{character.name} — questionnaire",
+        description="\n".join(lines).strip(),
+        footer=(
+            f"{interview.answered}/{interview.total} answered · "
+            f"page {page + 1}/{pages} · /page n to move"
+        ),
+        colour=BUILD_COLOUR,
+    )
+
+
+def build_embed(character, *, page: int = 0) -> EmbedSpec:
+    """The sheet, with the creation budgets still to spend."""
+    from dataclasses import replace as _replace
+
+    from ttrpg_chatbots.character.build import remaining
+
+    sheet = character.sheet
+    spec = embed_spec(sheet)
+    if character.build is None:
+        return spec
+    left = remaining(sheet, character.build)
+    parts: list[str] = []
+    for section in ("attributes", "abilities", "virtues", "backgrounds"):
+        for group, value in left[section].items():
+            budget = value + _spent(sheet, character.build, section, group)
+            parts.append(f"{group} {budget - value}/{budget}")
+    budget_line = " · ".join(parts)
+    # The assignment is a choice, so it stays visible rather than implied by whichever group
+    # happens to want points.
+    assignment = " · ".join(
+        f"{group} {budget}"
+        for group, budget in (
+            *character.build.attributes.items(),
+            *character.build.abilities.items(),
+        )
+    )
+    notes = [f"revision {character.revision}", "draft — nothing is final until /finish"]
+    if character.interview is not None:
+        notes.append(f"answers {character.interview.answered}/{character.interview.total}")
+    return _replace(
+        spec,
+        description=(
+            f"{spec.description}\n{budget_line}\n"
+            f"`{assignment}` — /budget changes which group gets which"
+        ),
+        footer=" · ".join(notes),
+        colour=BUILD_COLOUR,
+    )
+
+
+def _spent(sheet, build, section: str, group: str) -> int:
+    """Spent so far in one group, for the ``spent/budget`` display."""
+    from ttrpg_chatbots.character.build import (
+        ability_spent,
+        attribute_spent,
+        background_spent,
+        virtue_spent,
+    )
+
+    if section == "attributes":
+        return attribute_spent(sheet)[group]
+    if section == "abilities":
+        return ability_spent(sheet)[group]
+    if section == "virtues":
+        return virtue_spent(sheet)
+    return background_spent(sheet)

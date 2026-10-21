@@ -92,32 +92,52 @@ def test_setup_hook_publishes_every_command_to_the_guild(monkeypatch) -> None:
             await bot.close()
 
     assert asyncio.run(build()) == [
+        "ability",
         "answer",
         "ask",
+        "background",
+        "budget",
+        "build",
+        "characters",
         "claim",
+        "create",
+        "discard",
         "done",
         "edit",
         "export",
+        "finish",
+        "flaw",
         "gift",
+        "goto",
         "heal",
         "history",
         "hurt",
         "import",
         "join",
         "leave",
+        "lookup",
+        "merit",
         "mission",
         "options",
+        "page",
+        "panel",
         "ping",
+        "play",
+        "pool",
+        "remove",
         "roll",
         "say",
         "sheet",
+        "skip",
         "specialty",
         "spend",
         "stop",
         "undo",
         "ungift",
         "unlock",
+        "unmerit",
         "voices",
+        "willpower",
     ]
 
 
@@ -223,3 +243,18 @@ def test_main_exits_before_connecting_when_no_token_is_configured(monkeypatch, t
     with pytest.raises(SystemExit) as exit_info:
         main([])
     assert TOKEN_ENV_VAR in str(exit_info.value)
+
+
+def test_no_command_bypasses_the_registry() -> None:
+    """Every slash command must use ``@command``, which is what registers it.
+
+    A command decorated with ``app_commands.command`` directly exists, works when called, and
+    is never added to the tree -- invisible in Discord and silent in tests. That happened to
+    /create, so the source is now checked instead of trusting review.
+    """
+    import inspect
+
+    from ttrpg_chatbots import bot as module
+
+    source = inspect.getsource(module)
+    assert "@app_commands.command(" not in source

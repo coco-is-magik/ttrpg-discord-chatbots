@@ -98,6 +98,18 @@ class Interview:
         return bool(self.questions) and not self.missing
 
     @property
+    def next_unanswered(self) -> int | None:
+        """The number of the first unanswered question, or ``None`` when complete.
+
+        Position is derived, never stored, which is what makes resuming a build free: kill the
+        bot for a week and this still points at the right question.
+        """
+        for number, question in enumerate(self.questions, start=1):
+            if not question.answered:
+                return number
+        return None
+
+    @property
     def sections(self) -> tuple[str, ...]:
         seen: list[str] = []
         for question in self.questions:
@@ -298,6 +310,10 @@ def load_questionnaire(path: Path) -> Questionnaire:
     except ValueError as error:
         raise SheetError(f"{path}: invalid JSON: {error}") from error
     return Questionnaire.from_dict(data)
+
+
+# An answer a player chose not to give. Distinct from blank, which means "not yet".
+SKIPPED = "(skipped)"
 
 
 def character_from_tab(tab: str) -> str:

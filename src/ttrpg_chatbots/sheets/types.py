@@ -194,6 +194,11 @@ class Sheet:
     gifts: tuple[Gift, ...] = ()
     planned: tuple[Gift, ...] = ()
     backgrounds: tuple[Trait, ...] = ()
+    # Merits cost the points the book gives them; a custom merit names its own value.
+    merits: tuple[Trait, ...] = ()
+    # Flaws are rated, and their ratings are the freebie points they hand back
+    # ("FLAWS provide additional Freebie Points", capped at 7 unless two flaws).
+    flaws: tuple[Trait, ...] = ()
     # The Veteran Template is a status earned by a solo Veteran Game, not a Gift count; it
     # changes the tier and raises the Background cap. Kept separate for that reason.
     veteran: bool = False
@@ -210,6 +215,16 @@ class Sheet:
             raise ValueError("a sheet needs a character name")
         if not self.system.strip():
             raise ValueError("a sheet needs a system name")
+
+    @property
+    def merit_points(self) -> int:
+        """Freebie points a character has paid for merits."""
+        return sum(trait.dots for trait in self.merits)
+
+    @property
+    def flaw_points(self) -> int:
+        """Freebie points the Flaws are worth."""
+        return sum(trait.dots for trait in self.flaws)
 
     @property
     def gift_count(self) -> int:
@@ -279,6 +294,8 @@ class Sheet:
             "backgrounds": [
                 {"name": trait.name, "dots": trait.dots} for trait in self.backgrounds
             ],
+            "merits": [{"name": trait.name, "dots": trait.dots} for trait in self.merits],
+            "flaws": [{"name": trait.name, "dots": trait.dots} for trait in self.flaws],
             "meta": dict(self.meta),
             "source": self.source,
         }
@@ -330,6 +347,14 @@ def sheet_from_dict(data: Any) -> Sheet:
         backgrounds=tuple(
             Trait(name=str(entry["name"]), dots=int(entry.get("dots", 0)))
             for entry in (data.get("backgrounds") or ())
+        ),
+        merits=tuple(
+            Trait(name=str(entry["name"]), dots=int(entry.get("dots", 0)))
+            for entry in (data.get("merits") or ())
+        ),
+        flaws=tuple(
+            Trait(name=str(entry["name"]), dots=int(entry.get("dots", 0)))
+            for entry in (data.get("flaws") or ())
         ),
         meta=dict(data.get("meta") or {}),
         source=str(data.get("source", "") or ""),

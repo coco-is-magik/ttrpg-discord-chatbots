@@ -126,10 +126,28 @@ def test_duplicate_ids_are_refused() -> None:
         SeatBook([Seat.from_dict(HUMAN), Seat.from_dict({**BOT, "id": "truman"})])
 
 
-def test_one_discord_user_cannot_hold_two_seats() -> None:
+def test_one_discord_user_may_hold_several_seats_but_only_one_active() -> None:
+    # A player owns several characters; only the active one is "theirs" for a command.
     twin = {**BOT, "id": "dennis-two", "discord_id": HUMAN["discord_id"]}
-    with pytest.raises(SeatsError, match="claimed by both"):
+    with pytest.raises(SeatsError, match="two active seats"):
         SeatBook([Seat.from_dict(HUMAN), Seat.from_dict(twin)])
+
+    parked = SeatBook([Seat.from_dict(HUMAN), Seat.from_dict({**twin, "active": False})])
+    assert parked.for_discord(HUMAN["discord_id"]).id == "truman"
+    assert [seat.id for seat in parked.all_for_discord(HUMAN["discord_id"])] == [
+        "truman",
+        "dennis-two",
+    ]
+
+
+def test_activating_a_seat_deactivates_its_owner_others() -> None:
+    twin = {**BOT, "id": "dennis-two", "discord_id": HUMAN["discord_id"]}
+    book_two = SeatBook([Seat.from_dict(HUMAN), Seat.from_dict({**twin, "active": False})])
+    switched = book_two.activate("dennis-two")
+    assert switched.for_discord(HUMAN["discord_id"]).id == "dennis-two"
+    assert switched.get("truman").active is False
+    # And switching back is the same operation.
+    assert switched.activate("truman").for_discord(HUMAN["discord_id"]).id == "truman"
 
 
 def test_one_character_cannot_be_seated_twice() -> None:

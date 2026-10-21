@@ -13,6 +13,8 @@ import tempfile
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 
+from dataclasses import replace
+
 from ttrpg_chatbots.seats.types import Seat, SeatsError
 
 DEFAULT_SEATS_FILE = Path("data") / "seats.json"
@@ -23,24 +25,28 @@ class SeatBook:
 
     def __init__(self, seats: Iterable[Seat] = ()) -> None:
         self._seats: dict[str, Seat] = {}
-        self._by_discord: dict[int, Seat] = {}
+        # A player may own several characters; exactly one of them is active.
+        self._active_by_discord: dict[int, Seat] = {}
+        self._all_by_discord: dict[int, list[Seat]] = {}
         self._by_character: dict[str, Seat] = {}
         for seat in seats:
             key = seat.id.strip().lower()
             if key in self._seats:
                 raise SeatsError(f"duplicate seat id {seat.id!r}")
-            if seat.discord_id is not None:
-                owner = self._by_discord.get(seat.discord_id)
+            if seat.discord_id is not None and seat.active:
+                owner = self._active_by_discord.get(seat.discord_id)
                 if owner is not None:
                     raise SeatsError(
-                        f"discord id {seat.discord_id} is claimed by both "
-                        f"{owner.id!r} and {seat.id!r}"
+                        f"discord id {seat.discord_id} has two active seats "
+                        f"({owner.id!r} and {seat.id!r}); only one character plays at a time"
                     )
             if seat.character.strip().lower() in self._by_character:
                 raise SeatsError(f"character {seat.character!r} is seated twice")
             self._seats[key] = seat
             if seat.discord_id is not None:
-                self._by_discord[seat.discord_id] = seat
+                self._all_by_discord.setdefault(seat.discord_id, []).append(seat)
+                if seat.active:
+                    self._active_by_discord[seat.discord_id] = seat
             self._by_character[seat.character.strip().lower()] = seat
 
     def __len__(self) -> int:
@@ -71,10 +77,32 @@ class SeatBook:
         return seat
 
     def for_discord(self, discord_id: int | None) -> Seat | None:
-        """The human seat for a Discord user, if they have one."""
+        """The *active* seat for a Discord user: the character they are playing now."""
         if discord_id is None:
             return None
-        return self._by_discord.get(int(discord_id))
+        return self._active_by_discord.get(int(discord_id))
+
+    def all_for_discord(self, discord_id: int | None) -> tuple[Seat, ...]:
+        """Every character a player owns, active or not."""
+        if discord_id is None:
+            return ()
+        return tuple(self._all_by_discord.get(int(discord_id), ()))
+
+    def activate(self, seat_id: str) -> SeatBook:
+        """Make one seat active and deactivate its owner's others."""
+        chosen = self.get(seat_id)
+        if chosen.discord_id is None:
+            raise SeatsError(f"seat {seat_id!r} does not belong to a Discord user")
+        seats = tuple(
+            replace(
+                seat,
+                active=(seat.id == chosen.id),
+            )
+            if seat.discord_id == chosen.discord_id
+            else seat
+            for seat in self._seats.values()
+        )
+        return SeatBook(seats)
 
     def with_seat(self, seat: Seat) -> SeatBook:
         """A new book including ``seat``, re-validated (duplicates raise)."""

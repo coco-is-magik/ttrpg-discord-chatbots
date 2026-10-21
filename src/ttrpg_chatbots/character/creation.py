@@ -32,6 +32,30 @@ def now_utc() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def blank_sheet(name: str, *, system=houseg) -> Sheet:
+    """An empty character: attributes and virtues at 1, abilities at 0, nothing else.
+
+    This is the "empty character sheet" a build starts from. Every attribute and virtue begins
+    at 1 per the rules, which is why the budgets are measured against a floor rather than 0.
+    """
+    return Sheet(
+        name=name.strip(),
+        system=system.SYSTEM,
+        attributes={attribute: 1 for attribute in system.attribute_names()},
+        abilities={
+            ability: Ability(name=ability, rank=0, category=category)
+            for category, names in system.ABILITY_LISTS.items()
+            for ability in names
+        },
+        virtues={virtue: 1 for virtue in system.VIRTUE_NAMES},
+        willpower=1,
+        willpower_remaining=1,
+        morality=2,
+        health=system.HEALTH_LEVELS,
+        freebies=system.FREEBIE_BASE,
+    )
+
+
 def start_character(
     prompter: Prompter,
     questionnaire: Questionnaire,

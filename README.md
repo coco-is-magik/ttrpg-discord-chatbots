@@ -122,10 +122,21 @@ Once it is running, the bot answers these slash commands:
 | `/voices` | the cast table, plus whether voice is usable on this machine |
 | `/ask question:… character:… speak:true` | answer as a character; `speak` also says it aloud |
 | `/claim character:…` | claim an unclaimed character; this is how you get a seat |
+| `/create name:…` | build a character from scratch, in a DM |
+| `/characters` | your characters, and which one is active |
+| `/play character:…` | switch which character you are playing |
+| `/budget section:… seven:… five:… three:…` | choose which group gets 7/5/3 (or 13/9/5) |
+| `/build` · `/finish` | remaining creation budgets · submit and seal |
+| `/flaw name:… rating:…` | take a Flaw; it pays freebie points |
+| `/page number:…` | move between questionnaire pages |
 | `/sheet` | your own character (or any, with permission) |
 | `/spend trait:… to:… pool:…` | raise a trait; replies with the receipt and what is left |
 | `/options trait:…` | what the next point costs, or a list of everything raisable |
 | `/edit trait:… to:…` | set a trait directly (free; caps still apply) |
+| `/ability name:… rank:… category:…` | add a Talent, Skill or Knowledge |
+| `/background name:… dots:…` | add a Background |
+| `/remove trait:…` | take an ability or background off the sheet |
+| `/pool pool:… amount:…` | set a freebie or xp balance (correction) |
 | `/specialty ability:… text:…` | name or clear an ability specialty |
 | `/ungift name:…` | remove a Gift that should not be there |
 | `/hurt levels:…` / `/heal levels:…` | move along the health track |
@@ -152,6 +163,10 @@ Sheet management is a v1 loop, entirely inside Discord:
 /answer number:12 text:…    → rewrite one answer, recorded in history
 /done                       → seal; from then on changes are amendments
 /edit trait:Dexterity to:4   → "Dexterity 2→4" (free; /undo reverses it)
+/ability name:Sailing rank:2 category:skill
+/background name:Contacts dots:3
+/remove trait:Academics
+/pool pool:freebies amount:15   → "freebies 0→15" (imported sheets start empty)
 /specialty ability:Melee text:Improvised
 /hurt levels:1              → "hurt 1: health 7/8"
 /export                     → edit 55 paragraphs in a real editor, then /import
@@ -164,7 +179,10 @@ Voice needs `PyNaCl`, the DAVE library and a system `libopus`; the `voice` extra
 covers the first two, and `voice_readiness()` names whatever is missing.
 
 Discord's terms do not allow automated harnesses on real accounts, so the live bot
-is tested by hand. **[`docs/MANUAL_TESTING.md`](docs/MANUAL_TESTING.md)** is the
+is tested by hand. Building a character from scratch in Discord is planned in
+**[`docs/CREATION.md`](docs/CREATION.md)**.
+
+**[`docs/MANUAL_TESTING.md`](docs/MANUAL_TESTING.md)** is the
 script for that: creating the application, the invite URL, real credentials, and a
 step-by-step walkthrough with the expected output and a troubleshooting table.
 

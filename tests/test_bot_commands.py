@@ -15,8 +15,18 @@ import pytest
 from discord import app_commands
 
 from ttrpg_chatbots.audio.pcm import PcmAudio
+from dataclasses import replace
+
 from ttrpg_chatbots.bot import (
+    ability,
+    budget,
+    characters,
+    create,
+    play,
+    pool,
     answer,
+    background,
+    remove_trait_command,
     edit,
     heal,
     hurt,
@@ -115,6 +125,7 @@ class _Interaction:
         self.client = client
         self.user = _User()
         self.guild = guild
+        self.channel = None
         self.command = None
 
 
@@ -242,13 +253,23 @@ def test_every_command_the_guide_documents_is_registered() -> None:
             await bot.close()
 
     assert asyncio.run(build()) == {
+        "ability",
         "answer",
         "ask",
+        "background",
+        "budget",
+        "build",
+        "characters",
         "claim",
+        "create",
+        "discard",
         "done",
         "edit",
         "export",
+        "finish",
+        "flaw",
         "gift",
+        "goto",
         "heal",
         "history",
         "hurt",
@@ -256,8 +277,17 @@ def test_every_command_the_guide_documents_is_registered() -> None:
         "join",
         "leave",
         "mission",
+        "lookup",
+        "merit",
+        "panel",
+        "skip",
+        "unmerit",
         "options",
+        "page",
         "ping",
+        "play",
+        "pool",
+        "remove",
         "roll",
         "say",
         "sheet",
@@ -268,6 +298,7 @@ def test_every_command_the_guide_documents_is_registered() -> None:
         "ungift",
         "unlock",
         "voices",
+        "willpower",
     }
 
 
@@ -706,7 +737,7 @@ def test_spend_raises_a_trait_and_persists_it(seated) -> None:
     assert reloaded.sheet.freebies == 10
     assert reloaded.revision == 2
     assert reloaded.history[-1].kind == "sheet"
-    assert "Dexterity 5" in reloaded.history[-1].summary
+    assert "Dexterity 4->5" in reloaded.history[-1].summary
 
 
 def test_spend_refuses_to_exceed_a_cap(seated) -> None:
@@ -840,7 +871,7 @@ def test_history_shows_the_change_that_was_made(seated) -> None:
     _invoke(history, interaction)
     text = interaction.followup.messages[-1]
     assert "revision" in text
-    assert "Dexterity 5" in text
+    assert "Dexterity 4->5" in text
     assert "sheet" in text
 
 
@@ -1188,3 +1219,374 @@ def test_ungift_removes_and_undo_restores(seated) -> None:
     _invoke(ungift, interaction, "Auspex")
     assert "lost Auspex" in interaction.followup.messages[-1]
     assert seated.load("sable").sheet.gift_count == 0
+
+
+# -- adding traits --------------------------------------------------------
+
+
+def test_adding_a_background_spends_freebies(seated) -> None:
+    interaction = _Interaction(_Bot(_FakeConversation()))
+    interaction.user.id = 4242
+    _invoke(background, interaction, "Contacts", 3)
+    assert "gained Contacts 3" in interaction.followup.messages[-1]
+
+    reloaded = seated.load("sable")
+    assert reloaded.sheet.trait("Contacts").dots == 3
+    assert reloaded.sheet.freebies == 12  # 3 dots at 1 freebie each
+
+
+def test_adding_the_same_background_twice_is_refused(seated) -> None:
+    interaction = _Interaction(_Bot(_FakeConversation()))
+    interaction.user.id = 4242
+    _invoke(background, interaction, "Contacts", 1)
+    _invoke(background, interaction, "contacts", 1)
+    assert "already has contacts" in interaction.followup.messages[-1]
+
+
+def test_a_free_background_costs_nothing(seated) -> None:
+    interaction = _Interaction(_Bot(_FakeConversation()))
+    interaction.user.id = 4242
+    _invoke(background, interaction, "Library", 2, "none")
+    assert "gained Library 2" in interaction.followup.messages[-1]
+    assert seated.load("sable").sheet.freebies == 15
+
+
+def test_adding_an_ability_records_its_category(seated) -> None:
+    interaction = _Interaction(_Bot(_FakeConversation()))
+    interaction.user.id = 4242
+    _invoke(ability, interaction, "Occult", 2, "knowledge")
+    assert "gained Occult 2 (knowledge)" in interaction.followup.messages[-1]
+
+    reloaded = seated.load("sable")
+    assert reloaded.sheet.ability("Occult").category == "knowledge"
+    assert reloaded.sheet.ability("Occult").rank == 2
+    assert reloaded.sheet.freebies == 11  # 2 at 2 each
+
+
+def test_an_untrained_knowledge_can_be_listed(seated) -> None:
+    interaction = _Interaction(_Bot(_FakeConversation()))
+    interaction.user.id = 4242
+    _invoke(ability, interaction, "Academics", 0, "knowledge", "", "none")
+    assert "gained Academics 0 (knowledge)" in interaction.followup.messages[-1]
+    assert seated.load("sable").sheet.ability("Academics").rank == 0
+
+
+def test_an_ability_with_a_specialty_needs_rank_four(seated) -> None:
+    interaction = _Interaction(_Bot(_FakeConversation()))
+    interaction.user.id = 4242
+    _invoke(ability, interaction, "Melee", 2, "skill", "axes", "none")
+    assert "specialty needs rank 4" in interaction.followup.messages[-1]
+
+
+def test_adding_an_ability_that_exists_is_refused(seated) -> None:
+    interaction = _Interaction(_Bot(_FakeConversation()))
+    interaction.user.id = 4242
+    _invoke(ability, interaction, "Stealth", 1, "skill", "", "none")
+    assert "already has Stealth" in interaction.followup.messages[-1]
+
+
+def test_an_unaffordable_add_says_the_price(seated) -> None:
+    interaction = _Interaction(_Bot(_FakeConversation()))
+    interaction.user.id = 4242
+    _invoke(ability, interaction, "Occult", 5)
+    assert "costs 15 freebies; Sable has 15" not in interaction.followup.messages[-1]
+    _invoke(background, interaction, "Army", 5)  # 5 freebies, leaves 15
+    assert "freebies" in interaction.followup.messages[-1]
+
+
+# -- removing, and undoing an add ----------------------------------------
+
+
+def test_remove_takes_an_ability_off_the_sheet(seated) -> None:
+    interaction = _Interaction(_Bot(_FakeConversation()))
+    interaction.user.id = 4242
+    _invoke(remove_trait_command, interaction, "Stealth")
+    assert "removed Stealth" in interaction.followup.messages[-1]
+    assert seated.load("sable").sheet.find_ability("Stealth") is None
+
+
+def test_remove_takes_a_background_off_the_sheet(seated) -> None:
+    interaction = _Interaction(_Bot(_FakeConversation()))
+    interaction.user.id = 4242
+    _invoke(background, interaction, "Contacts", 2, "none")
+    _invoke(remove_trait_command, interaction, "Contacts")
+    assert "removed Contacts" in interaction.followup.messages[-1]
+    assert not seated.load("sable").sheet.backgrounds
+
+
+def test_undo_removes_a_trait_that_was_just_added(seated) -> None:
+    interaction = _Interaction(_Bot(_FakeConversation()))
+    interaction.user.id = 4242
+    _invoke(background, interaction, "Contacts", 2, "none")
+    assert seated.load("sable").sheet.trait("Contacts").dots == 2
+
+    _invoke(undo, interaction)
+    assert not seated.load("sable").sheet.backgrounds
+
+
+def test_undo_restores_a_removed_ability(seated) -> None:
+    interaction = _Interaction(_Bot(_FakeConversation()))
+    interaction.user.id = 4242
+    _invoke(edit, interaction, "Stealth", 4)  # give it rank 4 first
+    _invoke(remove_trait_command, interaction, "Stealth")
+    assert seated.load("sable").sheet.find_ability("Stealth") is None
+
+    _invoke(undo, interaction)
+    restored = seated.load("sable").sheet.ability("Stealth")
+    assert restored.rank == 4
+    assert restored.category == "skill"
+
+
+# -- pools ----------------------------------------------------------------
+
+
+def test_pool_sets_a_balance(seated) -> None:
+    interaction = _Interaction(_Bot(_FakeConversation()))
+    interaction.user.id = 4242
+    _invoke(pool, interaction, "freebies", 15)
+    assert "freebies 15→15" not in interaction.followup.messages[-1]
+
+
+def test_pool_reports_the_change_and_persists(seated) -> None:
+    interaction = _Interaction(_Bot(_FakeConversation()))
+    interaction.user.id = 4242
+    _invoke(pool, interaction, "freebies", 15)  # already 15
+    assert "already has 15 freebies" in interaction.followup.messages[-1]
+
+    _invoke(pool, interaction, "freebies", 3)
+    assert "freebies 15→3" in interaction.followup.messages[-1]
+    assert seated.load("sable").sheet.freebies == 3
+
+
+def test_pool_cannot_go_negative(seated) -> None:
+    interaction = _Interaction(_Bot(_FakeConversation()))
+    interaction.user.id = 4242
+    _invoke(pool, interaction, "xp", -5)
+    assert "cannot be negative" in interaction.followup.messages[-1]
+
+
+def test_pool_undo_restores_the_old_balance(seated) -> None:
+    interaction = _Interaction(_Bot(_FakeConversation()))
+    interaction.user.id = 4242
+    _invoke(pool, interaction, "xp", 40)
+    assert seated.load("sable").sheet.xp == 40
+    _invoke(undo, interaction)
+    assert seated.load("sable").sheet.xp == 0
+
+
+def test_a_gm_can_set_another_players_pool(seated) -> None:
+    interaction = _Interaction(_Bot(_FakeConversation()))
+    interaction.user.id = 9999  # the gm seat: view_any_sheet + award_gifts
+    _invoke(pool, interaction, "freebies", 5, "sable")
+    # Editing another sheet needs edit_any_sheet, which this seat does not have.
+    assert "edit_any_sheet" in interaction.followup.messages[-1]
+
+
+# -- a build needs a DM ---------------------------------------------------
+
+
+def _forbidden():
+    import discord
+
+    class _Response:
+        status = 403
+        reason = "Forbidden"
+
+    return discord.Forbidden(_Response(), "Cannot send messages to this user")
+
+
+class _Sent:
+    _next = 100
+
+    def __init__(self) -> None:
+        _Sent._next += 1
+        self.id = _Sent._next
+        self.edits: list = []
+
+    async def edit(self, embed=None, **kwargs) -> None:
+        self.edits.append(embed)
+
+    async def delete(self) -> None:
+        return None
+
+
+class _Dm:
+    """A DM channel that either works or refuses, like the real one."""
+
+    def __init__(self, *, refuse: bool = False) -> None:
+        self.refuse = refuse
+        self.sent: list[_Sent] = []
+
+    async def send(self, content=None, embed=None, **kwargs):
+        if self.refuse:
+            raise _forbidden()
+        message = _Sent()
+        self.sent.append(message)
+        return message
+
+    async def fetch_message(self, identifier: int):
+        for message in self.sent:
+            if message.id == identifier:
+                return message
+        return _Sent()
+
+
+def _dm_interaction(dm: _Dm):
+    interaction = _Interaction(_Bot(_FakeConversation()))
+    interaction.user.id = 4242
+    interaction.channel = dm  # a DM interaction has a channel and no guild
+    return interaction
+
+
+def test_create_refuses_cleanly_when_it_cannot_dm(empty_table, tmp_path) -> None:
+    dm = _Dm(refuse=True)
+    interaction = _dm_interaction(dm)
+    _invoke(create, interaction, "Ailis Vane")
+
+    message = interaction.followup.messages[-1]
+    assert "cannot message you privately" in message
+    assert "Nothing was created" in message
+    # And nothing was: no character file, no seat.
+    assert not empty_table.exists("Ailis Vane")
+    assert empty_table.ids() == ("dennis", "sable")
+    import json
+    import os
+
+    seats = json.loads(open(os.environ["TTRPG_SEATS_FILE"]).read()) if os.path.exists(
+        os.environ["TTRPG_SEATS_FILE"]
+    ) else []
+    assert seats == []
+
+
+def test_create_posts_two_panels_and_seats_the_player(empty_table) -> None:
+    dm = _Dm()
+    interaction = _dm_interaction(dm)
+    _invoke(create, interaction, "Ailis Vane")
+
+    assert "started" in interaction.followup.messages[-1]
+    # The probe is deleted, so exactly the questionnaire and the sheet remain.
+    assert len(dm.sent) >= 3
+
+    character = empty_table.load("Ailis Vane")
+    assert character.build is not None
+    assert character.interview.answered == 0
+    assert character.sheet.attribute("Strength") == 1
+    assert character.sheet.freebies == 15
+
+
+# -- several characters, one active ---------------------------------------
+
+
+def test_create_starts_a_second_character_and_switches_to_it(seated, tmp_path) -> None:
+    dm = _Dm()
+    interaction = _dm_interaction(dm)  # user 4242 already plays sable
+    _invoke(create, interaction, "Ailis Vane")
+
+    assert "started" in interaction.followup.messages[-1]
+    reloaded = seated.load("Ailis Vane")
+    assert reloaded.name == "Ailis Vane"
+
+    # Sable is still there, parked; the new character is the active one.
+    from ttrpg_chatbots.seats import load_seats
+    import os
+
+    book = load_seats(os.environ["TTRPG_SEATS_FILE"])
+    mine = book.all_for_discord(4242)
+    assert {seat.character for seat in mine} == {"sable", "ailis-vane"}
+    assert book.for_discord(4242).character == "ailis-vane"
+    assert sum(1 for seat in mine if seat.active) == 1
+
+
+def test_characters_lists_every_one_with_the_active_marked(seated) -> None:
+    interaction = _Interaction(_Bot(_FakeConversation()))
+    interaction.user.id = 4242
+    _invoke(characters, interaction)
+    text = interaction.followup.messages[-1]
+    assert "**active** · Sable" in text
+    assert "/play" in text
+
+
+def test_play_switches_the_active_character(seated, tmp_path) -> None:
+    from ttrpg_chatbots.seats import Seat, SeatBook, load_seats, save_seats
+    import os
+
+    book = load_seats(os.environ["TTRPG_SEATS_FILE"])
+    second = Seat(
+        id="truman-two",
+        kind="human",
+        character="dennis",
+        discord_id=4242,
+        active=False,
+        permissions=frozenset({"edit_own_sheet"}),
+    )
+    # Move dennis from the gm seat to a second seat for truman.
+    remaining = SeatBook(
+        [seat for seat in book if seat.id == "truman"] + [second]
+    )
+    save_seats(remaining, os.environ["TTRPG_SEATS_FILE"])
+
+    interaction = _Interaction(_Bot(_FakeConversation()))
+    interaction.user.id = 4242
+    _invoke(play, interaction, "dennis")
+    assert "now playing **Dennis**" in interaction.followup.messages[-1]
+    assert load_seats(os.environ["TTRPG_SEATS_FILE"]).for_discord(4242).character == "dennis"
+
+    _invoke(sheet, interaction)
+    assert interaction.followup.embeds[-1].title == "Dennis"
+
+
+def test_play_refuses_someone_elses_character(seated) -> None:
+    interaction = _Interaction(_Bot(_FakeConversation()))
+    interaction.user.id = 4242
+    _invoke(play, interaction, "dennis")  # the gm's character
+    assert "is not yours" in interaction.followup.messages[-1]
+
+
+def test_create_names_the_duplicate_before_touching_the_dm(seated, tmp_path) -> None:
+    dm = _Dm()
+    interaction = _dm_interaction(dm)
+    _invoke(create, interaction, "Sable")  # a character that already exists
+    assert "already a character called" in interaction.followup.messages[-1]
+    assert dm.sent == []  # no DM ping for a request that cannot work
+
+
+# -- the budget assignment -------------------------------------------------
+
+
+def test_budget_moves_the_largest_share(seated) -> None:
+    from ttrpg_chatbots.character.build import Build
+
+    interaction = _Interaction(_Bot(_FakeConversation()))
+    interaction.user.id = 4242
+    # A build only exists before sealing, so reopen first.
+    seated.save(seated.load("sable").unlock().with_build(Build()))
+
+    _invoke(budget, interaction, "attributes", "Mental", "Physical", "Social")
+    assert "Mental 7" in interaction.followup.messages[-1]
+    reloaded = seated.load("sable")
+    assert reloaded.build.attributes == {"Mental": 7, "Physical": 5, "Social": 3}
+
+
+def test_budget_refuses_an_assignment_the_spend_cannot_fit(seated) -> None:
+    from ttrpg_chatbots.character.build import Build
+
+    interaction = _Interaction(_Bot(_FakeConversation()))
+    interaction.user.id = 4242
+    character = seated.load("sable").unlock()
+    # Dexterity 4 and Strength 5 means 3 + 4 = 7 already spent in Physical.
+    sheet = replace(
+        character.sheet,
+        attributes={**character.sheet.attributes, "Strength": 5},
+    )
+    seated.save(character.with_sheet(sheet).with_build(Build()))
+
+    _invoke(budget, interaction, "attributes", "Social", "Mental", "Physical")
+    assert "does not fit what is already spent" in interaction.followup.messages[-1]
+    assert seated.load("sable").build.attributes["Physical"] == 7  # unchanged
+
+
+def test_budget_needs_a_build(seated) -> None:
+    interaction = _Interaction(_Bot(_FakeConversation()))
+    interaction.user.id = 4242
+    _invoke(budget, interaction, "attributes", "Mental", "Physical", "Social")
+    assert "no creation budgets" in interaction.followup.messages[-1]

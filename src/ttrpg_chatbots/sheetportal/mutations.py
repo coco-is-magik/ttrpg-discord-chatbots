@@ -46,6 +46,7 @@ class Receipt:
     sheet: Sheet
     lines: tuple[str, ...]
     spent: Mapping[str, int] = field(default_factory=dict)
+    gained: Mapping[str, int] = field(default_factory=dict)
     remaining: Mapping[str, int] = field(default_factory=dict)
     warnings: tuple[str, ...] = ()
 
@@ -56,14 +57,19 @@ class Receipt:
             for pool, amount in self.spent.items()
             if amount and pool != "none"
         )
+        earned = ", ".join(
+            f"{amount} {pool}" for pool, amount in self.gained.items() if amount
+        )
         left = ", ".join(
             f"{amount} {pool} left"
             for pool, amount in self.remaining.items()
-            if pool in self.spent and pool != "none"
+            if (pool in self.spent or pool in self.gained) and pool != "none"
         )
         parts = ["; ".join(self.lines)]
         if paid:
             parts.append(paid)
+        if earned:
+            parts.append(f"+{earned}")
         if left:
             parts.append(left)
         parts.extend(self.warnings)
@@ -343,6 +349,234 @@ def _apply(sheet: Sheet, kind: str, name: str, to: int) -> Sheet:
 # -- direct edits ------------------------------------------------------------
 
 
+def _auto_payment(
+    sheet: Sheet,
+    *,
+    kind: str,
+    points: int,
+    build,
+    label: str,
+    category: str | None = None,
+    system=houseg,
+) -> tuple[int, int, str]:
+    """Decide how to pay for ``points`` of a new trait during creation.
+
+    The rules spend group budgets first and let freebies top up, so "auto" is: as much as the
+    group's budget has room for, then freebies for the remainder — at the *freebie* rate, which
+    is not one point per dot. Returns ``(from_budget, freebie_cost, note)``.
+    """
+    rate = system.freebie_cost(kind)
+    if build is None:
+        need = points * rate
+        if sheet.freebies < need:
+            raise MutationError(
+                f"{label} costs {need} freebie{'s' if need != 1 else ''} at "
+                f"{rate} each; {sheet.name} has {sheet.freebies}"
+            )
+        return 0, need, ""
+    from ttrpg_chatbots.character.build import remaining
+
+    left = remaining(sheet, build)
+    if kind == "ability":
+        room = left["abilities"].get(category or _category_of(sheet, label), 0)
+    elif kind == "background":
+        room = left["backgrounds"]["Backgrounds"]
+    else:
+        room = 0
+    room = max(0, min(room, points))
+    rest = points - room
+    need = rest * rate
+    if need and sheet.freebies < need:
+        raise MutationError(
+            f"{label} needs {points} point(s): the budget has {room} left and paying for "
+            f"the other {rest} at {rate} freebies each needs {need}, but {sheet.name} has "
+            f"{sheet.freebies} — unpayable"
+        )
+    note = ""
+    if room and rest:
+        note = f"{room} from the budget, {rest} from freebies ({need} points)"
+    elif room:
+        note = "from the creation budget"
+    elif rest:
+        note = f"from freebies ({need} points)"
+    return room, need, note
+
+
+def _category_of(sheet: Sheet, label: str) -> str:
+    """The category a not-yet-added ability belongs to (falls back to a skill)."""
+    found = sheet.find_ability(label)
+    return found.category if found is not None else houseg.SKILL
+
+
+def add_background(
+    sheet: Sheet,
+    name: str,
+    *,
+    dots: int = 1,
+    pool: str = "auto",
+    build=None,
+    system=houseg,
+) -> Receipt:
+    """Add a new Background, priced like any other rating.
+
+    Backgrounds are the one rated trait a character grows during play (the book prices the
+    first rank at 7 XP, then rating x3), so adding one is a real spend rather than an edit.
+    During creation, ``pool="auto"`` spends the background budget first and tops up with
+    freebies, which is what the creation rules describe.
+    """
+    cleaned = " ".join(name.split())
+    if not cleaned:
+        raise MutationError("a background needs a name")
+    if any(normalise(trait.name) == normalise(cleaned) for trait in sheet.backgrounds):
+        raise MutationError(
+            f"{sheet.name} already has {cleaned}; raise it with /spend or /edit"
+        )
+    if dots < 1:
+        raise MutationError(f"{cleaned} needs at least one dot")
+    ceiling = cap_for(sheet, "background", cleaned)
+    if dots > ceiling:
+        tier = houseg.gift_tier(sheet.gift_count, veteran=sheet.veteran)
+        raise MutationError(f"a background is capped at {ceiling} for a {tier} character")
+
+    if pool == "auto":
+        from_budget, from_freebies, note = _auto_payment(
+            sheet, kind="background", points=dots, build=build, label=cleaned, system=system
+        )
+        updated = replace(
+            sheet,
+            backgrounds=(*sheet.backgrounds, Trait(cleaned, dots=dots)),
+            freebies=sheet.freebies - from_freebies,
+        )
+        lines = [f"gained {cleaned} {dots}"]
+        if note:
+            lines.append(note)
+        return Receipt(
+            sheet=updated,
+            lines=tuple(lines),
+            spent={"freebies": from_freebies} if from_freebies else {},
+            remaining={"freebies": updated.freebies} if from_freebies else {},
+        )
+
+    cost = cost_of("background", 0, dots, pool=pool, system=system)
+    available = getattr(sheet, pool, 0) if pool != "none" else 0
+    if cost > available:
+        raise MutationError(
+            f"{cleaned} {dots} costs {cost} {pool}; {sheet.name} has {available}"
+        )
+    updated = replace(sheet, backgrounds=(*sheet.backgrounds, Trait(cleaned, dots=dots)))
+    if pool != "none":
+        updated = replace(updated, **{pool: available - cost})
+    return Receipt(
+        sheet=updated,
+        lines=(f"gained {cleaned} {dots}",),
+        spent={pool: cost},
+        remaining={pool: available - cost},
+    )
+
+
+def add_ability(
+    sheet: Sheet,
+    name: str,
+    *,
+    rank: int = 1,
+    category: str = "skill",
+    specialty: str = "",
+    pool: str = "auto",
+    build=None,
+    system=houseg,
+) -> Receipt:
+    """Add a new Talent, Skill or Knowledge at a rank.
+
+    A knowledge at rank 0 is worth adding on purpose: "untrained knowledges cannot be rolled",
+    so listing one is how a player says "I have never studied this". During creation,
+    ``pool="auto"`` spends the category's budget first and tops up with freebies.
+    """
+    cleaned = " ".join(name.split())
+    if not cleaned:
+        raise MutationError("an ability needs a name")
+    if category not in (houseg.TALENT, houseg.SKILL, houseg.KNOWLEDGE):
+        raise MutationError(
+            f"unknown ability kind {category!r}; expected "
+            f"{houseg.TALENT}, {houseg.SKILL} or {houseg.KNOWLEDGE}"
+        )
+    existing = sheet.find_ability(cleaned)
+    if existing is not None:
+        raise MutationError(
+            f"{sheet.name} already has {existing.name} at rank {existing.rank}; "
+            "raise it with /spend or /edit"
+        )
+    ceiling = cap_for(sheet, "ability", cleaned)
+    if not 0 <= rank <= ceiling:
+        raise MutationError(f"{cleaned} must be between 0 and {ceiling}")
+    if specialty and rank < 4:
+        raise MutationError(f"a specialty needs rank 4 or more; {cleaned} is {rank}")
+
+    if pool == "auto":
+        from_budget, from_freebies, note = _auto_payment(
+            sheet,
+            kind="ability",
+            points=rank,
+            build=build,
+            label=cleaned,
+            category=category,
+            system=system,
+        )
+        ability = Ability(
+            name=cleaned, rank=rank, category=category, specialty=" ".join(specialty.split())
+        )
+        updated = replace(sheet, abilities={**sheet.abilities, cleaned: ability})
+        updated = replace(updated, freebies=updated.freebies - from_freebies)
+        lines = [f"gained {cleaned} {rank} ({category})"]
+        if note:
+            lines.append(note)
+        return Receipt(
+            sheet=updated,
+            lines=tuple(lines),
+            spent={"freebies": from_freebies} if from_freebies else {},
+            remaining={"freebies": updated.freebies} if from_freebies else {},
+        )
+
+    cost = cost_of("ability", 0, rank, pool=pool, system=system)
+    available = getattr(sheet, pool, 0) if pool != "none" else 0
+    if cost > available:
+        raise MutationError(
+            f"{cleaned} at rank {rank} costs {cost} {pool}; {sheet.name} has {available}"
+        )
+    ability = Ability(
+        name=cleaned, rank=rank, category=category, specialty=" ".join(specialty.split())
+    )
+    updated = replace(sheet, abilities={**sheet.abilities, cleaned: ability})
+    if pool != "none":
+        updated = replace(updated, **{pool: available - cost})
+    shown = f"gained {cleaned} {rank} ({category})"
+    return Receipt(
+        sheet=updated,
+        lines=(shown,),
+        spent={pool: cost},
+        remaining={pool: available - cost},
+    )
+
+
+def remove_trait(sheet: Sheet, name: str) -> Receipt:
+    """Remove an ability or a background that should not be on the sheet."""
+    ability = sheet.find_ability(name)
+    if ability is not None:
+        abilities = {
+            key: value for key, value in sheet.abilities.items() if value.name != ability.name
+        }
+        updated = replace(sheet, abilities=abilities)
+        return Receipt(sheet=updated, lines=(f"removed {ability.name}",))
+    try:
+        trait = sheet.trait(name)
+    except Exception as error:  # noqa: BLE001 - UnknownTrait, with its own good message
+        raise MutationError(f"{sheet.name} has no trait called {name!r}") from error
+    remaining = tuple(item for item in sheet.backgrounds if item.name != trait.name)
+    return Receipt(
+        sheet=replace(sheet, backgrounds=remaining),
+        lines=(f"removed {trait.name}",),
+    )
+
+
 def set_trait(
     sheet: Sheet, name: str, *, to: int, kind: str | None = None, system=houseg
 ) -> Receipt:
@@ -411,6 +645,29 @@ def adjust_health(sheet: Sheet, *, levels: int, system=houseg) -> Receipt:
     )
 
 
+def set_pool(sheet: Sheet, pool: str, amount: int) -> Receipt:
+    """Set a character's freebie or experience balance exactly.
+
+    A correction tool, not a reward: a character built elsewhere arrives with a pool the
+    workbook never recorded, and ``/mission`` is how experience is *earned*.
+    """
+    if pool not in ("freebies", "xp"):
+        raise MutationError(f"unknown pool {pool!r}; expected freebies or xp")
+    if isinstance(amount, bool) or not isinstance(amount, int):
+        raise MutationError("a pool is a whole number")
+    if amount < 0:
+        raise MutationError(f"{pool} cannot be negative")
+    current = getattr(sheet, pool)
+    if current == amount:
+        raise MutationError(f"{sheet.name} already has {amount} {pool}")
+    updated = replace(sheet, **{pool: amount})
+    return Receipt(
+        sheet=updated,
+        lines=(f"{pool} {current}→{amount}",),
+        remaining={pool: amount},
+    )
+
+
 def health_level(sheet: Sheet) -> int:
     """How much health the sheet says it has left."""
     return _health_now(sheet)[0]
@@ -443,3 +700,185 @@ def _health_now(sheet: Sheet) -> tuple[int, int, int]:
         if match:
             penalty = int(match.group(1))
     return current, maximum, penalty
+
+
+# -- flaws and creation budgets ---------------------------------------------
+
+
+def add_flaw(
+    sheet: Sheet, name: str, *, rating: int = 1, catalogue=None, system=houseg
+) -> Receipt:
+    """Take a Flaw, which hands back freebie points equal to its rating.
+
+    Flaws come *before* freebies: "15 + Flaw value" is the creation pool, so taking one has to
+    raise the balance rather than be bought from it.
+    """
+    cleaned = " ".join(name.split())
+    if not cleaned:
+        raise MutationError("a flaw needs a name")
+    if any(normalise(trait.name) == normalise(cleaned) for trait in sheet.flaws):
+        raise MutationError(f"{sheet.name} already has the flaw {cleaned}")
+    if not 1 <= rating <= houseg.MAX_FLAW_RATING:
+        raise MutationError(f"a flaw is rated 1..{houseg.MAX_FLAW_RATING}, got {rating}")
+    entry = catalogue.lookup(cleaned, "flaw") if catalogue is not None else None
+    if entry is not None and entry.maximum is not None and rating > entry.maximum:
+        raise MutationError(
+            f"{cleaned} is rated {entry.label} in {entry.source or 'the book'}; "
+            f"{rating} is too high"
+        )
+    total = sheet.flaw_points + rating
+    # "A character may have a maximum of 7 points of Flaws, or two Flaws totaling any amount."
+    if len(sheet.flaws) + 1 > 2 and total > houseg.MAX_FLAW_POINTS:
+        raise MutationError(
+            f"flaws are capped at {houseg.MAX_FLAW_POINTS} points unless there are exactly two"
+        )
+    updated = replace(
+        sheet,
+        flaws=(*sheet.flaws, Trait(cleaned, dots=rating)),
+        freebies=sheet.freebies + rating,
+    )
+    origin = f" ({entry.source})" if entry is not None and entry.source else ""
+    return Receipt(
+        sheet=updated,
+        lines=(f"took the flaw {cleaned} {rating}{origin}",),
+        gained={"freebies": rating},
+        remaining={"freebies": updated.freebies, "flaws": updated.flaw_points},
+    )
+
+
+def remove_flaw(sheet: Sheet, name: str) -> Receipt:
+    """Drop a Flaw, and take back the freebie points it gave (refusing if they are spent)."""
+    target = next(
+        (trait for trait in sheet.flaws if normalise(trait.name) == normalise(name)), None
+    )
+    if target is None:
+        known = ", ".join(trait.name for trait in sheet.flaws) or "none"
+        raise MutationError(f"{sheet.name} has no flaw {name!r}; known: {known}")
+    if sheet.freebies < target.dots:
+        raise MutationError(
+            f"{target.dots} freebies were granted by {target.name} and are already spent"
+        )
+    remaining = tuple(trait for trait in sheet.flaws if trait.name != target.name)
+    updated = replace(
+        sheet, flaws=remaining, freebies=sheet.freebies - target.dots
+    )
+    return Receipt(
+        sheet=updated,
+        lines=(f"bought off {target.name}",),
+        spent={"freebies": target.dots},
+        remaining={"freebies": updated.freebies, "flaws": updated.flaw_points},
+    )
+
+
+def add_merit(
+    sheet: Sheet,
+    name: str,
+    *,
+    points: int | None = None,
+    catalogue=None,
+) -> Receipt:
+    """Take a Merit, which costs the freebies its book charges.
+
+    "Merits: Standard cost" means the cost in whatever book the Merit comes from, so the
+    catalogue supplies the price when it knows the name. A custom Merit is equally legal — the
+    house style is "if the group accepts it, you can make whatever" — so naming ``points``
+    overrides the book, and a name the catalogue has never heard of is accepted with a note.
+    """
+    cleaned = " ".join(name.split())
+    if not cleaned:
+        raise MutationError("a merit needs a name")
+    if any(normalise(trait.name) == normalise(cleaned) for trait in sheet.merits):
+        raise MutationError(f"{sheet.name} already has the merit {cleaned}")
+
+    entry = catalogue.lookup(cleaned, "merit") if catalogue is not None else None
+    if points is None:
+        if entry is None or not entry.fixed:
+            known = f"{entry.label} in {entry.source}" if entry is not None else "unknown"
+            raise MutationError(
+                f"the cost of {cleaned!r} is {known}; give it explicitly, for example points:2"
+            )
+        points = entry.minimum
+    if points < 1:
+        raise MutationError(f"a merit is worth at least 1 point, got {points}")
+    if entry is not None and entry.maximum is not None and points > entry.maximum:
+        raise MutationError(
+            f"{cleaned} is rated {entry.label} in {entry.source or 'the book'}; "
+            f"{points} is too high"
+        )
+    if sheet.freebies < points:
+        raise MutationError(
+            f"{cleaned} costs {points} freebie{'s' if points != 1 else ''}; "
+            f"{sheet.name} has {sheet.freebies}"
+        )
+
+    updated = replace(
+        sheet,
+        merits=(*sheet.merits, Trait(cleaned, dots=points)),
+        freebies=sheet.freebies - points,
+    )
+    origin = f" ({entry.source})" if entry is not None and entry.source else ""
+    if entry is None:
+        origin = " (custom, group-approved)"
+    return Receipt(
+        sheet=updated,
+        lines=(f"took the merit {cleaned} {points}{origin}",),
+        spent={"freebies": points},
+        remaining={"freebies": updated.freebies, "merits": sheet.merit_points + points},
+    )
+
+
+def remove_merit(sheet: Sheet, name: str) -> Receipt:
+    """Drop a Merit and refund its points."""
+    target = next(
+        (trait for trait in sheet.merits if normalise(trait.name) == normalise(name)), None
+    )
+    if target is None:
+        known = ", ".join(trait.name for trait in sheet.merits) or "none"
+        raise MutationError(f"{sheet.name} has no merit {name!r}; known: {known}")
+    remaining = tuple(trait for trait in sheet.merits if trait.name != target.name)
+    updated = replace(sheet, merits=remaining, freebies=sheet.freebies + target.dots)
+    return Receipt(
+        sheet=updated,
+        lines=(f"dropped the merit {target.name}",),
+        remaining={"freebies": updated.freebies, "merits": updated.merit_points},
+    )
+
+
+def raise_in_build(
+    sheet: Sheet, name: str, *, to: int, build=None, kind: str | None = None
+) -> Receipt:
+    """Raise a trait using a creation budget rather than freebies.
+
+    One point per dot, and the group's budget must have room: that is what "exact spending"
+    means. Lowering gives the point back, which is why a half-built character can be reshaped
+    freely until it is submitted.
+    """
+    from ttrpg_chatbots.character.build import group_remaining
+
+    kind = resolve_kind(sheet, name, kind)
+    if kind == "gift":
+        raise MutationError("gifts are awarded, not built")
+    current = _current(sheet, kind, name)
+    ceiling = cap_for(sheet, kind, name)
+    if to > ceiling:
+        raise MutationError(f"{name} is capped at {ceiling}")
+    if to == current:
+        raise MutationError(f"{name} is already {current}")
+    if to > current:
+        room = group_remaining(sheet, name, kind, build)
+        wanted = to - current
+        if wanted > room:
+            raise MutationError(
+                f"{name} {current}->{to} needs {wanted} more point(s) but the budget has "
+                f"{room} left"
+            )
+    updated = _apply(sheet, kind, name, to)
+    if kind == "virtue":
+        from ttrpg_chatbots.character.build import derive_trackers
+
+        # Morality and Willpower *begin* as sums of virtues during creation.
+        updated = derive_trackers(updated)
+    shown = f"{_label(sheet, kind, name)} {current}->{to}"
+    if kind == "virtue":
+        shown += f" (morality {updated.morality}, willpower {updated.willpower})"
+    return Receipt(sheet=updated, lines=(shown,))

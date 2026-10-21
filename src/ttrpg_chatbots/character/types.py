@@ -17,6 +17,7 @@ import json
 from dataclasses import dataclass, field, replace
 from typing import Any, Mapping
 
+from ttrpg_chatbots.character.build import Build, BuildError
 from ttrpg_chatbots.sheets.interview import Interview
 from ttrpg_chatbots.sheets.types import Sheet, SheetError, sheet_from_dict
 
@@ -114,6 +115,8 @@ class Character:
     sealed: bool = False
     digest: str = ""
     created: str = ""
+    # Present while a character is being built from scratch: which budget each group got.
+    build: Build | None = None
     # Every accepted change bumps this. Writes are compare-and-swap on it, so two surfaces
     # editing one character cannot silently overwrite each other.
     revision: int = 0
@@ -228,6 +231,12 @@ class Character:
             revision=self.revision + 1,
         )
 
+    def with_build(self, build: Build | None) -> Character:
+        """Attach or replace the creation budgets (while still a draft)."""
+        if self.sealed:
+            raise CharacterError(f"{self.name} is sealed; there are no budgets left to set")
+        return replace(self, build=build, revision=self.revision + 1)
+
     def with_sheet(
         self,
         sheet: Sheet,
@@ -258,6 +267,7 @@ class Character:
             "sealed": self.sealed,
             "digest": self.digest,
             "created": self.created,
+            "build": self.build.as_dict() if self.build is not None else None,
             "revision": self.revision,
             "sheet": self.sheet.as_dict(),
             "interview": self.interview.as_dict() if self.interview is not None else None,
@@ -294,7 +304,7 @@ class Character:
             raise CharacterError("'history' must be a list")
         try:
             history = tuple(Event.from_dict(entry) for entry in raw_history)
-        except ValueError as error:
+        except (ValueError, BuildError) as error:
             raise CharacterError(str(error)) from error
 
         try:
@@ -305,6 +315,7 @@ class Character:
                 sealed=bool(data.get("sealed")),
                 digest=str(data.get("digest", "") or ""),
                 created=str(data.get("created", "") or ""),
+                build=Build.from_dict(data["build"]) if data.get("build") else None,
                 # Files written before revisions existed are revision 0, which is also the
                 # revision a freshly created character has: nothing to migrate.
                 revision=int(data.get("revision", 0) or 0),

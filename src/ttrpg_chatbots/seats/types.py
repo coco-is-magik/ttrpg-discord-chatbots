@@ -55,6 +55,9 @@ class Seat:
     world_character: str = ""
     voices: Mapping[str, str] = field(default_factory=dict)
     permissions: frozenset[str] = frozenset()
+    # One character is active at a time: a player may own several seats and switch
+    # which one /sheet, /spend and /roll act on.
+    active: bool = True
     meta: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -118,6 +121,8 @@ class Seat:
             data["voices"] = dict(self.voices)
         if self.permissions:
             data["permissions"] = sorted(self.permissions)
+        if not self.active:
+            data["active"] = False
         if self.meta:
             data["meta"] = dict(self.meta)
         return data
@@ -163,6 +168,7 @@ class Seat:
             "world_character",
             "voices",
             "permissions",
+            "active",
             "meta",
         }
         # Unknown keys are kept, so a seats file can grow ahead of the code that reads it.
@@ -178,6 +184,7 @@ class Seat:
                 world_character=world_character.strip(),
                 voices={str(mode): voice.strip() for mode, voice in voices.items()},
                 permissions=frozenset(str(permission) for permission in permissions),
+                active=bool(data.get("active", True)),
                 meta=meta,
             )
         except TypeError as error:  # a non-int discord_id reaches validation as a wrong type
