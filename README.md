@@ -10,14 +10,21 @@ between. The humans do the choosing; the machines do the arithmetic and the reme
 criteria, risks, open decisions.
 
 **The sheet, as a UI**: [`docs/SHEET_UI.md`](docs/SHEET_UI.md) — the four message surfaces,
-why they live in a DM, and how edits stay safe when two things change at once.
+why they live in a private thread per character, and how edits stay safe when two things change
+at once.
+
+**The group, as a design**: [`docs/GROUP.md`](docs/GROUP.md) — what a bot remembers, who speaks
+and when, the ambient rhythm, the table's scene and floor, and the contract for each.
 
 **Testing it against Discord by hand**: [`docs/MANUAL_TESTING.md`](docs/MANUAL_TESTING.md).
 
-What exists today is the substrate: sheet reading and creation, the 55-question interview,
-structured dice, the compression classifier, three LLM backends, TTS casting, voice playback,
-and eight slash commands behind one bot identity. Seats, sheet mutations, memory and ambient
-chat are the next phases.
+What exists today is the substrate and the sheet: reading, creation and mutation of a
+character, the 55-question interview, merits priced from the book, structured dice, the
+compression classifier, three LLM backends, TTS casting and voice playback — fifty slash
+commands on one **helper** bot that never reads a message. **Four Discord applications can run
+together** (`bots/`): the helper, plus three *friends* that are configured and dormant until
+their tokens exist, with a permission audit that logs exactly what Discord is refusing.
+Personality, memory and ambient chat are the next phases.
 
 ## Install
 
@@ -119,10 +126,11 @@ Once it is running, the bot answers these slash commands:
 | Command | What it does |
 | --- | --- |
 | `/ping` | `Pong!` — proves the gateway and the command sync |
+| `/botcheck` | every permission this bot needs, and the fix for each one it is missing |
 | `/voices` | the cast table, plus whether voice is usable on this machine |
 | `/ask question:… character:… speak:true` | answer as a character; `speak` also says it aloud |
 | `/claim character:…` | claim an unclaimed character; this is how you get a seat |
-| `/create name:…` | build a character from scratch, in a DM |
+| `/create name:…` | build a character from scratch, in a private thread |
 | `/characters` | your characters, and which one is active |
 | `/play character:…` | switch which character you are playing |
 | `/budget section:… seven:… five:… three:…` | choose which group gets 7/5/3 (or 13/9/5) |
@@ -152,6 +160,24 @@ Once it is running, the bot answers these slash commands:
 | `/join` / `/leave` | join your voice channel and hold a playback stream open |
 | `/say text:… character:…` | speak arbitrary text in that character's voice |
 | `/stop` | clear the queue mid-sentence |
+
+### More than one bot
+
+`ttrpg-bot` is the **helper**: every command above belongs to it, and it never reads an ordinary
+message, so it needs no privileged intent. The three **friends** are separate Discord
+applications listed in `data/bots.json` (copy [`examples/bots.example.json`](examples/bots.example.json)) —
+each with its own token, and a friend with no token is *dormant* rather than an error:
+
+```bash
+./start-bot.sh --check
+#   ttrpg-bot (helper) — token set
+#   friend-a (friend) — dormant (no TTRPG_FRIEND_A_TOKEN)
+```
+
+`/botcheck` audits the helper's own permissions in the channel it is run in; every friend audits
+itself when it connects, and logs each missing permission with the setting that fixes it. The
+friend applications are wired but silent: the listener and the personality are the next slices,
+described in [`docs/GROUP.md`](docs/GROUP.md).
 
 Sheet management is a v1 loop, entirely inside Discord:
 
@@ -186,11 +212,11 @@ is tested by hand. Building a character from scratch in Discord is planned in
 script for that: creating the application, the invite URL, real credentials, and a
 step-by-step walkthrough with the expected output and a troubleshooting table.
 
-**Not wired yet:** the bot does not listen (no speech-to-text from Discord), and there
-is no language model unless you configure one. The sheet portal is v1: it does not yet
-prompt for a whole character interactively (that is `ttrpg-chatbots-character --new`),
-and freebie pools are only known for characters built by the wizard — imported sheets
-start at 0, because the workbook never recorded what was left.
+**Not wired yet:** the friends are connected but do not answer — the listener, memory and
+personality are the slices in [`docs/GROUP.md`](docs/GROUP.md); the helper never listens by
+design, and there is no speech-to-text from Discord yet. There is no language model unless you
+configure one. Freebie pools are only known for characters built by the wizard — imported
+sheets start at 0, because the workbook never recorded what was left.
 
 ## Speech-to-text: measured engine selection
 
@@ -696,10 +722,11 @@ malformed, and empty `.env` files; and garbage or out-of-range guild ids.
 ## Layout
 
 ```
-src/ttrpg_chatbots/   package source: cli.py, config.py, bot.py, respond.py,
-                      stt/, reply/, llm/, dice/, audio/, tts/, voice/
-tests/                pytest suite: CLI, config, bot, stt, reply, llm, dice, audio,
-                      tts, voice, secrets guard
+src/ttrpg_chatbots/   package source: cli.py, config.py, bot.py, respond.py, conversation.py,
+                      sheets/, sheetportal/, character/, seats/, bots/, stt/, reply/, llm/,
+                      dice/, audio/, tts/, voice/
+tests/                pytest suite: CLI, config, bot, bots, seats, sheets, character, stt,
+                      reply, llm, dice, audio, tts, voice, secrets guard
 examples/demo_world/  committed toy dataset; data/ and datasets/ are git-ignored
 .env.example          committed credential template; .env itself is ignored
 pyproject.toml        packaging, dependencies, entry points, pytest and ruff config

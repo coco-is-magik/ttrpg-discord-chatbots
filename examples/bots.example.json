@@ -1,0 +1,33 @@
+[
+  {
+    "id": "ttrpg-bot",
+    "role": "helper",
+    "commands": true,
+    "token_env": "DISCORD_TOKEN",
+    "channels": []
+  },
+  {
+    "id": "friend-a",
+    "role": "friend",
+    "seat": "",
+    "listen": false,
+    "token_env": "TTRPG_FRIEND_A_TOKEN",
+    "channels": []
+  },
+  {
+    "id": "friend-b",
+    "role": "friend",
+    "seat": "",
+    "listen": false,
+    "token_env": "TTRPG_FRIEND_B_TOKEN",
+    "channels": []
+  },
+  {
+    "id": "friend-c",
+    "role": "friend",
+    "seat": "",
+    "listen": false,
+    "token_env": "TTRPG_FRIEND_C_TOKEN",
+    "channels": []
+  }
+]

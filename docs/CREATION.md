@@ -105,12 +105,16 @@ contract as the current sealed-interview rule, so `ready` keeps meaning "playabl
 
 ## 4. Where it lives, and why
 
-**DM by default.** Creation is private, slow, and full of half-finished prose. A DM is the only
+**A private thread per character.** Creation is private, slow, and full of half-finished prose.
+A thread named `player · character` is the container: commands work there immediately (guild
+scope), a GM with Manage Threads can read it, and the thread itself separates one build from the
+next. A DM was the first plan and is abandoned — guild-scoped commands do not exist in DMs, and
+publishing globally takes up to an hour. If the thread is deleted, the next refresh opens a new
+one and re-posts the panels into it.
 place in Discord where a message can be edited forever, where nobody else's chat scrolls the
-questions away, and where the answer to "how do I save?" is "you already did". A private thread
-is the fallback when a player has DMs closed, and the same surfaces work there.
+questions away, and where the answer to "how do I save?" is "you already did".
 
-**Progress is data, not messages.** The DM holds the conversation; the *character file* holds
+**Progress is data, not messages.** The thread holds the conversation; the *character file* holds
 the position. Kill the bot, restart a week later, and `/story` picks up at question 12 because
 question 12 is the first one without an answer.
 

@@ -257,6 +257,7 @@ def test_every_command_the_guide_documents_is_registered() -> None:
         "answer",
         "ask",
         "background",
+        "botcheck",
         "budget",
         "build",
         "characters",
@@ -266,11 +267,13 @@ def test_every_command_the_guide_documents_is_registered() -> None:
         "done",
         "edit",
         "export",
+        "fill",
         "finish",
         "flaw",
         "gift",
         "goto",
         "heal",
+        "help",
         "history",
         "hurt",
         "import",
@@ -294,6 +297,7 @@ def test_every_command_the_guide_documents_is_registered() -> None:
         "specialty",
         "spend",
         "stop",
+        "testthread",
         "undo",
         "ungift",
         "unlock",
@@ -1382,7 +1386,7 @@ def test_a_gm_can_set_another_players_pool(seated) -> None:
     assert "edit_any_sheet" in interaction.followup.messages[-1]
 
 
-# -- a build needs a DM ---------------------------------------------------
+# -- a build lives in a private thread ------------------------------------
 
 
 def _forbidden():
@@ -1392,16 +1396,17 @@ def _forbidden():
         status = 403
         reason = "Forbidden"
 
-    return discord.Forbidden(_Response(), "Cannot send messages to this user")
+    return discord.Forbidden(_Response(), "Missing Permissions")
 
 
 class _Sent:
     _next = 100
 
-    def __init__(self) -> None:
+    def __init__(self, embed=None) -> None:
         _Sent._next += 1
         self.id = _Sent._next
         self.edits: list = []
+        self.embed = embed  # what was first sent, so tests can check the order
 
     async def edit(self, embed=None, **kwargs) -> None:
         self.edits.append(embed)
@@ -1410,17 +1415,19 @@ class _Sent:
         return None
 
 
-class _Dm:
-    """A DM channel that either works or refuses, like the real one."""
+class _Thread:
+    """A private thread: it can be posted into, edited and deleted."""
 
-    def __init__(self, *, refuse: bool = False) -> None:
-        self.refuse = refuse
+    def __init__(self, name: str, thread_id: int = 555) -> None:
+        self.id = thread_id
+        self.name = name
+        self.mention = f"<#{thread_id}>"
         self.sent: list[_Sent] = []
+        self.added: list = []
+        self.deleted = False
 
     async def send(self, content=None, embed=None, **kwargs):
-        if self.refuse:
-            raise _forbidden()
-        message = _Sent()
+        message = _Sent(embed)
         self.sent.append(message)
         return message
 
@@ -1430,21 +1437,53 @@ class _Dm:
                 return message
         return _Sent()
 
+    async def add_user(self, user) -> None:
+        self.added.append(user)
 
-def _dm_interaction(dm: _Dm):
-    interaction = _Interaction(_Bot(_FakeConversation()))
+    async def delete(self) -> None:
+        self.deleted = True
+
+
+class _BuildChannel:
+    """A text channel that can open private threads, or refuse like Discord does."""
+
+    _next_thread = 500
+
+    def __init__(self, *, refuse: bool = False) -> None:
+        self.id = 777
+        self.type = "text"
+        self.refuse = refuse
+        self.created: list[dict] = []
+        self.threads: dict[int, _Thread] = {}
+
+    async def create_thread(self, **kwargs) -> _Thread:
+        if self.refuse:
+            raise _forbidden()
+        _BuildChannel._next_thread += 1
+        thread = _Thread(kwargs.get("name", ""), _BuildChannel._next_thread)
+        self.created.append(kwargs)
+        self.threads[thread.id] = thread
+        return thread
+
+
+def _thread_interaction(channel: _BuildChannel | None = None):
+    channel = channel or _BuildChannel()
+    bot = _Bot(_FakeConversation())
+    # The bot must be able to find a thread by id after a refresh, like a real client.
+    bot.get_channel = lambda identifier: channel.threads.get(identifier)
+    interaction = _Interaction(bot, guild=_Guild())
     interaction.user.id = 4242
-    interaction.channel = dm  # a DM interaction has a channel and no guild
+    interaction.channel = channel
     return interaction
 
 
-def test_create_refuses_cleanly_when_it_cannot_dm(empty_table, tmp_path) -> None:
-    dm = _Dm(refuse=True)
-    interaction = _dm_interaction(dm)
+def test_create_refuses_cleanly_when_it_cannot_open_a_thread(empty_table) -> None:
+    interaction = _thread_interaction(_BuildChannel(refuse=True))
     _invoke(create, interaction, "Ailis Vane")
 
     message = interaction.followup.messages[-1]
-    assert "cannot message you privately" in message
+    assert "private thread" in message
+    assert "Manage Threads" in message
     assert "Nothing was created" in message
     # And nothing was: no character file, no seat.
     assert not empty_table.exists("Ailis Vane")
@@ -1452,34 +1491,57 @@ def test_create_refuses_cleanly_when_it_cannot_dm(empty_table, tmp_path) -> None
     import json
     import os
 
-    seats = json.loads(open(os.environ["TTRPG_SEATS_FILE"]).read()) if os.path.exists(
-        os.environ["TTRPG_SEATS_FILE"]
-    ) else []
+    path = os.environ["TTRPG_SEATS_FILE"]
+    seats = json.loads(open(path).read()) if os.path.exists(path) else []
     assert seats == []
 
 
-def test_create_posts_two_panels_and_seats_the_player(empty_table) -> None:
-    dm = _Dm()
-    interaction = _dm_interaction(dm)
+def test_create_named_the_thread_for_the_player_and_character(empty_table) -> None:
+    interaction = _thread_interaction()
+    _invoke(create, interaction, "Ailis Vane")
+
+    created = interaction.channel.created[0]
+    assert created["name"] == "Tav · Ailis Vane"
+    assert created["invitable"] is False  # private, invited explicitly
+
+
+def test_create_posts_the_panels_into_the_thread_and_seats_the_player(empty_table) -> None:
+    interaction = _thread_interaction()
     _invoke(create, interaction, "Ailis Vane")
 
     assert "started" in interaction.followup.messages[-1]
-    # The probe is deleted, so exactly the questionnaire and the sheet remain.
-    assert len(dm.sent) >= 3
+    thread = next(iter(interaction.channel.threads.values()))
+    titles = [message.embed.title for message in thread.sent if message.embed]
+    # The guide first, then the two live panels.
+    assert titles == ["Building a character", "Ailis Vane — questionnaire", "Ailis Vane"]
+    # The player is in their own thread.
+    assert [user.id for user in thread.added] == [4242]
 
     character = empty_table.load("Ailis Vane")
     assert character.build is not None
     assert character.interview.answered == 0
-    assert character.sheet.attribute("Strength") == 1
     assert character.sheet.freebies == 15
+    # The thread is recorded, so a restart reopens it instead of making another.
+    assert character.sheet.meta["creation"]["thread"] == thread.id
 
+
+def test_a_later_edit_updates_the_panels_in_place(empty_table) -> None:
+    interaction = _thread_interaction()
+    _invoke(create, interaction, "Ailis Vane")
+    thread = next(iter(interaction.channel.threads.values()))
+
+    _invoke(create, interaction, "Ailis Vane")  # second call is refused: name taken
+    _invoke(edit, interaction, "Strength", 3)
+
+    # Three messages, still: the panels were edited, not re-posted.
+    assert len(thread.sent) == 3
+    assert thread.sent[-1].edits, "the sheet panel should have been edited"
 
 # -- several characters, one active ---------------------------------------
 
 
 def test_create_starts_a_second_character_and_switches_to_it(seated, tmp_path) -> None:
-    dm = _Dm()
-    interaction = _dm_interaction(dm)  # user 4242 already plays sable
+    interaction = _thread_interaction()  # user 4242 already plays sable
     _invoke(create, interaction, "Ailis Vane")
 
     assert "started" in interaction.followup.messages[-1]
@@ -1542,12 +1604,12 @@ def test_play_refuses_someone_elses_character(seated) -> None:
     assert "is not yours" in interaction.followup.messages[-1]
 
 
-def test_create_names_the_duplicate_before_touching_the_dm(seated, tmp_path) -> None:
-    dm = _Dm()
-    interaction = _dm_interaction(dm)
+def test_create_names_the_duplicate_before_opening_a_thread(seated, tmp_path) -> None:
+    interaction = _thread_interaction()
     _invoke(create, interaction, "Sable")  # a character that already exists
     assert "already a character called" in interaction.followup.messages[-1]
-    assert dm.sent == []  # no DM ping for a request that cannot work
+    # No thread is opened for a request that cannot work.
+    assert interaction.channel.created == []
 
 
 # -- the budget assignment -------------------------------------------------

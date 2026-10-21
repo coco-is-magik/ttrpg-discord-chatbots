@@ -24,30 +24,38 @@ character, and the numbers follow.
 - Menus of menus. If a surface needs a second page to be usable, it is the wrong surface.
 - Any use of the play channel for admin. Ever.
 
-## 2. Why DMs
+## 2. Why a private thread per character
 
-The sheet lives in a **direct message between the bot and its owner**, one per player. This
-is the load-bearing decision for "zero disruption":
+The sheet lives in a **private thread between the bot and its owner**, one thread per
+character, named `player · character`. This is the load-bearing decision for "zero
+disruption", and it was chosen after testing both: a DM was the first plan, and it fails for a
+structural reason — **guild-scoped slash commands do not exist in DMs**. Publishing commands
+globally fixes that, but global propagation takes up to an hour and is rate limited, which is
+unusable while the surface is still changing. Threads are guild channels, so every command
+already works there.
 
-| Concern | Why a DM solves it |
+| Concern | Why a thread solves it |
 |---|---|
-| Several people building characters at once | each player has their own channel; nothing is shared |
+| Several people building characters at once | one thread per character; nothing is shared |
 | People talking in the play channel | admin never enters it, so chatter cannot bury a panel |
-| Privacy | only the owner and the bot can see it; no permission logic needed |
-| Message lifetime | ephemeral interactions expire; DM messages can be edited forever |
-| History | the DM *is* the audit trail, in order, with the bot as the only author |
+| Privacy | a private thread is invisible to everyone not added; permissions, not luck |
+| Message lifetime | ephemeral interactions expire; thread messages can be edited forever |
+| History | one thread per character *is* the audit trail — no dividers needed to separate builds |
+| Commands | guild-scoped commands work immediately, with no global publish |
+| GM oversight | a GM with **Manage Threads** can read a build without asking |
 
-Two constraints to design around:
+Constraints to design around:
 
-1. A bot can only DM someone who **shares a guild** with it, and only if that user allows
-   DMs from server members. So `/sheet` is always invoked **in the server**; the bot opens
-   the DM and posts the panel there.
-2. If DMs are closed, fall back to a **private thread** in a `#sheets` channel, created for
-   that player only. Same four surfaces, same state, different container — and the panel
-   records which container it lives in.
+1. The bot needs **Manage Threads** and **Send Messages in Threads** in the channel where
+   `/create` is run, and the channel must be one that supports threads (not a forum, not a
+   voice channel).
+2. `/create` refuses outside a guild — a build has no home in a DM.
+3. The thread id is stored on the character, so a restart reopens the same thread instead of
+   opening a second one. If the thread is deleted, the next refresh creates a fresh one and
+   re-posts the panels into it.
 
-Conversation belongs in the server; the DM is a tool. The panel says so once, in its header,
-and never again: `Your character panel. The group is in #general.`
+Conversation belongs in the server; the thread is a tool. Panels post their header once, and
+never again: `Your character thread. The group is in #general.`
 
 ## 3. The four surfaces
 

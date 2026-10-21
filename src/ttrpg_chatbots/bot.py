@@ -41,6 +41,15 @@ from ttrpg_chatbots.sheets.render import (
 )
 from ttrpg_chatbots.sheets.types import SheetError, normalise
 from ttrpg_chatbots.character.types import Character, CharacterConflict, CharacterError
+from ttrpg_chatbots.bots import (
+    ROLE_FRIEND,
+    ROLE_HELPER,
+    RosterError,
+    audit,
+    load_roster,
+    log_findings,
+    report,
+)
 from ttrpg_chatbots.config import ConfigError, DiscordConfig, load_discord_config
 from ttrpg_chatbots.conversation import Conversation, ConversationError
 from ttrpg_chatbots.dice.parts import RollParts
@@ -345,6 +354,83 @@ async def ping(interaction: discord.Interaction) -> None:
     await interaction.response.send_message("Pong!")
 
 
+@command(
+    name="botcheck",
+    description="Check this bot's Discord permissions and report what is missing.",
+)
+async def botcheck(interaction: discord.Interaction) -> None:
+    """Audit the helper, and any friend whose ``user_id`` is known, in the channels that matter.
+
+    Only an application can see its own permissions in a channel, so each friend audits itself
+    when it connects. This command covers the helper's own audit, plus friends that have a
+    ``user_id`` in ``bots.json`` — the one way to check another bot's channel overwrites
+    without the privileged members intent.
+    """
+    await interaction.response.defer(thinking=True, ephemeral=True)
+    guild = interaction.guild
+    if guild is None:
+        await interaction.followup.send("permissions only exist in a server; run this there")
+        return
+    try:
+        roster = await asyncio.to_thread(load_roster)
+    except RosterError as error:
+        await _fail(interaction, error)
+        return
+
+    helper = roster.helper
+    name = helper.id if helper is not None else "this bot"
+    findings = audit(
+        bot_name=name,
+        role=ROLE_HELPER,
+        channels=_audit_channels(interaction, helper),
+        member=guild.me,
+    )
+    log_findings(LOGGER, findings)
+
+    sections = [report(findings)]
+    for spec in roster.friends:
+        sections.append(await _friend_report(interaction, spec))
+    await interaction.followup.send(_clip_text("\n\n".join(sections)), ephemeral=True)
+
+
+def _audit_channels(interaction: discord.Interaction, spec) -> list:
+    """The channels worth checking: the bot's configured ones, else where we are standing."""
+    guild = interaction.guild
+    channels = []
+    for channel_id in getattr(spec, "channels", ()) or ():
+        channel = guild.get_channel(channel_id) if guild is not None else None
+        if channel is not None:
+            channels.append(channel)
+    if channels:
+        return channels
+    channel = getattr(interaction, "channel", None)
+    return [channel] if channel is not None else []
+
+
+async def _friend_report(interaction: discord.Interaction, spec) -> str:
+    """Audit one friend if its member can be fetched; otherwise say why it could not be."""
+    guild = interaction.guild
+    if guild is None:
+        return f"{spec.id}: no server, so nothing to check"
+    if spec.user_id is None:
+        return (
+            f"{spec.id}: no user_id in bots.json, so its channel permissions cannot be checked "
+            "from here; it checks itself when it connects"
+        )
+    try:
+        member = guild.get_member(spec.user_id) or await guild.fetch_member(spec.user_id)
+    except discord.HTTPException:
+        return f"{spec.id}: not in this server yet (user_id {spec.user_id})"
+    findings = audit(
+        bot_name=spec.id,
+        role=ROLE_FRIEND,
+        channels=_audit_channels(interaction, spec),
+        member=member,
+    )
+    log_findings(LOGGER, findings)
+    return report(findings)
+
+
 async def _enqueue(interaction: discord.Interaction, clip) -> None:
     """Queue a synthesized clip for the guild's voice client, if there is one."""
     client = _voice_client(interaction)
@@ -551,6 +637,7 @@ async def spend(
     except (SeatsError, CharacterError, CharacterConflict, MutationError, OSError) as error:
         await _fail(interaction, error)
         return
+    await _refresh_creation(interaction, updated)
     await interaction.followup.send(f"{_clip_text(str(receipt))}\n-# {_pools_line(receipt.sheet)}")
 
 
@@ -626,7 +713,7 @@ async def edit(
         receipt = await asyncio.to_thread(
             mutate.set_trait, character.sheet, trait, to=to, kind=kind
         )
-        await asyncio.to_thread(
+        updated = await asyncio.to_thread(
             _record,
             character,
             receipt,
@@ -636,6 +723,7 @@ async def edit(
     except (SeatsError, CharacterError, CharacterConflict, MutationError, OSError) as error:
         await _fail(interaction, error)
         return
+    await _refresh_creation(interaction, updated)
     await interaction.followup.send(f"{_clip_text(str(receipt))}\n-# /undo reverses it")
 
 
@@ -664,7 +752,7 @@ async def ungift(interaction: discord.Interaction, name: str) -> None:
         _, character = await asyncio.to_thread(_sheet_owner, interaction, None)
         held = character.sheet.gift(name)
         receipt = await asyncio.to_thread(mutate.remove_gift, character.sheet, name)
-        await asyncio.to_thread(
+        updated = await asyncio.to_thread(
             _record,
             character,
             receipt,
@@ -674,6 +762,7 @@ async def ungift(interaction: discord.Interaction, name: str) -> None:
     except (SeatsError, CharacterError, CharacterConflict, MutationError, OSError) as error:
         await _fail(interaction, error)
         return
+    await _refresh_creation(interaction, updated)
     await interaction.followup.send(
         f"{_clip_text(str(receipt))}\n-# {_pools_line(receipt.sheet)}"
     )
@@ -701,12 +790,13 @@ async def _health(interaction: discord.Interaction, levels: int) -> None:
         receipt = await asyncio.to_thread(
             mutate.adjust_health, character.sheet, levels=levels
         )
-        await asyncio.to_thread(
+        updated = await asyncio.to_thread(
             _record, character, receipt, summary=receipt.lines[0], detail={"health": before}
         )
     except (SeatsError, CharacterError, CharacterConflict, MutationError, OSError) as error:
         await _fail(interaction, error)
         return
+    await _refresh_creation(interaction, updated)
     await interaction.followup.send(_clip_text(str(receipt)))
 
 
@@ -731,6 +821,7 @@ async def undo(interaction: discord.Interaction) -> None:
     except (SeatsError, CharacterError, CharacterConflict, MutationError, OSError) as error:
         await _fail(interaction, error)
         return
+    await _refresh_creation(interaction, updated)
     await interaction.followup.send(f"undid **{summary}**\n-# {_clip_text(str(receipt))}")
 
 
@@ -822,7 +913,7 @@ async def specialty(
         receipt = await asyncio.to_thread(
             mutate.set_specialty, character.sheet, ability, text
         )
-        await asyncio.to_thread(
+        updated = await asyncio.to_thread(
             _record,
             character,
             receipt,
@@ -832,6 +923,7 @@ async def specialty(
     except (SeatsError, CharacterError, CharacterConflict, MutationError, OSError) as error:
         await _fail(interaction, error)
         return
+    await _refresh_creation(interaction, updated)
     await interaction.followup.send(f"{_clip_text(str(receipt))}\n-# /undo reverses it")
 
 
@@ -867,7 +959,7 @@ async def background(
             pool=pool,
             build=character.build,
         )
-        await asyncio.to_thread(
+        updated = await asyncio.to_thread(
             _record,
             character,
             receipt,
@@ -877,6 +969,7 @@ async def background(
     except (SeatsError, CharacterError, CharacterConflict, MutationError, OSError) as error:
         await _fail(interaction, error)
         return
+    await _refresh_creation(interaction, updated)
     await interaction.followup.send(f"{_clip_text(str(receipt))}\n-# /undo removes it")
 
 
@@ -923,7 +1016,7 @@ async def ability(
             pool=pool,
             build=character.build,
         )
-        await asyncio.to_thread(
+        updated = await asyncio.to_thread(
             _record,
             character,
             receipt,
@@ -933,6 +1026,7 @@ async def ability(
     except (SeatsError, CharacterError, CharacterConflict, MutationError, OSError) as error:
         await _fail(interaction, error)
         return
+    await _refresh_creation(interaction, updated)
     await interaction.followup.send(f"{_clip_text(str(receipt))}\n-# /undo removes it")
 
 
@@ -969,7 +1063,7 @@ async def remove_trait_command(
         receipt = await asyncio.to_thread(
             mutate.remove_trait, character.sheet, trait
         )
-        await asyncio.to_thread(
+        updated = await asyncio.to_thread(
             _record, character, receipt, summary=receipt.lines[0], detail=detail
         )
     except (
@@ -982,6 +1076,7 @@ async def remove_trait_command(
     ) as error:
         await _fail(interaction, error)
         return
+    await _refresh_creation(interaction, updated)
     await interaction.followup.send(f"{_clip_text(str(receipt))}\n-# /undo restores it")
 
 
@@ -1011,7 +1106,7 @@ async def pool(
         receipt = await asyncio.to_thread(
             mutate.set_pool, character.sheet, pool, amount
         )
-        await asyncio.to_thread(
+        updated = await asyncio.to_thread(
             _record,
             character,
             receipt,
@@ -1021,13 +1116,14 @@ async def pool(
     except (SeatsError, CharacterError, CharacterConflict, MutationError, OSError) as error:
         await _fail(interaction, error)
         return
+    await _refresh_creation(interaction, updated)
     await interaction.followup.send(
         f"{_clip_text(str(receipt))}\n-# {_pools_line(receipt.sheet)} · /undo reverses it"
     )
 
 
-class DmUnavailable(SeatsError):
-    """The bot cannot open a private channel, so a build cannot run."""
+class ThreadUnavailable(SeatsError):
+    """The bot cannot open a private thread, so a build cannot run."""
 
 
 CREATION_KEY = "creation"
@@ -1039,46 +1135,94 @@ def _creation_state(character: Character) -> dict:
     return dict(raw) if isinstance(raw, dict) else {}
 
 
-async def _creation_channel(interaction: discord.Interaction):
-    """The DM a build lives in. A guild channel gets a DM instead, so it stays private."""
-    if interaction.guild is None:
-        channel = getattr(interaction, "channel", None)
-        if channel is None:
-            raise DmUnavailable(
-                "I cannot open a private channel with you, so I cannot run a build. "
-                "Nothing was created."
-            )
-        return channel
-    return await interaction.user.create_dm()
+def _build_thread_name(interaction: discord.Interaction, character: str) -> str:
+    """``noodle · Ailis Vane`` — who and which character, in the thread list."""
+    who = getattr(interaction.user, "display_name", "") or "player"
+    return f"{who} · {character}"
 
 
-async def _open_dm(interaction: discord.Interaction):
-    """Prove the DM works *before* anything is created.
+async def _create_build_thread(interaction: discord.Interaction, character: str):
+    """Open the private thread a build lives in.
 
-    A build is two panels in a DM, so a player who has DMs closed cannot be built for. Checking
-    first means a refusal leaves no half-made character and no stray seat: the sequence stops
-    where it started, and the message says exactly what to change.
+    A thread rather than a DM: guild-scoped slash commands work in threads, so nothing has to
+    be published globally (which takes up to an hour), a GM with *Manage Threads* can read a
+    build, and one thread per character is itself the record — no divider needed to separate
+    successive builds.
+
+    Every failure is logged with its traceback and turned into one sentence the player can act
+    on, because the usual causes are permissions, not logic.
     """
-    try:
-        channel = await _creation_channel(interaction)
-        probe = await channel.send(
-            embed=discord.Embed(
-                title="Build starting…",
-                description="Setting up your questionnaire and sheet.",
-                colour=discord.Colour.dark_teal(),
-            )
+    channel = getattr(interaction, "channel", None)
+    if interaction.guild is None or channel is None or not hasattr(channel, "create_thread"):
+        LOGGER.warning(
+            "build thread: no guild channel (guild=%s channel=%s)",
+            getattr(interaction.guild, "id", None),
+            getattr(channel, "id", None),
         )
-    except (discord.Forbidden, discord.HTTPException) as error:
-        raise DmUnavailable(
-            "I cannot message you privately, so I cannot run a build. Allow direct "
-            "messages from server members (Discord → Privacy & Safety), then run /create "
-            "again. Nothing was created."
-        ) from error
+        raise ThreadUnavailable(
+            "builds live in a private thread, so run /create in a server text channel "
+            "(not a DM). Nothing was created."
+        )
+    name = _build_thread_name(interaction, character)
     try:
-        await probe.delete()
+        thread = await channel.create_thread(
+            name=name,
+            type=discord.ChannelType.private_thread,
+            invitable=False,
+            auto_archive_duration=1440,
+            reason=f"ttrpg-chatbots: build {character}",
+        )
+    except discord.Forbidden as error:
+        LOGGER.exception("build thread: forbidden creating a thread in %s", channel.id)
+        raise ThreadUnavailable(
+            "I cannot create a private thread here: I need **Manage Threads** and "
+            "**Send Messages in Threads** in this channel. Nothing was created."
+        ) from error
+    except discord.HTTPException as error:
+        LOGGER.exception("build thread: Discord refused a thread in %s", channel.id)
+        raise ThreadUnavailable(
+            f"Discord refused to create a thread here ({error.status} {error.text}). "
+            "Some channel types cannot host threads. Nothing was created."
+        ) from error
+    LOGGER.info("build thread: created %s (%s) for %s", thread.id, name, interaction.user.id)
+    try:
+        await thread.add_user(interaction.user)
+    except (discord.Forbidden, discord.HTTPException):
+        # The creator is normally added by Discord, so this is a fallback, not a requirement.
+        LOGGER.warning("build thread: could not add %s to %s", interaction.user.id, thread.id)
+    return thread
+
+
+async def _creation_channel(interaction: discord.Interaction, character):
+    """The thread this character's build lives in: reopened if known, created if not.
+
+    The thread id is stored in the character, so a restart (or a bot upgrade) reopens the same
+    thread instead of littering the channel with a second one.
+    """
+    state = _creation_state(character)
+    thread_id = state.get("thread")
+    if thread_id:
+        try:
+            channel = interaction.client.get_channel(thread_id)
+            if channel is None:
+                channel = await interaction.client.fetch_channel(thread_id)
+            return channel
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            LOGGER.warning(
+                "build thread: %s is gone or unreadable; opening a new one", thread_id
+            )
+    return await _create_build_thread(interaction, character.name)
+
+
+async def _remove_thread(thread) -> None:
+    """Best effort: delete a thread we opened for a build that then failed."""
+    if thread is None:
+        return
+    try:
+        await thread.delete()
+        LOGGER.info("build thread: removed %s after a failed start", getattr(thread, "id", "?"))
     except (discord.Forbidden, discord.NotFound, discord.HTTPException):
-        pass  # cosmetic: a leftover probe is harmless
-    return channel
+        LOGGER.warning("build thread: could not remove %s", getattr(thread, "id", "?"))
 
 
 
@@ -1091,8 +1235,17 @@ async def _refresh_creation(interaction: discord.Interaction, character: Charact
     sheet = _to_embed(build_embed(character))
     messages = state.get("messages") or []
     try:
-        channel = await _creation_channel(interaction)
+        channel = await _creation_channel(interaction, character)
+        if not state.get("thread"):
+            # First post in a freshly created thread: remember where it is before writing.
+            state["thread"] = getattr(channel, "id", None)
         if len(messages) != 2:
+            # One thread per character, so the thread *is* the divider — it is named for the
+            # player and the character, and nothing above it belongs to this build. The guide
+            # goes first, then the two panels.
+            from ttrpg_chatbots.help import help_spec
+
+            await channel.send(embed=_to_embed(help_spec()))
             first = await channel.send(embed=quiz)
             second = await channel.send(embed=sheet)
             state["messages"] = [first.id, second.id]
@@ -1107,7 +1260,7 @@ async def _refresh_creation(interaction: discord.Interaction, character: Charact
         await (await channel.fetch_message(messages[0])).edit(embed=quiz)
         await (await channel.fetch_message(messages[1])).edit(embed=sheet)
     except (discord.NotFound, discord.Forbidden, discord.HTTPException) as error:
-        # The edit that triggered this has already been saved. A closed DM or a deleted
+        # The edit that triggered this has already been saved. A closed thread or a deleted
         # panel must not undo it, but it does stop the panels tracking the build.
         LOGGER.warning("could not refresh the creation embeds: %s", error)
 
@@ -1128,7 +1281,9 @@ def _precheck_creation(name: str) -> str:
     return cleaned
 
 
-def _begin_creation(interaction: discord.Interaction, name: str) -> Character:
+def _begin_creation(
+    interaction: discord.Interaction, name: str, thread_id: int | None = None
+) -> Character:
     """Draft + seat, in one step, refusing anything that would overwrite a character."""
     cleaned = _precheck_creation(name)
     store = _character_store()
@@ -1142,14 +1297,16 @@ def _begin_creation(interaction: discord.Interaction, name: str) -> Character:
         created=now_utc(),
     )
     character = character.record("created", f"began building {cleaned}", at=now_utc())
+    state: dict = {"messages": [], "page": 0}
+    if thread_id is not None:
+        state["thread"] = thread_id
     character = replace(
         character,
         sheet=replace(
             character.sheet,
-            meta={**character.sheet.meta, CREATION_KEY: {"messages": [], "page": 0}},
+            meta={**character.sheet.meta, CREATION_KEY: state},
         ),
     )
-    store.save(character)
     owner = interaction.user.id
     seat = Seat(
         id=_seat_id(interaction, book),
@@ -1164,23 +1321,39 @@ def _begin_creation(interaction: discord.Interaction, name: str) -> Character:
         replace(existing, active=False) if existing.discord_id == owner else existing
         for existing in book
     )
-    save_seats(SeatBook((*others, seat)), _seats_path())
+    # Validate the seat *before* the character is written, so a refusal leaves nothing behind.
+    updated_book = SeatBook((*others, seat))
+    store.save(character)
+    try:
+        save_seats(updated_book, _seats_path())
+    except (SeatsError, OSError):
+        # Never leave an orphan character that no seat can reach.
+        store.delete(identifier)
+        raise
     return character
 
 
 @command(name="create", description="Start building a character from scratch.")
 @app_commands.describe(name="The character's name")
 async def create(interaction: discord.Interaction, name: str) -> None:
-    """Create the draft, post the two live embeds, and seat the player."""
+    """Create the draft, open the build thread, and seat the player."""
     await interaction.response.defer(thinking=True, ephemeral=True)
+    thread = None
     try:
-        # Refuse bad requests before the DM probe, so a doomed /create sends no ping.
-        await asyncio.to_thread(_precheck_creation, name)
-        # The DM is the whole surface of a build, so it is checked before anything is made.
-        await _open_dm(interaction)
-        character = await asyncio.to_thread(_begin_creation, interaction, name)
-    except DmUnavailable as error:
-        LOGGER.warning("cannot DM %s: %s", getattr(interaction.user, "id", None), error)
+        # Refuse bad requests before touching Discord, so a doomed /create opens no thread.
+        cleaned = await asyncio.to_thread(_precheck_creation, name)
+        # Creating the thread *is* the permission check: if this works, the surface exists.
+        thread = await _create_build_thread(interaction, cleaned)
+        try:
+            character = await asyncio.to_thread(
+                _begin_creation, interaction, name, thread.id
+            )
+        except Exception:
+            # A character without a thread is unreachable; do not leave one behind.
+            await _remove_thread(thread)
+            raise
+    except ThreadUnavailable as error:
+        LOGGER.warning("cannot open a build thread: %s", error)
         await _fail(interaction, error)
         return
     except (SeatsError, CharacterError, SheetError, OSError) as error:
@@ -1188,8 +1361,113 @@ async def create(interaction: discord.Interaction, name: str) -> None:
         return
     await _refresh_creation(interaction, character)
     await interaction.followup.send(
-        f"**{character.name}** started · seat `{character.id}`\n"
+        f"**{character.name}** started in {getattr(thread, 'mention', 'the thread')} · "
+        f"seat `{character.id}`\n"
         "-# /answer n text · /spend · /flaw · /page · /finish",
+        ephemeral=True,
+    )
+
+
+@command(name="help", description="The command guide, grouped by task.")
+async def help_command(interaction: discord.Interaction) -> None:
+    """Show the guide. Also posted at the top of every build thread."""
+    from ttrpg_chatbots.help import help_spec
+
+    embed = _to_embed(help_spec())
+    if interaction.guild is None:
+        await interaction.response.send_message(embed=embed)
+    else:
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+@command(
+    name="testthread",
+    description="[temporary] Make a private thread and try posting the build surface there.",
+)
+async def testthread(interaction: discord.Interaction) -> None:
+    """Probe whether a private thread can host a build, so we can avoid publishing globally.
+
+    Temporary on purpose: it exists to answer one question — can the bot create a private
+    thread here, add the player to it, and post into it? Every step is logged at INFO and
+    every failure at ERROR with the traceback, so the log says exactly which step Discord
+    refused and why.
+    """
+    await interaction.response.defer(thinking=True, ephemeral=True)
+    channel = interaction.channel
+    guild = interaction.guild
+    LOGGER.info(
+        "testthread: guild=%s channel=%s channel_type=%s",
+        getattr(guild, "id", None),
+        getattr(channel, "id", None),
+        getattr(channel, "type", None),
+    )
+    if guild is None:
+        # A DM has no threads: this is the case we are trying to avoid relying on.
+        LOGGER.warning("testthread: called outside a guild (channel=%s)", channel)
+        await interaction.followup.send(
+            "this probe needs a server channel: run it in the text channel where the "
+            "thread should live, not in a DM",
+            ephemeral=True,
+        )
+        return
+
+    name = f"{interaction.user.display_name}'s build (probe)"
+    try:
+        thread = await channel.create_thread(
+            name=name,
+            type=discord.ChannelType.private_thread,
+            invitable=False,
+            auto_archive_duration=1440,
+            reason="ttrpg-chatbots: private build surface probe",
+        )
+    except Exception as error:  # noqa: BLE001 - the reply must survive any Discord failure
+        LOGGER.exception(
+            "testthread: create_thread failed on channel %s (%s)",
+            getattr(channel, "id", None),
+            type(channel).__name__,
+        )
+        await interaction.followup.send(
+            f"**create_thread failed**: {type(error).__name__}: {error}\n"
+            "-# logged with a traceback; the bot needs Manage Threads and a channel that "
+            "supports threads",
+            ephemeral=True,
+        )
+        return
+    LOGGER.info(
+        "testthread: created private thread %s (%s)",
+        getattr(thread, "id", None),
+        getattr(thread, "name", "unnamed"),
+    )
+
+    added = "not needed"
+    try:
+        await thread.add_user(interaction.user)
+        added = "yes"
+    except Exception as error:  # noqa: BLE001 - report, do not abort the probe
+        added = f"no ({type(error).__name__}: {error})"
+        LOGGER.exception("testthread: add_user failed on thread %s", thread.id)
+
+    try:
+        first = await thread.send(
+            embed=discord.Embed(
+                title="━━━━━━━━━━  PROBE  ━━━━━━━━━━",
+                description="If you can read this in the thread, the surface works.",
+                colour=discord.Colour(0x4F545C),
+            )
+        )
+        LOGGER.info("testthread: posted %s into thread %s", first.id, thread.id)
+    except Exception as error:  # noqa: BLE001 - report, do not abort the probe
+        LOGGER.exception("testthread: send failed on thread %s", thread.id)
+        await interaction.followup.send(
+            f"thread {thread.mention} was created but I could not post in it: "
+            f"{type(error).__name__}: {error}",
+            ephemeral=True,
+        )
+        return
+
+    await interaction.followup.send(
+        f"thread works: {thread.mention}\n"
+        f"-# id {thread.id} · added you: {added} · see #bot-log for the step trace",
         ephemeral=True,
     )
 
@@ -1226,6 +1504,7 @@ async def willpower(
     except Exception as error:  # noqa: BLE001 - one friendly failure line for the user
         await _fail(interaction, error)
         return
+    await _refresh_creation(interaction, updated)
     await interaction.followup.send(f"{_clip_text(str(receipt))}\n-# /undo reverses it")
 
 
@@ -1328,6 +1607,16 @@ async def discard(interaction: discord.Interaction, confirm: str) -> None:
         await asyncio.to_thread(_character_store().delete, character.id)
         remaining = tuple(other for other in _seatbook() if other.id != seat.id)
         await asyncio.to_thread(save_seats, SeatBook(remaining), _seats_path())
+        thread_id = _creation_state(character).get("thread")
+        if thread_id:
+            # The thread held only this character; leaving it behind would be litter.
+            try:
+                thread = interaction.client.get_channel(thread_id)
+                if thread is not None:
+                    await thread.delete()
+                    LOGGER.info("discard: removed build thread %s", thread_id)
+            except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+                LOGGER.warning("discard: could not remove thread %s", thread_id)
     except (SeatsError, CharacterError, CharacterConflict, OSError) as error:
         await _fail(interaction, error)
         return
@@ -1796,6 +2085,7 @@ async def gift(
     except (SeatsError, CharacterError, CharacterConflict, MutationError, OSError) as error:
         await _fail(interaction, error)
         return
+    await _refresh_creation(interaction, character)
     await interaction.followup.send(f"**{character.name}** {_clip_text(str(receipt))}")
 
 
@@ -1957,21 +2247,77 @@ async def unlock(interaction: discord.Interaction, reason: str = "") -> None:
     )
 
 
-@command(name="export", description="Download this character as JSON.")
-async def export(interaction: discord.Interaction) -> None:
-    """The file round-trip: edit long prose in a real editor, then /import."""
+@command(name="export", description="Download this character: JSON, or an editable questionnaire.")
+@app_commands.describe(
+    style="json is the whole character; questionnaire is a text file to fill in and /fill back"
+)
+@app_commands.choices(
+    style=[
+        app_commands.Choice(name="json — the whole character", value="json"),
+        app_commands.Choice(
+            name="questionnaire — a text file of the questions", value="questionnaire"
+        ),
+    ]
+)
+async def export(interaction: discord.Interaction, style: str = "json") -> None:
+    """The file round-trip: edit long prose in a real editor, then bring it back."""
     await interaction.response.defer(thinking=True)
     try:
         _, character = await asyncio.to_thread(_own_character, interaction)
+        if style == "questionnaire":
+            from ttrpg_chatbots.character.questionnaire_text import render_text
+
+            text = await asyncio.to_thread(render_text, character)
+            payload = text.encode("utf-8")
+            filename = f"{character.id}-questionnaire.md"
+            label = f"{len(text.splitlines())} lines · fill it in, then /fill"
+        else:
+            payload = character.to_json().encode("utf-8")
+            filename = f"{character.id}.json"
+            label = "the whole character — sheet, answers, history"
     except (SeatsError, CharacterError, OSError) as error:
         await _fail(interaction, error)
         return
     answers = len(character.interview.questions) if character.interview else 0
-    buffer = io.BytesIO(character.to_json().encode("utf-8"))
     await interaction.followup.send(
-        f"**{character.name}** · revision {character.revision} · {answers} answers",
-        file=discord.File(buffer, filename=f"{character.id}.json"),
+        f"**{character.name}** · revision {character.revision} · {answers} answers\n-# {label}",
+        file=discord.File(io.BytesIO(payload), filename=filename),
     )
+
+
+@command(name="fill", description="Import questionnaire answers from a text file.")
+@app_commands.describe(file="The .md from /export style:questionnaire, with your answers filled in")
+async def fill(interaction: discord.Interaction, file: discord.Attachment) -> None:
+    """Answers are matched by question text, so order and partial fills are fine."""
+    await interaction.response.defer(thinking=True)
+    try:
+        from ttrpg_chatbots.character.questionnaire_text import apply_text
+
+        if file.size and file.size > 1_000_000:
+            raise CharacterError(
+                f"{file.filename} is {file.size} bytes; that is not a questionnaire file"
+            )
+        _, character = await asyncio.to_thread(_own_character, interaction)
+        raw = await file.read()
+        result = await asyncio.to_thread(apply_text, character, raw.decode("utf-8"))
+        await asyncio.to_thread(_save, character, result.character)
+    except (
+        SeatsError,
+        CharacterError,
+        CharacterConflict,
+        OSError,
+        UnicodeDecodeError,
+    ) as error:
+        await _fail(interaction, error)
+        return
+    await _refresh_creation(interaction, result.character)
+    lines = [f"**{result.character.name}** · {result.summary()}"]
+    if result.ignored:
+        shown = "\n".join(f"· {prompt}" for prompt in result.ignored[:5])
+        lines.append(f"not on this form, so ignored:\n{shown}")
+    if result.still_missing:
+        lines.append(f"next unanswered: {result.still_missing[0]}")
+    await interaction.followup.send(_clip_text("\n".join(lines)))
 
 
 @command(name="import", description="Replace your character from an exported JSON file.")
@@ -2014,11 +2360,21 @@ def _claimable_ids() -> tuple[str, ...]:
 
 
 def _seat_id(interaction: discord.Interaction, book: SeatBook) -> str:
-    """A readable seat id, made unique with the Discord id if the name is taken."""
-    base = slug_for(getattr(interaction.user, "display_name", "") or "player")
-    if not base:
-        return f"player-{interaction.user.id}"
-    return f"{base}-{interaction.user.id}" if base in book.ids else base
+    """A readable seat id that is guaranteed unique.
+
+    A player may hold several characters, so "name" and "name-discordid" both get used up;
+    every further character appends a counter rather than reusing an id and failing.
+    """
+    base = slug_for(getattr(interaction.user, "display_name", "") or "player") or "player"
+    owner = interaction.user.id
+    taken = set(book.ids)
+    for candidate in (base, f"{base}-{owner}"):
+        if candidate not in taken:
+            return candidate
+    counter = 2
+    while f"{base}-{owner}-{counter}" in taken:
+        counter += 1
+    return f"{base}-{owner}-{counter}"
 
 
 def _claim(interaction: discord.Interaction, character: str) -> tuple[Seat, Character]:
@@ -2424,6 +2780,38 @@ class TtrpgBot(commands.Bot):
         LOGGER.info("Connected to Discord as %s", self.user)
         ready, detail = voice_readiness()
         LOGGER.info("voice: %s", "ready" if ready else detail)
+        await self.check_permissions()
+
+    async def check_permissions(self) -> None:
+        """Audit this bot against what the helper needs, where it is configured to work.
+
+        The helper does not listen to messages, so this is the only place it can learn that
+        *Create Private Threads* or *Manage Threads* is missing before a player hits the
+        failure. Channels come from ``bots.json``; without them there is nothing to check,
+        and ``/botcheck`` covers the channel the command is run in.
+        """
+        spec = getattr(self, "spec", None)
+        guild = self.guilds[0] if self.guilds else None
+        if guild is None:
+            LOGGER.warning("connected but in no server, so permissions were not checked")
+            return
+        channels = []
+        for channel_id in getattr(spec, "channels", ()) or ():
+            channel = guild.get_channel(channel_id)
+            if channel is not None:
+                channels.append(channel)
+        if not channels:
+            LOGGER.info(
+                "no channels configured for the permission audit; run /botcheck in a channel"
+            )
+            return
+        findings = audit(
+            bot_name=getattr(spec, "id", "helper"),
+            role=ROLE_HELPER,
+            channels=channels,
+            member=guild.me,
+        )
+        log_findings(LOGGER, findings)
 
     async def close(self) -> None:
         for player in self.players.values():
@@ -2443,10 +2831,22 @@ def create_bot(guild_id: int | None = None) -> TtrpgBot:
 
 
 def run_bot(config: DiscordConfig) -> None:
-    """Connect to Discord and run until interrupted."""
-    bot = create_bot(guild_id=config.guild_id)
-    LOGGER.info("Starting bot; slash commands scope: %s", config.guild_id or "global")
-    bot.run(config.token, log_handler=None)
+    """Connect every configured bot: the helper, plus any friend that has a token.
+
+    The roster is data. Without ``bots.json`` it is the single helper, and the old one-bot path
+    is taken unchanged, so nothing about a plain installation moves.
+    """
+    from ttrpg_chatbots.bots.supervisor import run as run_roster
+
+    roster = load_roster()
+    try:
+        lines = roster.describe()
+    except RosterError as error:
+        raise SystemExit(f"roster error: {error}") from error
+    LOGGER.info("Starting bot(s); slash commands scope: %s", config.guild_id or "global")
+    for line in lines:
+        LOGGER.info("bot: %s", line)
+    run_roster(roster, helper_token=config.token, guild_id=config.guild_id)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -2484,6 +2884,14 @@ def main(argv: list[str] | None = None) -> None:
     if args.check:
         print(f"token: configured ({len(config.token)} characters, not shown)")
         print(f"guild: {config.guild_id if config.guild_id is not None else 'global sync'}")
+        try:
+            roster = load_roster()
+            lines = roster.describe()
+        except RosterError as error:
+            raise SystemExit(f"roster error: {error}") from error
+        print("bots:")
+        for line in lines:
+            print(f"  {line}")
         print(f"voice: {detail if not ready else 'ready'}")
         print("check only: not connecting to Discord")
         return

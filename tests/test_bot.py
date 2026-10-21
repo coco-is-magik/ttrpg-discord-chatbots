@@ -96,6 +96,7 @@ def test_setup_hook_publishes_every_command_to_the_guild(monkeypatch) -> None:
         "answer",
         "ask",
         "background",
+        "botcheck",
         "budget",
         "build",
         "characters",
@@ -105,11 +106,13 @@ def test_setup_hook_publishes_every_command_to_the_guild(monkeypatch) -> None:
         "done",
         "edit",
         "export",
+        "fill",
         "finish",
         "flaw",
         "gift",
         "goto",
         "heal",
+        "help",
         "history",
         "hurt",
         "import",
@@ -132,6 +135,7 @@ def test_setup_hook_publishes_every_command_to_the_guild(monkeypatch) -> None:
         "specialty",
         "spend",
         "stop",
+        "testthread",
         "undo",
         "ungift",
         "unlock",
@@ -167,7 +171,10 @@ def test_setup_hook_syncs_to_the_configured_guild(monkeypatch) -> None:
     asyncio.run(build())
 
 
-def test_run_bot_forwards_the_token_and_keeps_our_logging(monkeypatch) -> None:
+def test_run_bot_forwards_the_token_and_keeps_our_logging(monkeypatch, tmp_path) -> None:
+    # A roster file from a developer's working copy must not change what this asserts.
+    monkeypatch.setenv("TTRPG_BOTS_FILE", str(tmp_path / "absent-bots.json"))
+
     async def build() -> None:
         recorded = {}
 

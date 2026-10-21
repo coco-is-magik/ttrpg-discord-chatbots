@@ -14,6 +14,18 @@
     "character": "robert-ross",
     "world_character": "sable",
     "voices": { "ic": "en_GB-alan-medium", "ooc": "en_US-amy-medium" },
-    "meta": { "name": "Dennis" }
+    "meta": {
+      "name": "Dennis",
+      "persona": {
+        "role": "",
+        "humour": "",
+        "verbosity": "short",
+        "interjection_rate": 0.5,
+        "question_rate": 0.2,
+        "topics": {},
+        "quiet": "00:00-08:30",
+        "tz": "America/Toronto"
+      }
+    }
   }
 ]

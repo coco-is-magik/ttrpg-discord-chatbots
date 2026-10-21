@@ -8,6 +8,8 @@ reversals of earlier ones.
 
 - [`SHEET_UI.md`](SHEET_UI.md) — the character-sheet portal in detail: message layout, DM
   isolation, concurrency, failure recovery.
+- [`GROUP.md`](GROUP.md) — the other surface in detail: `memory/`, `social/`, `ambient/` and
+  `table/`, their contracts, the invariants that protect them, and the order they get built.
 - [`MANUAL_TESTING.md`](MANUAL_TESTING.md) — running the bot against Discord by hand.
 
 ---
@@ -66,14 +68,22 @@ Where a principle and a feature conflict, the principle wins or the feature is r
 
 ## 3. Cast, modes, roles
 
-```
+```text
+ttrpg-bot                the helper: commands, threads, sheet, dice, voice. Not a person.
 seat 0  human            one seat, the reason the server exists
-seat 1  bot "organiser"  warm, initiates, keeps the calendar
-seat 2  bot "dry wit"    teases gently, shorter messages, plays the cynic
-seat 3  bot "steady"     remembers, checks in, knows the rules
+seat 1  friend "…"       a person; name and personality not yet decided
+seat 2  friend "…"       a person; name and personality not yet decided
+seat 3  friend "…"       a person; name and personality not yet decided
 ```
 
-Three bots is the right number: it is a believable group, it fits "4 max including the
+**The helper is infrastructure and never appears as a person.** It answers slash commands, owns
+the build threads and the sheet portal, and never reads ordinary messages, so it needs no
+privileged intent. **The friends are three separate applications**, because a group of people
+needs three faces and three voices; their names and personalities are deliberately unwritten for
+now, and the code treats "friend" as a slot rather than a role (see
+[`GROUP.md`](GROUP.md) §8.4 and §13.11).
+
+Three friends is the right number: it is a believable group, it fits "4 max including the
 human", and two simultaneous conversation threads is the most a text channel can carry
 before it becomes soup.
 
@@ -100,9 +110,10 @@ off.
 | `reply/`, `llm/`, `respond.py` | classification, models, the `Answer` seam | **exists** |
 | `tts/`, `audio/`, `voice/` | casting, synthesis, playback frames | **exists** |
 | `conversation.py` | front-end-free answer/roll/speak | **exists** |
-| `bot.py` | Discord adapters (8 commands today) | **exists** |
-| `seats/` | human\|bot × character\|player × transport × voices × permissions | **new** |
-| `sheetportal/` | mutations, receipts, provenance, draft lifecycle, panels | **new** |
+| `bot.py` | the helper: Discord adapters, slash commands, `/botcheck` | **exists** |
+| `bots/` | the four applications: roster, supervisor, permission audit | **exists** |
+| `seats/` | human\|bot × character\|player × transport × voices × permissions | **exists** |
+| `sheetportal/` | mutations, receipts, provenance, draft lifecycle, panels | **exists** |
 | `table/` | scene state, floor control, rotating GM, rulings | **new** |
 | `ambient/` | cadence clocks, topic board, budgets, quiet hours, arrivals | **new** |
 | `memory/` | working window, facts, episodes, canon | **new** |
@@ -123,7 +134,7 @@ Hard rules, each of which should have a test that fails when broken:
 7. No engagement mechanics: no streaks, no "don't lose your progress", no reward for
    frequency.
 8. A deferral is not a refusal: every "not now" carries a return.
-9. Admin never appears in the play channel; the sheet lives in the player's DM.
+9. Admin never appears in the play channel; the sheet lives in a private thread per character.
 10. Bots are marked as bots by the platform, and are never made to perform a confession.
 
 
@@ -274,7 +285,8 @@ restart loses nothing.
 
 ### Phase 3 — One bot, ambient
 
-Personality and memory under test with the cheapest surface.
+Personality and memory under test with the cheapest surface. The contracts for this phase and
+the two after it are in [`GROUP.md`](GROUP.md).
 
 - `ambient/`: cadence clock (base 4–9 min, heavy-tailed jitter), topic board, message budget,
   quiet hours, reactions-first
@@ -317,7 +329,8 @@ GM and the human playing; no invented modifiers, no lost rulings, no talking ove
 
 ### Phase 6 — Voice identity
 
-- one bot user per seat (four applications, four tokens, one supervisor process)
+- **the applications already exist**: `bots/` runs four Discord clients in one supervisor
+  process, with a token per friend and a permission audit each (built ahead of this phase)
 - two voices per bot seat: character (IC) and player (OOC); line-by-line casting
 - speaking ring, per-user mute and volume become available for free
 - playback queue per seat with the same TTL and barge-in rules as text
