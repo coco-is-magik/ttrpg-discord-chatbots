@@ -18,21 +18,11 @@ dist/
 .idea/
 
 # --- Datasets -----------------------------------------------------------------
-# Nothing downloaded or generated belongs in git: corpora run to tens or hundreds
-# of megabytes, they slow every clone and every status call, and they are all
-# reproducible from a URL (docs/CLASSIFIER.md §5).
-#
-# Two folders, different jobs:
-#   corpora/  downloaded or hand-built source data, plus what is derived from it
-#   data/     this install's runtime state: characters, seats, bots.json, logs
-#
-# Only examples/ (the tiny demo and friends worlds) and tests/fixtures/ are tracked.
-# corpora/ keeps one tracked file, its README, so the folder exists and explains
-# itself in a fresh clone; everything else inside it is ignored.
-corpora/*
-!corpora/README.md
+# The real knowledge / in-character response corpora are large and machine
+# produced, so they live outside git. Only examples/ (tiny demo world) and
+# tests/fixtures/ are tracked; point --data at data/ on a deployed box.
 data/
-datasets/     # legacy alias from before corpora/; kept so an old checkout cannot leak in
+datasets/
 *.jsonl.gz
 custom_assets/
 
