@@ -50,6 +50,7 @@ class BotSpec:
     seat: str = ""
     user_id: int | None = None
     token_env: str = ""
+    env_file: str = ""
     channels: tuple[int, ...] = ()
     listen: bool = False
     commands: bool = False
@@ -67,6 +68,8 @@ class BotSpec:
             raise BotSpecError(
                 f"bot {identifier!r}: role must be one of {list(ROLES)}, got {self.role!r}"
             )
+        if not isinstance(self.env_file, str):
+            raise BotSpecError(f"bot {identifier!r}: env_file must be a path string")
         if self.role == ROLE_HELPER and self.listen:
             raise BotSpecError(
                 f"bot {identifier!r}: the helper does not listen; keep it commands-only so it "
@@ -152,6 +155,10 @@ def bots_from_records(records, *, source: str = "bots") -> tuple[BotSpec, ...]:
         if not isinstance(token_env, str):
             raise BotSpecError(f"{where}: 'token_env' must be a string")
 
+        env_file = record.get("env_file", "")
+        if not isinstance(env_file, str):
+            raise BotSpecError(f"{where}: 'env_file' must be a path string")
+
         channels = record.get("channels") or []
         if not isinstance(channels, list):
             raise BotSpecError(f"{where}: 'channels' must be a list of Discord ids")
@@ -172,6 +179,7 @@ def bots_from_records(records, *, source: str = "bots") -> tuple[BotSpec, ...]:
                     seat=seat.strip(),
                     user_id=record.get("user_id"),
                     token_env=token_env.strip(),
+                    env_file=env_file.strip(),
                     channels=tuple(cleaned),
                     listen=bool(record.get("listen", False)),
                     commands=bool(record.get("commands", role.strip().lower() == ROLE_HELPER)),

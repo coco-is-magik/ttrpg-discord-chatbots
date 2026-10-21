@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from types import SimpleNamespace
 
 import discord
 import pytest
@@ -166,6 +167,20 @@ def test_several_bots_go_through_asyncio(monkeypatch) -> None:
     assert seen == ["ttrpg-bot", "friend-a"]
 
 
+def test_the_helper_can_reach_its_friends(monkeypatch) -> None:
+    """One process, so /friendcheck reads friend clients directly instead of using IPC."""
+    monkeypatch.setenv("TTRPG_FRIEND_A_TOKEN", "friend-token")
+    helper = _Client()
+    entries = build_entries(
+        _roster(_helper(), _friend()),
+        helper_token="helper-token",
+        create_helper=lambda guild_id: helper,
+        create_friend=lambda spec: _Client(),
+    )
+    assert set(helper.friends) == {"friend-a"}
+    assert helper.friends["friend-a"] is entries[1].client
+
+
 def test_a_roster_without_a_helper_warns(monkeypatch, caplog) -> None:
     monkeypatch.setenv("TTRPG_FRIEND_A_TOKEN", "friend-token")
     run(
@@ -228,3 +243,34 @@ def test_a_friend_that_is_not_listening_is_not_warned_about_message_content(capl
 
     assert "message_content" not in caplog.text
     assert "checks passed" in caplog.text
+
+
+def _heard(text: str = "anyone around?", *, bot_author: bool = False):
+    return SimpleNamespace(
+        author=SimpleNamespace(display_name="Tav", id=5, bot=bot_author),
+        channel=SimpleNamespace(name="general", id=7),
+        content=text,
+        mentions=[],
+    )
+
+
+def test_a_listening_friend_records_what_it_hears() -> None:
+    friend = FriendBot(_friend(listen=True))
+    asyncio.run(friend.on_message(_heard()))
+
+    assert friend.received == 1
+    assert friend.last_message["author"] == "Tav"
+    assert friend.last_message["channel"] == "general"
+    assert friend.last_message["text"] == "anyone around?"
+
+
+def test_a_friend_ignores_other_bots() -> None:
+    friend = FriendBot(_friend(listen=True))
+    asyncio.run(friend.on_message(_heard("beep", bot_author=True)))
+
+    assert friend.received == 0
+    assert friend.last_message == {}
+    # ...but the delivery is counted, so a probe can tell filtering from a dead gateway.
+    assert friend.delivered == 1
+    assert friend.last_delivery["bot"] == "yes"
+    assert friend.last_delivery["text"] == "beep"

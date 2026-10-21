@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -10,9 +11,11 @@ from ttrpg_chatbots.bots.identity import BotSpec, BotSpecError
 from ttrpg_chatbots.bots.roster import (
     Roster,
     RosterError,
+    app_id,
     default_roster,
     load_roster,
     resolve_token,
+    token_source,
 )
 
 
@@ -151,3 +154,63 @@ def test_a_direct_roster_with_two_helpers_is_refused() -> None:
                 BotSpec(id="two", role="helper"),
             )
         )
+
+
+def _friend_env(tmp_path, name: str = ".env.frienda", **values) -> Path:
+    path = tmp_path / name
+    lines = [f"{key}={value}" for key, value in values.items()]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def test_a_bot_reads_its_token_from_its_own_env_file(tmp_path) -> None:
+    path = _friend_env(tmp_path, APP_ID=123, DISCORD_TOKEN="from-the-file")
+    friend = BotSpec(id="friend-a", role="friend", env_file=str(path))
+    assert resolve_token(friend, env={}) == "from-the-file"
+    assert token_source(friend, env={}) == str(path)
+
+
+def test_the_environment_wins_over_the_env_file(tmp_path) -> None:
+    path = _friend_env(tmp_path, DISCORD_TOKEN="from-the-file")
+    friend = BotSpec(id="friend-a", role="friend", env_file=str(path))
+    env = {"TTRPG_FRIEND_A_TOKEN": "from-the-environment"}
+    assert resolve_token(friend, env=env) == "from-the-environment"
+    assert token_source(friend, env=env) == "TTRPG_FRIEND_A_TOKEN"
+
+
+def test_a_missing_env_file_names_the_bot(tmp_path) -> None:
+    friend = BotSpec(
+        id="friend-a", role="friend", env_file=str(tmp_path / ".env.absent")
+    )
+    with pytest.raises(RosterError, match="friend-a"):
+        resolve_token(friend, env={})
+
+
+def test_the_app_id_is_used_as_the_bot_user_id(tmp_path) -> None:
+    path = _friend_env(tmp_path, APP_ID=123, DISCORD_TOKEN="t")
+    friend = BotSpec(id="friend-a", role="friend", env_file=str(path))
+    assert app_id(friend, env={}) == 123
+
+
+def test_an_explicit_user_id_wins_over_the_env_file(tmp_path) -> None:
+    path = _friend_env(tmp_path, APP_ID=123, DISCORD_TOKEN="t")
+    friend = BotSpec(id="friend-a", role="friend", env_file=str(path), user_id=999)
+    assert app_id(friend, env={}) == 999
+
+
+def test_a_non_numeric_app_id_is_refused(tmp_path) -> None:
+    path = _friend_env(tmp_path, APP_ID="not-a-number", DISCORD_TOKEN="t")
+    friend = BotSpec(id="friend-a", role="friend", env_file=str(path))
+    with pytest.raises(RosterError, match="APP_ID"):
+        app_id(friend, env={})
+
+
+def test_describe_says_which_file_the_token_came_from(tmp_path, monkeypatch) -> None:
+    path = _friend_env(tmp_path, DISCORD_TOKEN="super-secret-token")
+    monkeypatch.delenv("TTRPG_FRIEND_A_TOKEN", raising=False)
+    monkeypatch.delenv("TTRPG_FRIEND_A_TOKEN_FILE", raising=False)
+    roster = Roster((BotSpec(id="friend-a", role="friend", env_file=str(path)),))
+    line = roster.describe()[0]
+    assert "token set" in line
+    assert str(path) in line
+    assert "super-secret-token" not in line

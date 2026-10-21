@@ -126,6 +126,7 @@ Once it is running, the bot answers these slash commands:
 | Command | What it does |
 | --- | --- |
 | `/ping` | `Pong!` — proves the gateway and the command sync |
+| `/friendcheck send:…` | are the friends online, can they post, and what did they last hear? |
 | `/botcheck` | every permission this bot needs, and the fix for each one it is missing |
 | `/voices` | the cast table, plus whether voice is usable on this machine |
 | `/ask question:… character:… speak:true` | answer as a character; `speak` also says it aloud |
@@ -178,6 +179,18 @@ each with its own token, and a friend with no token is *dormant* rather than an 
 itself when it connects, and logs each missing permission with the setting that fixes it. The
 friend applications are wired but silent: the listener and the personality are the next slices,
 described in [`docs/GROUP.md`](docs/GROUP.md).
+
+To prove the whole pipe — tokens, gateway, Message Content, sending, receiving — with the bot
+stopped:
+
+```bash
+./start-bot.sh --stop
+.venv/bin/ttrpg-chatbots-bot --friendcheck general   # channel id or name
+./start-bot.sh --background
+```
+
+It posts one labelled line from each friend, reports what each one received, and deletes its
+own messages. Live, the same check is `/friendcheck` (add `send:true` to make them speak).
 
 Sheet management is a v1 loop, entirely inside Discord:
 

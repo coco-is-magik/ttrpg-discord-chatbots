@@ -539,24 +539,63 @@ helper", so an installation that never adds friends behaves exactly as it did be
 - **`listen`** — requests **Message Content** for this application. Off until the intent is
   enabled in the Developer Portal, because requesting an ungranted intent makes Discord refuse
   the connection (close code 4014).
+- **`token_env`** — the variable holding this bot's token. Defaults are sensible:
+  `DISCORD_TOKEN` for the helper, `TTRPG_FRIEND_A_TOKEN` for `friend-a`.
+- **`env_file`** — a dotenv file belonging to this bot, read *without* touching the process
+  environment. This is how three friends each keep a file that names its token
+  `DISCORD_TOKEN`: `.env.frienda`, `.env.friendb`, `.env.friendc`. Its `APP_ID` is also used as
+  the bot's user id, so the helper can audit that friend's channel permissions.
 - **`channels`** — where this bot is expected to work. These are what the permission audit
   checks; empty means "nothing to check yet", which is logged rather than guessed.
-- **`user_id`** — optional; when present, the helper can audit that friend's channel
-  permissions too (see 8.3).
+- **`user_id`** — optional; overrides `APP_ID` when a bot's user id is written down explicitly.
 
 ### 8.2 Tokens, and "dormant"
 
 Each bot reads its own token, in the same precedence `config.py` uses for the helper:
-`<VAR>_FILE`, then `<VAR>`, then nothing. A bot with no token is **dormant**: reported by
-`--check`, logged at startup, and simply not started. Dormant is how the three friends are
-committed as configuration today and born later when their applications exist.
+`<VAR>_FILE`, then `<VAR>`, then its own `env_file`. A bot with no token is **dormant**:
+reported by `--check`, logged at startup, and simply not started. Dormant is how the three
+friends are committed as configuration before their applications exist.
 
 ```text
 $ ttrpg-chatbots-bot --check
 bots:
-  ttrpg-bot (helper) — token set
-  friend-a (friend) — dormant (no TTRPG_FRIEND_A_TOKEN)
+  ttrpg-bot (helper) — token set (DISCORD_TOKEN)
+  friend-a (friend) — token set (.env.frienda)
+  friend-b (friend) — token set (.env.friendb)
+  friend-c (friend) — token set (.env.friendc)
 ```
+
+`env_file` values are read with `dotenv_values`, not `load_dotenv`: three files that each name
+their token `DISCORD_TOKEN` must not overwrite the helper's copy in the process environment.
+
+### 8.2a Proving the pipe: `--friendcheck`
+
+Before any personality exists, there is one question worth answering: are these four
+applications really alive, can they speak, and do they hear? One command answers it without
+touching the gateway the running bot holds:
+
+```text
+$ ttrpg-chatbots-bot --friendcheck general
+friend-a: online as TerrysTopGuy#2763
+friend-b: online as Otokodelyoko#7113
+friend-c: online as Crusty.chan#8006
+friend-a: sent to #general (1364544268609523765)
+friend-b: sent to #general (1364544268609523765)
+friend-c: sent to #general (1364544268609523765)
+friend-a: received 3 message(s), only from bots (last: Crusty.chan); it is listening...
+```
+
+It connects the friends only, posts one labelled line from each, waits, reports what each one
+received, and deletes its own messages on the way out. **Run it with the main bot stopped** —
+one token cannot hold two gateway sessions.
+
+The distinction it reports matters. `received N, only from bots` means the gateway and Message
+Content are working and the "ignore other bots" rule is doing its job. `got N events but the
+text was empty` means Message Content is off for that application. `received no message events`
+means the channel never reached it at all. Three different failures, three different fixes.
+
+The same test runs live, without stopping anything: `/friendcheck` on the helper, with
+`send:true` to make each friend post in the current channel.
 
 ### 8.3 What each role is allowed to do
 
@@ -578,6 +617,19 @@ logged as warnings that name the channel and the fix, and the *absence* of warni
 logged once (`ttrpg-bot: 8/8 checks passed in #general`), so a silent log means "checked and
 fine", not "never ran". Nothing here asserts a permission the code believes it has: the check
 asks Discord, per channel, which is the only answer that accounts for overwrites.
+
+**Invite integers**, so the URL generator matches the table above:
+
+| Application | Scope | `permissions=` |
+|---|---|---|
+| helper, text + voice | `bot` + `applications.commands` | `360780516352` |
+| helper, no voice | `bot` + `applications.commands` | `360777370624` |
+| friend, text only | `bot` | `274878254144` |
+| friend, text + voice | `bot` | `274881399872` |
+
+The walkthrough, including the per-application Message Content toggle, is in
+[`MANUAL_TESTING.md`](MANUAL_TESTING.md) §2. Friends deliberately do **not** get
+`applications.commands`: they own no commands, and the absent scope says so.
 
 
 ### 8.4 The person's slot: personality is not decided yet
@@ -662,6 +714,8 @@ spirit as the existing sheet invariants.
 | 21 | A missing permission names the channel and the fix | `test_one_missing_permission_names_the_fix` |
 | 22 | One bot failing does not take the others down | `test_one_failing_bot_does_not_stop_the_other` |
 | 23 | A friend with `listen` off is not nagged about the intent | `test_a_friend_that_is_not_listening_is_not_warned_about_message_content` |
+| 24 | Deliveries are counted before the "ignore bots" rule | `test_a_friend_ignores_other_bots` |
+| 25 | A listening friend records what a human said | `test_a_listening_friend_records_what_it_hears` |
 
 Invariant 9 is the one most likely to rot, because it depends on two prompts staying separate
 while sharing a persona builder. It gets a scripted scene, not a snapshot: the human asks OOC

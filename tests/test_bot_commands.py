@@ -270,6 +270,7 @@ def test_every_command_the_guide_documents_is_registered() -> None:
         "fill",
         "finish",
         "flaw",
+        "friendcheck",
         "gift",
         "goto",
         "heal",

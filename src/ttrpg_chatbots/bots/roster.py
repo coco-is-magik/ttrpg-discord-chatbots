@@ -21,6 +21,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from dotenv import dotenv_values
+
 from ttrpg_chatbots.bots.identity import (
     HELPER_TOKEN_ENV,
     ROLE_HELPER,
@@ -90,24 +92,60 @@ class Roster:
         """The token for one bot, or ``None`` when it is dormant."""
         return resolve_token(bot)
 
+    def token_source(self, bot: BotSpec) -> str:
+        """Where the token came from, for ``--check``; never the token itself."""
+        return token_source(bot)
+
+    def app_id_for(self, bot: BotSpec) -> int | None:
+        """The bot's user id, which Discord makes equal to its application id."""
+        return app_id(bot)
+
     def describe(self) -> tuple[str, ...]:
         """One line per bot for ``--check``: role, seat, and whether a token exists."""
         lines = []
         for bot in self.bots:
-            state = "disabled" if not bot.enabled else (
-                "token set" if self.token_for(bot) else f"dormant (no {bot.token_var})"
-            )
+            if not bot.enabled:
+                state = "disabled"
+            elif self.token_for(bot):
+                state = f"token set ({self.token_source(bot)})"
+            elif bot.env_file:
+                state = f"dormant (no token in {bot.env_file})"
+            else:
+                state = f"dormant (no {bot.token_var})"
             lines.append(f"{bot.describe()} — {state}")
         return tuple(lines)
 
 
+def _env_file_values(bot: BotSpec) -> dict[str, str]:
+    """Read one bot's own env file, without touching ``os.environ``.
+
+    ``dotenv_values`` keeps the file's values away from the process environment, which matters:
+    every friend's file names its token ``DISCORD_TOKEN``, and loading three of those into
+    ``os.environ`` would quietly overwrite the helper's.
+    """
+    path = Path(bot.env_file).expanduser()
+    if not path.is_file():
+        raise RosterError(f"{bot.id}: env_file does not exist: {path}")
+    values = dotenv_values(path)
+    if not values:
+        raise RosterError(f"{bot.id}: env_file is empty: {path}")
+    return {key: (value or "") for key, value in values.items()}
+
+
 def resolve_token(bot: BotSpec, env=os.environ) -> str | None:
-    """Read one bot's token from ``<VAR>_FILE`` or ``<VAR>``; ``None`` means dormant."""
+    """Read one bot's token, or ``None`` when it is dormant.
+
+    Precedence: ``<VAR>_FILE``, then ``<VAR>``, then the bot's own ``env_file`` (which may name
+    it ``DISCORD_TOKEN`` like the helper's). Deployment environment wins over a local file.
+    """
     path = (env.get(bot.token_file_var) or "").strip()
     if path:
         token = _read_token_file(Path(path).expanduser(), bot)
     else:
         token = (env.get(bot.token_var) or "").strip()
+        if not token and bot.env_file:
+            values = _env_file_values(bot)
+            token = (values.get(bot.token_var) or values.get(HELPER_TOKEN_ENV) or "").strip()
     if not token:
         return None
     if any(character.isspace() for character in token):
@@ -116,6 +154,35 @@ def resolve_token(bot: BotSpec, env=os.environ) -> str | None:
             "token; check the secret file or environment value"
         )
     return token
+
+
+def token_source(bot: BotSpec, env=os.environ) -> str:
+    """The name of the variable or file a token came from, or ``""`` when dormant."""
+    if (env.get(bot.token_file_var) or "").strip():
+        return bot.token_file_var
+    if (env.get(bot.token_var) or "").strip():
+        return bot.token_var
+    if bot.env_file and resolve_token(bot, env):
+        return bot.env_file
+    return ""
+
+
+def app_id(bot: BotSpec, env=os.environ) -> int | None:
+    """The bot's user id, read from ``APP_ID`` when it is not written down explicitly.
+
+    A Discord bot's user id is its application id, which is what lets the helper fetch a
+    friend's member object and audit its channel permissions.
+    """
+    if bot.user_id is not None:
+        return bot.user_id
+    if not bot.env_file:
+        return None
+    raw = (_env_file_values(bot).get("APP_ID") or "").strip()
+    if not raw:
+        return None
+    if not raw.isdigit():
+        raise RosterError(f"{bot.id}: APP_ID in {bot.env_file} is not a number")
+    return int(raw)
 
 
 def _read_token_file(path: Path, bot: BotSpec) -> str:

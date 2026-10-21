@@ -47,8 +47,9 @@ test of the answer chain, the cast, and the voice pipeline.
    * Copy the **token** with **Reset Token** (it is shown once). This is your
      `DISCORD_TOKEN`.
    * Leave **Public Bot** on if you want to invite it elsewhere; off is fine for testing.
-   * **Privileged Gateway Intents:** leave all three **off**. Slash commands do not need
-     them, and the code does not request them.
+   * **Privileged Gateway Intents:** for the helper, leave all three **off**. Slash commands do
+     not need them, and the helper never reads messages. The friends are the exception and need
+     **Message Content** on — see §2.1.
 4. Left sidebar → **OAuth2 → General**. Copy the **Application ID** (also called the
    client id) — you need it for the invite link in the next step.
 
@@ -57,16 +58,103 @@ test of the answer chain, the cast, and the voice pipeline.
 Build this URL, replacing `YOUR_APPLICATION_ID`:
 
 ```
-https://discord.com/oauth2/authorize?client_id=YOUR_APPLICATION_ID&scope=bot%20applications.commands&permissions=3148800
+https://discord.com/oauth2/authorize?client_id=YOUR_APPLICATION_ID&scope=bot%20applications.commands&permissions=360780516352
 ```
 
-`3148800` is **View Channels (1024) + Send Messages (2048) + Connect (1048576) +
-Speak (2097152)**. Nothing else is needed; if you prefer, grant `Administrator` in a test
-server and tighten it later.
+`360780516352` is exactly what the helper uses, and nothing more:
+
+| Permission | Bit | Why the helper needs it |
+|---|---|---|
+| View Channels | 1024 | see the channel at all |
+| Send Messages | 2048 | reply and post panels |
+| Send Messages in Threads | 274877906944 | answer inside a build thread |
+| Read Message History | 65536 | fetch and edit the panel it posted |
+| Embed Links | 16384 | the sheet and questionnaire embeds |
+| Attach Files | 32768 | `/export` and `/import` |
+| Create Private Threads | 68719476736 | `/create` opens a private build thread |
+| Manage Threads | 17179869184 | delete a thread whose build failed |
+| Connect + Speak | 1048576 + 2097152 | `/join`, `/say` |
+
+Drop the voice pair (`360777370624`) if this instance never joins a channel.
+
+Do **not** grant `Administrator` "to save time": `/botcheck` and the startup log name exactly
+what is missing, so least privilege costs nothing to maintain. The invite permissions become the
+bot's managed role; a channel or category override can still take them away, which is why the
+audit checks the channel rather than the role.
 
 Both scopes matter: `bot` joins it to the server, `applications.commands` is what lets
 slash commands appear. Missing the second is the most common cause of "the bot is online
 but has no commands".
+
+### 2.1 The three friends
+
+Each friend is a separate application: repeat §1 with its own name and token. Three things
+differ from the helper.
+
+1. **Scope is `bot` only.** Friends own no slash commands, so `applications.commands` is
+   deliberately not granted — it documents that they cannot register commands.
+2. **Message Content must be on** (Bot → **Privileged Gateway Intents**) *before* `"listen":
+   true` is set in `bots.json`. It is not part of the invite URL, and requesting it while it is
+   off closes the gateway connection with code **4014**.
+3. **Permissions stop at talking.** No Manage Threads, no Manage Messages, no Administrator.
+
+| Use | `permissions=` | Grants |
+|---|---|---|
+| friend, text only | `274878254144` | View Channels, Send Messages, Send Messages in Threads, Read Message History, Embed Links, Add Reactions, Use External Emojis |
+| friend, text + voice | `274881399872` | the same, plus Connect and Speak |
+
+```
+https://discord.com/oauth2/authorize?client_id=YOUR_FRIEND_APP_ID&scope=bot&permissions=274878254144
+```
+
+Grant them at the **category** the group talks in, not server-wide, so a friend that should only
+speak in `#general` has no permission anywhere else. A private thread inherits the parent
+channel's permissions, so the same grant is what lets a friend talk at the table.
+
+Message Content is per application and cannot be granted by a role: three friends means three
+toggles in three portal entries.
+
+**Tokens, one file each.** Each friend's file may name its token `DISCORD_TOKEN`, exactly like
+the helper's. Point `bots.json` at it and nothing has to be renamed:
+
+```json
+{ "id": "friend-a", "role": "friend", "listen": true, "env_file": ".env.frienda" }
+```
+
+Those files are read individually with `dotenv_values`, never merged into the process
+environment, so three `DISCORD_TOKEN` values cannot overwrite the helper's. The deploy-style
+`TTRPG_FRIEND_A_TOKEN` / `_FILE` variables still win if they are set.
+
+**Then prove it**, with the bot stopped so no token holds two gateway sessions:
+
+```bash
+./start-bot.sh --stop
+.venv/bin/ttrpg-chatbots-bot --friendcheck general   # channel id or name
+./start-bot.sh --background
+```
+
+```text
+friend-a: online as TerrysTopGuy#2763
+friend-a: sent to #general (1364544268609523765)
+friend-a: received 3 message(s), only from bots (last: Crusty.chan); it is listening...
+```
+
+`received N, only from bots` is success: the gateway is delivering, and the friends are
+deliberately ignoring each other's chatter. `got N events but the text was empty` means Message
+Content is off for that application. The probe deletes its own lines before exiting.
+
+### 2.2 Re-inviting an app that is already in the server
+
+Open the same URL again and approve the new permissions (you need **Manage Server**). If you
+cannot re-invite, edit the bot's managed role under **Server Settings → Roles**, or the channel
+override directly. Then check the result rather than assuming it:
+
+```bash
+./start-bot.sh --check     # which applications are configured, and which are dormant
+```
+
+and `/botcheck` in the channel the bot works in, or read the startup log — every missing
+permission is one warning line with the fix.
 
 ## 3. Find your server (guild) id
 

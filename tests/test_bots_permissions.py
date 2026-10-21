@@ -188,3 +188,27 @@ def test_findings_are_immutable_and_ordered() -> None:
     findings = _audit(ROLE_HELPER, _names(ROLE_HELPER))
     assert tuple(findings) == findings
     assert findings[0].requirement == "view_channel"
+
+
+def test_the_invite_integers_match_the_requirement_sets() -> None:
+    """The URL generator values in the docs must not drift from what the audit checks.
+
+    Published in MANUAL_TESTING.md §2 and GROUP.md §8.3. If a permission is added to a role,
+    this fails and both documents get updated with the new integer.
+    """
+    import discord
+
+    published = {
+        (ROLE_HELPER, False): 360777370624,
+        (ROLE_HELPER, True): 360780516352,
+        (ROLE_FRIEND, False): 274878254144,
+        (ROLE_FRIEND, True): 274881399872,
+    }
+    for (role, voice), expected in published.items():
+        permissions = discord.Permissions(
+            **{requirement.name: True for requirement in requirements_for(role, voice=voice)}
+        )
+        assert permissions.value == expected, (
+            f"the invite integer for {role} (voice={voice}) is now {permissions.value}; update "
+            "MANUAL_TESTING.md §2 and GROUP.md §8.3"
+        )

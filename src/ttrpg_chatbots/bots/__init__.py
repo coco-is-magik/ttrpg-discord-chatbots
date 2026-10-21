@@ -30,9 +30,11 @@ from ttrpg_chatbots.bots.roster import (
     DEFAULT_ROSTER_FILE,
     Roster,
     RosterError,
+    app_id,
     default_roster,
     load_roster,
     roster_path,
+    token_source,
 )
 
 __all__ = [
@@ -48,6 +50,7 @@ __all__ = [
     "Requirement",
     "Roster",
     "RosterError",
+    "app_id",
     "audit",
     "bots_from_records",
     "default_roster",
@@ -58,4 +61,5 @@ __all__ = [
     "requirements_for",
     "roster_path",
     "summarise",
+    "token_source",
 ]

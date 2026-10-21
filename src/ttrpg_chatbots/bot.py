@@ -389,7 +389,7 @@ async def botcheck(interaction: discord.Interaction) -> None:
 
     sections = [report(findings)]
     for spec in roster.friends:
-        sections.append(await _friend_report(interaction, spec))
+        sections.append(await _friend_report(interaction, spec, roster))
     await interaction.followup.send(_clip_text("\n\n".join(sections)), ephemeral=True)
 
 
@@ -407,20 +407,91 @@ def _audit_channels(interaction: discord.Interaction, spec) -> list:
     return [channel] if channel is not None else []
 
 
-async def _friend_report(interaction: discord.Interaction, spec) -> str:
+@command(
+    name="friendcheck",
+    description="Are the friends online, and can they send and hear?",
+)
+@app_commands.describe(send="Post one short probe from each friend in this channel")
+async def friendcheck(interaction: discord.Interaction, send: bool = False) -> None:
+    """Report each friend's connection, and optionally prove it by having them speak.
+
+    The friends share this process, so the helper can reach their clients directly: no IPC, no
+    second command surface. ``last_message`` is what a friend most recently heard, which is the
+    only honest way to prove receipt without asking a human to read the log.
+    """
+    await interaction.response.defer(thinking=True, ephemeral=True)
+    try:
+        roster = await asyncio.to_thread(load_roster)
+    except RosterError as error:
+        await _fail(interaction, error)
+        return
+
+    friends = getattr(interaction.client, "friends", {})
+    lines: list[str] = []
+    if not friends:
+        lines.append("no friend is connected: check data/bots.json and each friend's token")
+    for spec in roster.friends:
+        client = friends.get(spec.id)
+        if client is None:
+            lines.append(f"**{spec.id}** · not connected (dormant, failed or disabled)")
+            continue
+        if not client.is_ready():
+            lines.append(f"**{spec.id}** · connecting")
+            continue
+        last = getattr(client, "last_message", {})
+        delivered = getattr(client, "delivered", 0)
+        if last:
+            heard = f"heard {last['author']} in #{last['channel']}: {last['text'][:60]}"
+        elif delivered:
+            heard = f"received {delivered} message(s), none from a human yet"
+        else:
+            heard = "received nothing yet"
+        lines.append(
+            f"**{spec.id}** · online as {client.user} · "
+            f"listening={'yes' if spec.listen else 'no'} · {heard}"
+        )
+        if send:
+            lines.append(await _friend_speak(interaction, client, spec))
+
+    await interaction.followup.send(_clip_text("\n".join(lines)), ephemeral=True)
+
+
+async def _friend_speak(interaction: discord.Interaction, client, spec) -> str:
+    """Send one line as the friend, in the channel this command was run in."""
+    channel = interaction.channel
+    if channel is None:
+        return f"-# {spec.id}: there is no channel here to speak in"
+    target = client.get_channel(channel.id)
+    if target is None:
+        try:
+            target = await client.fetch_channel(channel.id)
+        except discord.HTTPException as error:
+            return f"-# {spec.id}: cannot reach this channel ({error})"
+    try:
+        await target.send(f"probe from {spec.id}")
+    except discord.HTTPException as error:
+        return f"-# {spec.id}: could not send ({error})"
+    return f"-# {spec.id}: sent a probe here"
+
+
+async def _friend_report(interaction: discord.Interaction, spec, roster) -> str:
     """Audit one friend if its member can be fetched; otherwise say why it could not be."""
     guild = interaction.guild
     if guild is None:
         return f"{spec.id}: no server, so nothing to check"
-    if spec.user_id is None:
+    try:
+        user_id = roster.app_id_for(spec)
+    except RosterError as error:
+        return f"{spec.id}: cannot read its app id ({error})"
+    if user_id is None:
         return (
-            f"{spec.id}: no user_id in bots.json, so its channel permissions cannot be checked "
-            "from here; it checks itself when it connects"
+            f"{spec.id}: no user_id in bots.json and no APP_ID in its env file, so its channel "
+            "permissions cannot be checked from here; it checks itself when it connects"
         )
     try:
-        member = guild.get_member(spec.user_id) or await guild.fetch_member(spec.user_id)
+        member = guild.get_member(user_id) or await guild.fetch_member(user_id)
     except discord.HTTPException:
-        return f"{spec.id}: not in this server yet (user_id {spec.user_id})"
+        return f"{spec.id}: not in this server yet (app id {user_id})"
     findings = audit(
         bot_name=spec.id,
         role=ROLE_FRIEND,
@@ -2866,6 +2937,14 @@ def main(argv: list[str] | None = None) -> None:
         help="validate configuration and voice support, then exit without connecting",
     )
     parser.add_argument("--version", action="store_true", help="print the version and exit")
+    parser.add_argument(
+        "--friendcheck",
+        metavar="CHANNEL",
+        help=(
+            "connect the friends only, send one message each in CHANNEL (id or name), report "
+            "what each one heard, then exit"
+        ),
+    )
     args = parser.parse_args(argv)
 
     if args.version:
@@ -2875,6 +2954,18 @@ def main(argv: list[str] | None = None) -> None:
         return
 
     discord.utils.setup_logging(level=logging.INFO)
+
+    if args.friendcheck:
+        from ttrpg_chatbots.bots.supervisor import probe_friends
+
+        try:
+            roster = load_roster()
+            lines = probe_friends(roster, channel=args.friendcheck)
+        except RosterError as error:
+            raise SystemExit(f"friendcheck: {error}") from error
+        for line in lines:
+            print(line)
+        return
     try:
         config = load_discord_config()
     except ConfigError as error:
