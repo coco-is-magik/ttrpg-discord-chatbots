@@ -20,6 +20,7 @@ from ttrpg_chatbots.bots.supervisor import (
     explain_failure,
     run,
 )
+from ttrpg_chatbots.respond import Answer
 
 
 class _Client:
@@ -47,8 +48,8 @@ def _helper() -> BotSpec:
     return BotSpec(id="ttrpg-bot", role="helper", commands=True)
 
 
-def _friend(name: str = "friend-a", *, listen: bool = True) -> BotSpec:
-    return BotSpec(id=name, role="friend", listen=listen)
+def _friend(name: str = "friend-a", *, listen: bool = True, reply: str = "off") -> BotSpec:
+    return BotSpec(id=name, role="friend", listen=listen, reply=reply)
 
 
 def _roster(*bots: BotSpec) -> Roster:
@@ -274,3 +275,139 @@ def test_a_friend_ignores_other_bots() -> None:
     assert friend.delivered == 1
     assert friend.last_delivery["bot"] == "yes"
     assert friend.last_delivery["text"] == "beep"
+
+
+class _Chat:
+    """A stand-in for FriendChat: records the question, answers without a dataset."""
+
+    def __init__(self, *, fail: BaseException | None = None) -> None:
+        self.calls: list[tuple[str, str, str | None]] = []
+        self.contexts: list[object] = []
+        self.fail = fail
+
+    def reply(
+        self,
+        text: str,
+        friend: str,
+        *,
+        speaker: str | None = None,
+        context=None,
+        addressed: bool = True,
+    ):
+        self.calls.append((text, friend, speaker))
+        self.contexts.append(context)
+        if self.fail is not None:
+            raise self.fail
+        return Answer(
+            text="hey back", source=f"reply:{friend}", detail={"tag": "social:greeting"}
+        )
+
+
+class _MentionedFriend(FriendBot):
+    """A FriendBot with a stable user object, so mentions can be tested without a gateway."""
+
+    def __init__(self, spec, *, chat=None, user=None) -> None:
+        super().__init__(spec, chat=chat)
+        self._fake_user = user or SimpleNamespace(id=1, mention="<@1>", bot=True)
+
+    @property
+    def user(self):
+        return self._fake_user
+
+
+def _mention(friend, text: str = "<@1> hey", *, mentioned: bool = True, bot_author=False):
+    message = SimpleNamespace(
+        author=SimpleNamespace(display_name="Tav", id=5, bot=bot_author),
+        channel=SimpleNamespace(name="general", id=7),
+        guild=object(),
+        content=text,
+        mentions=[friend.user] if mentioned else [],
+        replies=[],
+    )
+
+    async def reply(content: str, mention_author: bool = True) -> None:
+        message.replies.append((content, mention_author))
+
+    message.reply = reply
+    return message
+
+
+def test_a_mention_gets_a_reply_as_the_friend() -> None:
+    chat = _Chat()
+    friend = _MentionedFriend(_friend(reply="mention"), chat=chat)
+    message = _mention(friend)
+
+    asyncio.run(friend.on_message(message))
+
+    assert chat.calls == [("hey", "friend-a", "Tav")]
+    assert message.replies == [("hey back", False)]
+    assert friend.replied == 1
+    assert friend.last_reply == "hey back"
+
+
+def test_a_message_that_does_not_mention_the_friend_gets_no_reply() -> None:
+    chat = _Chat()
+    friend = _MentionedFriend(_friend(reply="mention"), chat=chat)
+
+    asyncio.run(friend.on_message(_mention(friend, "<@1> hey", mentioned=False)))
+
+    assert chat.calls == []
+    assert friend.replied == 0
+
+
+def test_a_friend_with_reply_off_stays_silent() -> None:
+    chat = _Chat()
+    friend = _MentionedFriend(_friend(reply="off"), chat=chat)
+
+    asyncio.run(friend.on_message(_mention(friend)))
+
+    assert chat.calls == []
+    assert friend.replied == 0
+
+
+def test_a_friend_never_replies_to_a_bot() -> None:
+    chat = _Chat()
+    friend = _MentionedFriend(_friend(reply="mention"), chat=chat)
+
+    asyncio.run(friend.on_message(_mention(friend, bot_author=True)))
+
+    assert chat.calls == []
+    assert friend.replied == 0
+
+
+def test_a_mention_outside_the_configured_channels_gets_no_reply() -> None:
+    chat = _Chat()
+    spec = BotSpec(
+        id="friend-a", role="friend", listen=True, reply="mention", channels=(999,)
+    )
+    friend = _MentionedFriend(spec, chat=chat)
+
+    asyncio.run(friend.on_message(_mention(friend)))
+
+    assert chat.calls == []
+
+
+def test_a_thread_under_a_configured_channel_is_allowed() -> None:
+    chat = _Chat()
+    spec = BotSpec(
+        id="friend-a", role="friend", listen=True, reply="mention", channels=(7,)
+    )
+    friend = _MentionedFriend(spec, chat=chat)
+    message = _mention(friend)
+    message.channel = SimpleNamespace(id=555, parent_id=7, name="build-thread")
+
+    asyncio.run(friend.on_message(message))
+
+    assert chat.calls
+
+
+def test_a_classifier_failure_is_logged_not_raised(caplog) -> None:
+    chat = _Chat(fail=RuntimeError("dataset on fire"))
+    friend = _MentionedFriend(_friend(reply="mention"), chat=chat)
+    message = _mention(friend)
+
+    asyncio.run(friend.on_message(message))
+
+    assert message.replies == []
+    assert friend.replied == 0
+    assert "cannot answer" in caplog.text or "dataset on fire" in caplog.text

@@ -1,0 +1,31 @@
+# Neutral replies for the friends. Wildcard templates, because no personality has been chosen:
+# every friend answers from the same plain pool, and only the account differs. Three per tag
+# so rotation can avoid repeating itself; the fallback is the honest "I don't know".
+{"id": "r-greeting-1", "character": "*", "tags": ["social:greeting"], "template": "Hey, {speaker}."}
+{"id": "r-greeting-2", "character": "*", "tags": ["social:greeting"], "template": "Hey. Good to see you."}
+{"id": "r-greeting-3", "character": "*", "tags": ["social:greeting"], "template": "Evening."}
+{"id": "r-presence-1", "character": "*", "tags": ["social:presence"], "template": "I'm around for a bit."}
+{"id": "r-presence-2", "character": "*", "tags": ["social:presence"], "template": "Yeah, I'm here."}
+{"id": "r-presence-3", "character": "*", "tags": ["social:presence"], "template": "Around, yeah. What's up?"}
+{"id": "r-thanks-1", "character": "*", "tags": ["social:thanks"], "template": "Any time."}
+{"id": "r-thanks-2", "character": "*", "tags": ["social:thanks"], "template": "No worries."}
+{"id": "r-thanks-3", "character": "*", "tags": ["social:thanks"], "template": "Sure thing, {speaker}."}
+{"id": "r-goodbye-1", "character": "*", "tags": ["social:goodbye"], "template": "See you later."}
+{"id": "r-goodbye-2", "character": "*", "tags": ["social:goodbye"], "template": "Later, {speaker}."}
+{"id": "r-goodbye-3", "character": "*", "tags": ["social:goodbye"], "template": "Catch you tomorrow."}
+{"id": "r-howareyou-1", "character": "*", "tags": ["social:howareyou"], "template": "Doing all right, thanks. You?"}
+{"id": "r-howareyou-2", "character": "*", "tags": ["social:howareyou"], "template": "Not bad. Busy day."}
+{"id": "r-howareyou-3", "character": "*", "tags": ["social:howareyou"], "template": "Fine, thanks. How about you?"}
+{"id": "r-smalltalk-1", "character": "*", "tags": ["social:smalltalk"], "template": "Not much here. You?"}
+{"id": "r-smalltalk-2", "character": "*", "tags": ["social:smalltalk"], "template": "Same as usual."}
+{"id": "r-smalltalk-3", "character": "*", "tags": ["social:smalltalk"], "template": "Quiet one."}
+{"id": "r-agreement-1", "character": "*", "tags": ["social:agreement"], "template": "Sounds good."}
+{"id": "r-agreement-2", "character": "*", "tags": ["social:agreement"], "template": "Yeah, that works."}
+{"id": "r-agreement-3", "character": "*", "tags": ["social:agreement"], "template": "Okay, {speaker}."}
+{"id": "r-apology-1", "character": "*", "tags": ["social:apology"], "template": "No harm done."}
+{"id": "r-apology-2", "character": "*", "tags": ["social:apology"], "template": "It's fine."}
+{"id": "r-apology-3", "character": "*", "tags": ["social:apology"], "template": "Don't worry about it."}
+{"id": "r-fallback-1", "character": "*", "tags": ["fallback"], "template": "I don't know about that one."}
+{"id": "r-fallback-2", "character": "*", "tags": ["fallback"], "template": "No idea, sorry."}
+{"id": "r-fallback-3", "character": "*", "tags": ["fallback"], "template": "I can't help with that."}
+{"id": "r-fallback-4", "character": "*", "tags": ["fallback"], "template": "Not something I know."}

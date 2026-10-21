@@ -716,6 +716,12 @@ spirit as the existing sheet invariants.
 | 23 | A friend with `listen` off is not nagged about the intent | `test_a_friend_that_is_not_listening_is_not_warned_about_message_content` |
 | 24 | Deliveries are counted before the "ignore bots" rule | `test_a_friend_ignores_other_bots` |
 | 25 | A listening friend records what a human said | `test_a_listening_friend_records_what_it_hears` |
+| 26 | Without a table, context changes nothing | `test_a_missing_table_means_context_changes_nothing` |
+| 27 | Context can veto a reading but never invent one | `test_the_table_vetoes_a_reading_that_cannot_follow` |
+| 28 | An addressed message is always answered | `test_a_mention_is_answered_even_when_the_friend_just_spoke` |
+| 29 | An unaddressed repeat is left alone | `test_an_unaddressed_repeat_is_left_alone` |
+| 30 | An import reports how much of the corpus it understood | `test_the_report_names_coverage_and_the_worst_labels` |
+| 31 | A thin import can be refused outright | `test_low_coverage_can_be_refused_outright` |
 
 Invariant 9 is the one most likely to rot, because it depends on two prompts staying separate
 while sharing a persona builder. It gets a scripted scene, not a snapshot: the human asks OOC
@@ -730,22 +736,40 @@ Each slice is independently useful and independently revertible, the same rule `
 for its phases. Nothing later requires rewriting earlier work. **3a and 3b are the two halves of
 `DESIGN.md` phase 3**; 4, 5 and 6 map to phases 4, 5 and 6 one for one.
 
-### 3a — "It hears you" (one friend, reactive)
-**Built already:** `bots/` — the roster, the supervisor, the permission audit and `/botcheck`.
-That was the prerequisite: four applications that can run together, with three of them dormant
-until their tokens exist, and every missing permission named instead of guessed.
+### 3a — "It hears you" (one friend, classifier, text only)
+**Built:** the roster, supervisor and permission audit above, and then the first talking slice:
 
-**New:** `utterance.py`; `memory/` (`window.py`, `facts.py`, `store.py`); `cast.py` (the
-`BotProfile` loader, ~80 lines).
-**Changed:** `llm/responder.py` (`history_for`), `llm/prompt.py` (an OOC system prompt beside
-the IC one), `conversation.py` (`respond_as` + the responder cache), `supervisor.py` (the
-friend's `on_message` stops being a placeholder), `bot.py` (`/memory`, `/remember`, `/forget`),
-`help.py`.
+- **`reply/intents.py`** — deterministic social intents (greeting, presence, thanks, goodbye,
+  how-are-you, apology, agreement, smalltalk) matched *before* compression. This was measured,
+  not guessed: `hey` scores 0.92 against its own anchor while `tell me about the guild` scores
+  0.71 against an apology, so no distance ceiling can separate smalltalk from a lore question.
+- **`examples/friends_world/`** — 9 social anchors, 28 neutral templates, and three friend
+  characters who know *only* social tags. A lore question therefore deflects honestly rather
+  than being answered with a rumour.
+- **`bots/chat.py`** — `FriendChat`, classifier-only, `max_distance=0.65` (the closest
+  non-social query measured 0.714), rotation on so a repeated greeting is not a repeated line.
+- **`reply` mode per bot** (`off` | `mention`), mention-only gating, reply counters, and
+  `/friendcheck` reporting what each friend has heard and said. `--friendcheck` still proves the
+  pipe with the bot stopped.
+- **`reply/context.py` + `reply/transitions.py`** — the room's last few turns, and a table of
+  which act plausibly follows which. Context does exactly two things: it vetoes a reading that
+  cannot follow the previous turn (`"hey, anyone around?"` after a goodbye stops being a presence
+  question), and it stays quiet rather than repeating itself when nobody is being addressed. With
+  no table, context changes nothing. See `docs/CLASSIFIER.md`.
+- **`reply/importers.py`** — reads a published dialogue-act corpus offline and writes the table.
+  Switchboard maps cleanly onto these eight moves; DailyDialog's four acts do not, and the importer
+  reports coverage instead of guessing. No corpus text is ever committed, only counts. Measured on
+  the real release: **86% of 122,646 utterances mapped, 104,871 transitions, a 1.1 KB table** —
+  numbers and caveats in `docs/CLASSIFIER.md` §6.
 
-**Done when:** a mention in an allow-listed channel gets an answer grounded in the recent window
-(twenty turns of the fifty kept) and the seat's facts; the leakage scene passes; a friend with
-`listen` off never requests a privileged intent (a test asserts it); every turn logs one cost
-line.
+**Deferred until a model is chosen:** `utterance.py`, `memory/`, `cast.py`, an OOC prompt, and
+the LLM responder cache. The classifier needs none of them, and building them now would be
+guessing at a personality that has not been written. They stay specified in §3, §4 and §7 for
+the day a model is added — and the classifier stays the fallback when it fails.
+
+**Done when:** a mention in `#general` gets a short neutral reply from one friend; a lore
+question gets an honest "I don't know"; two identical greetings do not produce two identical
+lines; and nobody answers a bot, an unmentioned message, or a friend with `reply: off`.
 
 ### 3b — "It has a rhythm" (one friend, initiative)
 **New:** `social/` (`policy.py`, `boundaries.py`, `promises.py`, `room.py`); `ambient/`
@@ -851,9 +875,11 @@ Each has a recommendation, because a plan with no opinion is a menu.
 2. **One bot account or four?** **Decided: four.** `ttrpg-bot` stays the silent helper — commands,
    threads, sheet, dice, voice — and three separate applications are the friends. The helper is
    not a seat, holds no personality, and never appears in the group as a person.
-3. **Which model for ambient?** Recommended: **local first** (free, private, no budget anxiety),
-   with a paid model for table mode where quality shows. A paid ambient model is fine too, but
-   then the daily ceiling matters from day one.
+3. **Which model for ambient?** **Deferred by decision.** The classifier answers first, with the
+   social-intent lexicon in front of it, because the pipe matters more than the prose and because
+   this is also the fallback when a model fails — so it is built as a first-class responder, not
+   a stub. A hosted model can be added later behind the same `Answer` seam; nothing built now is
+   thrown away by that.
 4. **Chatter level.** Recommended starting point: one group message per ten minutes, quiet hours
    23:00–08:00, no initiative into a cold room. That is *quieter* than `DESIGN.md`'s 4–9 minutes
    for a single bot; err quiet, and loosen after a week if it feels dead.

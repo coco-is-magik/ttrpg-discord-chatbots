@@ -22,6 +22,10 @@ ROLE_HELPER = "helper"
 ROLE_FRIEND = "friend"
 ROLES = (ROLE_HELPER, ROLE_FRIEND)
 
+# When a friend answers. "off" is the default so a newly added bot is silent until it is
+# deliberately switched on; "mention" answers only an @mention.
+REPLY_MODES = ("off", "mention")
+
 HELPER_TOKEN_ENV = "DISCORD_TOKEN"
 FRIEND_TOKEN_PREFIX = "TTRPG_"
 FRIEND_TOKEN_SUFFIX = "_TOKEN"
@@ -54,6 +58,7 @@ class BotSpec:
     channels: tuple[int, ...] = ()
     listen: bool = False
     commands: bool = False
+    reply: str = "off"
     enabled: bool = True
 
     def __post_init__(self) -> None:
@@ -70,6 +75,15 @@ class BotSpec:
             )
         if not isinstance(self.env_file, str):
             raise BotSpecError(f"bot {identifier!r}: env_file must be a path string")
+        if self.reply not in REPLY_MODES:
+            raise BotSpecError(
+                f"bot {identifier!r}: reply must be one of {list(REPLY_MODES)}, got {self.reply!r}"
+            )
+        if self.role == ROLE_HELPER and self.reply != "off":
+            raise BotSpecError(
+                f"bot {identifier!r}: the helper never replies to messages; put the conversation "
+                "on a friend"
+            )
         if self.role == ROLE_HELPER and self.listen:
             raise BotSpecError(
                 f"bot {identifier!r}: the helper does not listen; keep it commands-only so it "
@@ -183,6 +197,7 @@ def bots_from_records(records, *, source: str = "bots") -> tuple[BotSpec, ...]:
                     channels=tuple(cleaned),
                     listen=bool(record.get("listen", False)),
                     commands=bool(record.get("commands", role.strip().lower() == ROLE_HELPER)),
+                    reply=str(record.get("reply", "off")).strip().lower(),
                     enabled=bool(record.get("enabled", True)),
                 )
             )

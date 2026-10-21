@@ -1,0 +1,6 @@
+# The three friends, as people. `known_tags` gates what they can answer; right now they
+# know only social intents, so a lore question deflects honestly instead of inventing.
+# `name` is a placeholder until the friends are actually named; templates avoid it.
+{"id": "friend-a", "name": "Friend A", "known_tags": ["social:greeting", "social:presence", "social:thanks", "social:goodbye", "social:howareyou", "social:smalltalk", "social:agreement", "social:apology"], "tags": [], "fallback_tag": "fallback"}
+{"id": "friend-b", "name": "Friend B", "known_tags": ["social:greeting", "social:presence", "social:thanks", "social:goodbye", "social:howareyou", "social:smalltalk", "social:agreement", "social:apology"], "tags": [], "fallback_tag": "fallback"}
+{"id": "friend-c", "name": "Friend C", "known_tags": ["social:greeting", "social:presence", "social:thanks", "social:goodbye", "social:howareyou", "social:smalltalk", "social:agreement", "social:apology"], "tags": [], "fallback_tag": "fallback"}

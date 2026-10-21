@@ -440,6 +440,7 @@ async def friendcheck(interaction: discord.Interaction, send: bool = False) -> N
             continue
         last = getattr(client, "last_message", {})
         delivered = getattr(client, "delivered", 0)
+        replied = getattr(client, "replied", 0)
         if last:
             heard = f"heard {last['author']} in #{last['channel']}: {last['text'][:60]}"
         elif delivered:
@@ -448,7 +449,8 @@ async def friendcheck(interaction: discord.Interaction, send: bool = False) -> N
             heard = "received nothing yet"
         lines.append(
             f"**{spec.id}** · online as {client.user} · "
-            f"listening={'yes' if spec.listen else 'no'} · {heard}"
+            f"listening={'yes' if spec.listen else 'no'} · reply={spec.reply} · {heard}"
+            + (f" · replied {replied}" if replied else "")
         )
         if send:
             lines.append(await _friend_speak(interaction, client, spec))

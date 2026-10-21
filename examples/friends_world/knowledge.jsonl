@@ -1,0 +1,12 @@
+# Social anchors. Unlike the lore dataset, `text` is not a fact: it is a typical way someone
+# says this, chosen so the compression distance to a real message is small. Templates never
+# use {fact} for these, because there is nothing to report -- the reply is the whole point.
+{"id": "k-social-greeting", "text": "Hey, hello there.", "tags": ["social:greeting"]}
+{"id": "k-social-greeting-morning", "text": "Morning. How is it going?", "tags": ["social:greeting"]}
+{"id": "k-social-presence", "text": "Anyone around tonight?", "tags": ["social:presence"]}
+{"id": "k-social-thanks", "text": "Thanks, appreciate it.", "tags": ["social:thanks"]}
+{"id": "k-social-goodbye", "text": "See you later, bye.", "tags": ["social:goodbye"]}
+{"id": "k-social-howareyou", "text": "How are you doing?", "tags": ["social:howareyou"]}
+{"id": "k-social-smalltalk", "text": "What's up? Not much here.", "tags": ["social:smalltalk"]}
+{"id": "k-social-agreement", "text": "Sounds good, okay.", "tags": ["social:agreement"]}
+{"id": "k-social-apology", "text": "Sorry about that, my mistake.", "tags": ["social:apology"]}

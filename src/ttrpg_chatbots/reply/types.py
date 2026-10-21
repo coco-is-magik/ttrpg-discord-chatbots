@@ -146,7 +146,12 @@ class Classification:
 
 @dataclass(frozen=True)
 class Reply:
-    """A rendered in-character line and where every part of it came from."""
+    """A rendered in-character line and where every part of it came from.
+
+    ``detail`` carries anything the caller should log but not say: the acts this message
+    could have been, the turn it followed, the sequence it landed in. It is metadata, so
+    it never affects the text.
+    """
 
     text: str
     character: str
@@ -155,6 +160,7 @@ class Reply:
     template_id: str
     distance: float | None = None
     known: bool = True
+    detail: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.text.strip():

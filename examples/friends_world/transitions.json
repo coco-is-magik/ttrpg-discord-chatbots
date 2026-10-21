@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "source": "authored",
+  "smoothing": 1.0,
+  "note": "AUTHORED, NOT MEASURED. These counts describe how the eight social moves tend to follow one another in ordinary conversation; they were written by hand as a starting point, not counted from a corpus. The table is only used to reject a reading that is impossible in context (an apology in reply to a goodbye), so the shape matters far more than the numbers. To replace it with measured data, see docs/CLASSIFIER.md: run the importer against Switchboard and write the result here with \"source\": \"switchboard\".",
+  "counts": {
+    "social:greeting": {
+      "social:greeting": 60,
+      "social:presence": 30,
+      "social:howareyou": 25,
+      "social:smalltalk": 15,
+      "social:thanks": 6,
+      "social:goodbye": 3,
+      "social:agreement": 2
+    },
+    "social:howareyou": {
+      "social:howareyou": 40,
+      "social:smalltalk": 30,
+      "social:agreement": 12,
+      "social:thanks": 6,
+      "social:presence": 3,
+      "social:goodbye": 3,
+      "social:greeting": 2
+    },
+    "social:presence": {
+      "social:presence": 25,
+      "social:smalltalk": 20,
+      "social:greeting": 15,
+      "social:howareyou": 8,
+      "social:agreement": 4,
+      "social:goodbye": 3,
+      "social:thanks": 2
+    },
+    "social:thanks": {
+      "social:agreement": 25,
+      "social:smalltalk": 15,
+      "social:goodbye": 10,
+      "social:thanks": 3,
+      "social:howareyou": 2,
+      "social:greeting": 2,
+      "social:presence": 2
+    },
+    "social:goodbye": {
+      "social:goodbye": 30,
+      "social:thanks": 12,
+      "social:greeting": 5,
+      "social:smalltalk": 5,
+      "social:agreement": 4
+    },
+    "social:apology": {
+      "social:agreement": 20,
+      "social:smalltalk": 10,
+      "social:thanks": 4,
+      "social:goodbye": 4,
+      "social:howareyou": 2,
+      "social:greeting": 2
+    },
+    "social:agreement": {
+      "social:smalltalk": 25,
+      "social:agreement": 15,
+      "social:thanks": 10,
+      "social:goodbye": 10,
+      "social:presence": 6,
+      "social:greeting": 3,
+      "social:howareyou": 3
+    },
+    "social:smalltalk": {
+      "social:smalltalk": 50,
+      "social:howareyou": 15,
+      "social:agreement": 15,
+      "social:thanks": 8,
+      "social:goodbye": 8,
+      "social:greeting": 6,
+      "social:presence": 5
+    }
+  }
+}

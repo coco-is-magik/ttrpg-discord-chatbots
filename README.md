@@ -5,6 +5,9 @@ A private Discord table: one human and three bots who are both **people in the g
 character, and a conversational group that plays House Games on game night and chats in
 between. The humans do the choosing; the machines do the arithmetic and the remembering.
 
+**Where we are right now**: [`docs/STATUS.md`](docs/STATUS.md) — a dated snapshot of what runs,
+what is verified, what is uncommitted, and the next three actions.
+
 **Where it is going**, and the rules it holds itself to:
 [`docs/DESIGN.md`](docs/DESIGN.md) — principles, cast, architecture, phases with exit
 criteria, risks, open decisions.
@@ -15,6 +18,10 @@ at once.
 
 **The group, as a design**: [`docs/GROUP.md`](docs/GROUP.md) — what a bot remembers, who speaks
 and when, the ambient rhythm, the table's scene and floor, and the contract for each.
+
+**The classifier, and the corpora behind it**: [`docs/CLASSIFIER.md`](docs/CLASSIFIER.md) — the
+three inputs, what context is allowed to do, which published dialogue-act corpora fit and on what
+licence, and how to import one.
 
 **Testing it against Discord by hand**: [`docs/MANUAL_TESTING.md`](docs/MANUAL_TESTING.md).
 
@@ -176,9 +183,17 @@ each with its own token, and a friend with no token is *dormant* rather than an 
 ```
 
 `/botcheck` audits the helper's own permissions in the channel it is run in; every friend audits
-itself when it connects, and logs each missing permission with the setting that fixes it. The
-friend applications are wired but silent: the listener and the personality are the next slices,
-described in [`docs/GROUP.md`](docs/GROUP.md).
+itself when it connects, and logs each missing permission with the setting that fixes it.
+
+**friend-a answers when mentioned**, using the compression classifier — deterministic social
+intents (greeting, presence, thanks, goodbye, apology, agreement, smalltalk) in front of tagged
+knowledge, with no model and no API key. It also knows what was just said: a small act-transition
+table vetoes a reading that cannot follow the previous turn, and an unaddressed remark is left
+alone rather than answered twice. `friend-b` and `friend-c` are connected and listening but
+switched off (`reply: off`). Personalities are deliberately unwritten: every line is plain and
+short, and the fallback is an honest "I don't know" rather than an invented one. The design, and
+what waits for a model, is in [`docs/GROUP.md`](docs/GROUP.md); the corpus and licensing picture
+is in [`docs/CLASSIFIER.md`](docs/CLASSIFIER.md).
 
 To prove the whole pipe — tokens, gateway, Message Content, sending, receiving — with the bot
 stopped:
@@ -328,7 +343,9 @@ the `reply` extra is installed.
 
 ### Datasets
 
-`data/` and `datasets/` are git-ignored (they will be large).
+`corpora/` (downloaded corpora and what is derived from them) and `data/` (this install's runtime
+state) are git-ignored, because both grow to sizes that do not belong in a clone. Only
+`corpora/README.md` is tracked, so the folder exists and carries its own instructions.
 `examples/demo_world/` is a committed toy world, used by the tests and the demo
 above. Three JSONL files plus an optional manifest:
 
@@ -740,7 +757,11 @@ src/ttrpg_chatbots/   package source: cli.py, config.py, bot.py, respond.py, con
                       dice/, audio/, tts/, voice/
 tests/                pytest suite: CLI, config, bot, bots, seats, sheets, character, stt,
                       reply, llm, dice, audio, tts, voice, secrets guard
-examples/demo_world/  committed toy dataset; data/ and datasets/ are git-ignored
+examples/demo_world/  committed toy dataset; examples/friends_world/ is the classifier's
+corpora/              downloaded corpora and what is derived from them: git-ignored except
+                      its README, which has the commands (37 MiB for Switchboard)
+data/                 this install's runtime state: characters, seats, bots.json, logs.
+                      git-ignored; nothing in it is reproducible from a clone
 .env.example          committed credential template; .env itself is ignored
 pyproject.toml        packaging, dependencies, entry points, pytest and ruff config
 ```

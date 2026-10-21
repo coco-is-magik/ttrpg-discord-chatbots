@@ -5,8 +5,9 @@ answer to "who already replied". Two processes would need IPC to answer that.
 
 The helper is today's :class:`~ttrpg_chatbots.bot.TtrpgBot`, unchanged: commands only, default
 intents, no listener. A friend is a :class:`discord.Client` with message content when it is
-configured to listen, **no command tree**, and an ``on_ready`` that audits its own permissions.
-Until the listener lands it replies to nothing: it connects, checks itself, and says so once.
+configured to listen, **no command tree**, an ``on_ready`` that audits its own permissions, and a
+listener that answers when it is mentioned -- through the classifier, with the last few turns as
+context. A friend with ``reply: off`` connects, checks itself, and says nothing.
 
 Failures are isolated per bot. One friend whose token is wrong must not take the sheet portal
 down with it, so each client gets its own task and its own explanation.
@@ -16,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -24,6 +26,8 @@ import discord
 from ttrpg_chatbots.bots.identity import ROLE_FRIEND, BotSpec
 from ttrpg_chatbots.bots.permissions import audit, log_findings
 from ttrpg_chatbots.bots.roster import Roster, RosterError
+from ttrpg_chatbots.reply.context import DEFAULT_WINDOW, Context, Turn
+from ttrpg_chatbots.reply.intents import match_intent
 
 LOGGER = logging.getLogger(__name__)
 
@@ -41,15 +45,17 @@ class Entry:
 
 
 class FriendBot(discord.Client):
-    """One of the people in the group: no commands, and nothing to say yet."""
+    """One of the people in the group: no commands, and a line only when addressed."""
 
-    def __init__(self, spec: BotSpec) -> None:
+    def __init__(self, spec: BotSpec, *, chat=None) -> None:
         intents = discord.Intents.default()
         # Requesting an ungranted intent makes Discord refuse the connection (4014), which is
         # why this follows the spec rather than always being on.
         intents.message_content = bool(spec.listen)
         super().__init__(intents=intents)
         self.spec = spec
+        # The classifier (or, later, a model) that turns a message into a line.
+        self.chat = chat
         # What this friend last heard, so a probe (or /friendcheck) can prove receipt without
         # reading the log. Volatile on purpose: memory arrives in the next slice.
         self.last_message: dict[str, str] = {}
@@ -58,21 +64,50 @@ class FriendBot(discord.Client):
         # "the gateway sent nothing" apart from "we deliberately dropped bot chatter".
         self.last_delivery: dict[str, str] = {}
         self.delivered = 0
+        self.replied = 0
+        self.stayed_quiet = 0
+        self.last_reply = ""
+        # The last few turns as this friend heard them. Volatile and per-process on purpose:
+        # durable memory is a later slice, and a restart starting from silence is correct.
+        self.history: deque[Turn] = deque(maxlen=DEFAULT_WINDOW)
+
+    def context(self) -> Context:
+        """What was said before the message currently being answered."""
+        return Context.of(self.history, window=DEFAULT_WINDOW)
+
+    def _remember_human(self, message: discord.Message, content: str) -> None:
+        """Record a human turn, with the act it looked like at the time."""
+        self.history.append(
+            Turn(
+                speaker=getattr(message.author, "display_name", "?"),
+                text=content,
+                act=match_intent(content),
+                is_bot=False,
+            )
+        )
+
+    def _remember_reply(self, text: str, act: str | None) -> None:
+        self.history.append(Turn(speaker=self.spec.id, text=text, act=act, is_bot=True))
 
     async def on_ready(self) -> None:
         LOGGER.info("%s connected as %s", self.spec.id, self.user)
-        if self.spec.listen:
-            LOGGER.info("%s is listening (replies arrive in the next slice)", self.spec.id)
-        else:
+        if not self.spec.listen:
             LOGGER.info(
                 "%s is connected but not listening; set \"listen\": true once Message Content "
                 "is enabled for this application",
                 self.spec.id,
             )
+        elif self.spec.reply == "off":
+            LOGGER.info(
+                "%s is listening but replies are off; set \"reply\": \"mention\" to let it talk",
+                self.spec.id,
+            )
+        else:
+            LOGGER.info("%s is listening and answers when mentioned", self.spec.id)
         await self.check_permissions()
 
     async def on_message(self, message: discord.Message) -> None:
-        """Record what was heard. Replying is the next slice; this proves the pipe works."""
+        """Record what was heard, then answer if this friend is addressed."""
         if not self.spec.listen:
             return
         content = message.content or ""
@@ -94,6 +129,7 @@ class FriendBot(discord.Client):
             return
         self.received += 1
         self.last_message = dict(self.last_delivery)
+        self._remember_human(message, content)
         mentioned = self.user is not None and self.user in getattr(message, "mentions", ())
         if mentioned:
             LOGGER.info(
@@ -111,6 +147,81 @@ class FriendBot(discord.Client):
                 self.last_message["channel"],
                 content[:100],
             )
+
+        if self._should_reply(message):
+            await self._answer(message)
+
+    def _should_reply(self, message: discord.Message) -> bool:
+        """Only an explicit mention, in a configured channel, when switched on."""
+        if self.spec.reply != "mention" or self.chat is None:
+            return False
+        if getattr(message, "guild", None) is None:
+            return False
+        if self.user is None or self.user not in getattr(message, "mentions", ()):
+            return False
+        allowed = self.spec.channels
+        if not allowed:
+            return True
+        channel = getattr(message, "channel", None)
+        channel_id = getattr(channel, "id", None)
+        parent_id = getattr(channel, "parent_id", None)  # a thread inherits its channel's grant
+        return channel_id in allowed or parent_id in allowed
+
+    def _query(self, message: discord.Message) -> str:
+        """The message with the mention removed, so "hey @Friend" is just "hey"."""
+        text = message.content or ""
+        for mention in (self.user.mention, f"<@!{self.user.id}>"):
+            text = text.replace(mention, " ")
+        return " ".join(text.split()) or "hey"
+
+    async def _answer(self, message: discord.Message) -> None:
+        """Ask the classifier off the event loop, then reply in the same channel.
+
+        The friend is told what came before, so an ambiguous move is read in context, and
+        it is told it was addressed -- a mention always earns a line. Silence is only for
+        remarks nobody aimed at anybody.
+        """
+        text = self._query(message)
+        speaker = getattr(message.author, "display_name", None)
+        context = self.context()
+        try:
+            answer = await asyncio.to_thread(
+                self.chat.reply,
+                text,
+                self.spec.id,
+                speaker=speaker,
+                context=context,
+                addressed=True,
+            )
+        except Exception as error:  # noqa: BLE001 - a bad dataset must not kill the bot
+            LOGGER.warning("%s could not answer: %s", self.spec.id, error)
+            return
+        if answer is None:
+            self.stayed_quiet += 1
+            LOGGER.info(
+                "%s stayed quiet after %s (%s)",
+                self.spec.id,
+                self.last_message["author"],
+                context.sequence() or "no acts",
+            )
+            return
+        try:
+            await message.reply(answer.text, mention_author=False)
+        except discord.HTTPException as error:
+            LOGGER.warning("%s could not send its reply: %s", self.spec.id, error)
+            return
+        self.replied += 1
+        self.last_reply = answer.text
+        self._remember_reply(answer.text, answer.detail.get("tag"))
+        after = answer.detail.get("after")
+        LOGGER.info(
+            "%s replied to %s (%s, %s%s)",
+            self.spec.id,
+            self.last_message["author"],
+            answer.source,
+            answer.detail.get("tag") or "fallback",
+            f" after {after}" if after else "",
+        )
 
     async def check_permissions(self) -> None:
         """Audit this bot against what a friend needs, in the channels it is told to use."""
@@ -169,12 +280,22 @@ def build_entries(
     guild_id: int | None = None,
     create_helper=None,
     create_friend=None,
+    create_chat=None,
 ) -> tuple[Entry, ...]:
     """Clients for every enabled bot that has a token, plus a log line for every dormant one."""
     if create_helper is None:
         # Imported here, not at module scope: bot.py imports this package for /botcheck.
         from ttrpg_chatbots.bot import create_bot as create_helper
-    make_friend = create_friend if create_friend is not None else FriendBot
+    make_friend = create_friend
+
+    chat = None
+    if any(spec.is_friend and spec.reply != "off" for spec in roster.enabled()):
+        if create_chat is not None:
+            chat = create_chat()
+        else:
+            from ttrpg_chatbots.bots.chat import FriendChat
+
+            chat = FriendChat()
 
     entries: list[Entry] = []
     for spec in roster.enabled():
@@ -186,7 +307,12 @@ def build_entries(
                 spec.token_var,
             )
             continue
-        client = create_helper(guild_id) if spec.is_helper else make_friend(spec)
+        if spec.is_helper:
+            client = create_helper(guild_id)
+        elif make_friend is not None:
+            client = make_friend(spec)
+        else:
+            client = FriendBot(spec, chat=chat)
         # The helper learns its own spec here, which is how on_ready knows which channels to
         # audit; FriendBot already holds it from __init__.
         client.spec = spec
@@ -211,6 +337,7 @@ def run(
     guild_id: int | None = None,
     create_helper=None,
     create_friend=None,
+    create_chat=None,
 ) -> None:
     """Run every configured bot. One bot keeps the old blocking ``run`` path."""
     if not roster.helpers:
@@ -221,6 +348,7 @@ def run(
         guild_id=guild_id,
         create_helper=create_helper,
         create_friend=create_friend,
+        create_chat=create_chat,
     )
     LOGGER.info(
         "starting %d bot(s): %s",

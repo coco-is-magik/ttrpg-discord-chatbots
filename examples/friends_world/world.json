@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "name": "The Group",
+  "note": "Social intents for the three friends, not a world of facts. Each knowledge entry is an *anchor*: a representative utterance the classifier can match, never a claim a template repeats. Neutral on purpose: no personality has been chosen yet, so every line is plain and short."
+}

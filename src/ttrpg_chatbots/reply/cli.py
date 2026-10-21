@@ -9,6 +9,7 @@ from pathlib import Path
 
 from ttrpg_chatbots.reply import compression
 from ttrpg_chatbots.reply.datasets import load_world
+from ttrpg_chatbots.reply.importers import CorpusError, from_jsonl, from_switchboard
 from ttrpg_chatbots.reply.replier import Replier
 from ttrpg_chatbots.reply.types import Classification, ReplyError, World
 
@@ -29,8 +30,29 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--ask", metavar="TEXT", help="answer a question in character")
     parser.add_argument("--classify", metavar="TEXT", help="show the tag ranking only")
     parser.add_argument(
-        "--validate", action="store_true", help="check the dataset, print a summary"
+        "--import-acts",
+        type=Path,
+        metavar="FILE",
+        help="count act transitions in a labelled corpus and write a transitions.json",
     )
+    parser.add_argument(
+        "--format",
+        choices=("switchboard", "jsonl"),
+        default="switchboard",
+        help="corpus layout for --import-acts (default: switchboard)",
+    )
+    parser.add_argument(
+        "--out",
+        type=Path,
+        help="where --import-acts writes its table (default: <data>/transitions.json)",
+    )
+    parser.add_argument(
+        "--min-coverage",
+        type=float,
+        default=0.0,
+        help="refuse --import-acts below this fraction of labelled utterances",
+    )
+    parser.add_argument("--validate", action="store_true", help="check the dataset, print a summary")
     parser.add_argument("--list-characters", action="store_true")
     parser.add_argument("--json", action="store_true", help="machine-readable output")
     return parser.parse_args(argv)
@@ -137,7 +159,13 @@ def _report_reply(reply, world: World, *, as_json: bool) -> int:
         )
         return 0
 
-    origin = f"{reply.tag} via {reply.knowledge_id}" if reply.tag else "no knowledge"
+    origin = (
+        f"{reply.tag} via {reply.knowledge_id}"
+        if reply.tag and reply.knowledge_id
+        else f"{reply.tag} (intent)"
+        if reply.tag
+        else "no knowledge"
+    )
     distance = "" if reply.distance is None else f", d={reply.distance:.3f}"
     state = "" if reply.known else " (deflected)"
     print(f"{world.character(reply.character).name} [{origin}{distance}{state}]:")
@@ -158,9 +186,38 @@ def _list_characters(world: World, *, as_json: bool) -> int:
     return 0
 
 
+def _import_acts(args: argparse.Namespace) -> int:
+    """Build a transition table from a corpus. Runs before any dataset is loaded."""
+    reader = from_switchboard if args.format == "switchboard" else from_jsonl
+    try:
+        result = reader(args.import_acts)
+        model = result.model(min_coverage=args.min_coverage)
+    except (CorpusError, ReplyError, OSError) as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 2
+    out = args.out or (args.data / "transitions.json")
+    try:
+        written = model.save(out)
+    except ReplyError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 2
+    print(result.report())
+    print(f"wrote {written}")
+    if result.coverage < 0.5:
+        print(
+            "WARNING: less than half of the corpus was understood; the table is thin. "
+            "Extend the label mapping before trusting it.",
+            file=sys.stderr,
+        )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """Entry point for the ``ttrpg-chatbots-reply`` console script."""
     args = _parse_args(argv)
+
+    if args.import_acts is not None:
+        return _import_acts(args)
 
     try:
         world = load_world(args.data)
@@ -190,6 +247,10 @@ def main(argv: list[str] | None = None) -> int:
             return _report_classification(replier.classify(args.classify), as_json=args.json)
         character = args.character or world.characters[0].id
         reply = replier.reply(args.ask, character, speaker=args.speaker)
+        if reply is None:
+            # Only reachable with a context, which this CLI does not supply; kept honest.
+            print("(nothing to say)")
+            return 0
         return _report_reply(reply, world, as_json=args.json)
     except (ReplyError, ValueError) as error:
         print(f"error: {error}", file=sys.stderr)

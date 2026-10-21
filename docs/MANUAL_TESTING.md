@@ -143,6 +143,43 @@ friend-a: received 3 message(s), only from bots (last: Crusty.chan); it is liste
 deliberately ignoring each other's chatter. `got N events but the text was empty` means Message
 Content is off for that application. The probe deletes its own lines before exiting.
 
+### 2.3 One friend answers (classifier only)
+
+`friend-a` has `"reply": "mention"`. In the channel listed in its `channels`, mention it:
+
+```text
+Tav    @TerrysTopGuy hey
+```
+```text
+TerrysTopGuy   Hey, Tav.
+```
+
+Then try the edges, which are the point of the design:
+
+| Message | Expected |
+|---|---|
+| `@TerrysTopGuy anyone around tonight?` | a presence reply (`I'm around for a bit.`) |
+| `@TerrysTopGuy thanks` | a short acknowledgement |
+| `@TerrysTopGuy what is the sunken crown?` | "I don't know" — friends know no lore yet |
+| `@TerrysTopGuy hey` twice | two different greetings, not the same line |
+| `hey, @friend-b` | silence: `friend-b` has `reply: off` |
+| a message that mentions no friend | silence |
+
+`/friendcheck` shows each friend's mode, what it last heard, and how many lines it has sent.
+To hear from the others, set `"reply": "mention"` on `friend-b` or `friend-c` and restart — one at
+a time is deliberate while the classifier's voice is still being tuned.
+
+The classifier is also the fallback when a model is configured and fails, so it is not a stub.
+This command reproduces exactly what the bot runs — note the ceiling, which is what turns a lore
+question into an honest refusal instead of a greeting:
+
+```bash
+.venv/bin/ttrpg-chatbots-reply --data examples/friends_world --character friend-a \
+  --max-distance 0.65 --ask "what is the sunken crown?"
+# Friend A [no knowledge, d=0.870 (deflected)]:
+# I can't help with that.
+```
+
 ### 2.2 Re-inviting an app that is already in the server
 
 Open the same URL again and approve the new permissions (you need **Manage Server**). If you
