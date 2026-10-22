@@ -144,6 +144,7 @@ def test_setup_hook_publishes_every_command_to_the_guild(monkeypatch) -> None:
         "unlock",
         "unmerit",
         "voices",
+        "voicetest",
         "willpower",
     ]
 

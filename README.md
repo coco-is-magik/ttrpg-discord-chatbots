@@ -179,7 +179,24 @@ Once it is running, the bot answers these slash commands:
 | `/say text:… character:…` | speak arbitrary text in that character's voice |
 | `/stop` | clear the queue mid-sentence |
 
-### More than one bot
+### What he says out loud
+
+Speech needs a different string from text: `$250 watch` is read as a symbol by a synthesiser and
+said as *two hundred fifty dollars* by a person. `tts/spoken/` closes that gap in five modules
+(money, symbols, numbers, abbreviations, acronyms) with a fixed order, wrapped around every
+engine where it is built, so no caller can forget it. The voice itself is pinned in
+`examples/friends_world/voices.lock.json` -- digests, two sources, provenance -- so a rebuilt box
+can fetch it back and prove it got the same voice.
+
+```bash
+ttrpg-chatbots-tts --spoken '$250 watch'   # two hundred fifty dollars watch
+ttrpg-chatbots-tts --verify-voice          # is the cached voice the one we chose?
+ttrpg-chatbots-tts --fetch-voice           # get it back, source by source
+```
+
+Details: `docs/SPEECH.md`.
+
+## More than one bot
 
 `ttrpg-bot` is the **helper**: every command above belongs to it, and it never reads an ordinary
 message, so it needs no privileged intent. The three **friends** are separate Discord

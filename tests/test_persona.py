@@ -263,26 +263,16 @@ def test_the_other_friends_do_not_borrow_his_voice() -> None:
 def test_no_template_is_ever_cold_to_the_person_being_answered() -> None:
     # Firm opinions about the world are the point. Contempt for the human is not, and a template
     # is the wrong place to discover it.
-    banned = (
-        "stupid",
-        "idiot",
-        "shut up",
-        "nobody cares",
-        "don't care",
-        "do not care about you",
-        "boring",
-        "whatever you say",
-        "obviously",
-        "you're wrong",
-        "you are wrong",
-    )
+    # The wording lives in the harness now, so this test and `ttrpg-chatbots-persona` cannot drift
+    # apart -- and it is person-directed, so advice about a thing is not mistaken for contempt.
+    from ttrpg_chatbots.bots.persona_harness import _cold_phrases
+
     world = _chat().world
 
     offenders = [
-        (template.id, word)
+        (template.id, phrase)
         for template in world.responses
-        for word in banned
-        if word in template.template.lower()
+        for phrase in _cold_phrases(template.template)
     ]
 
     assert not offenders, f"hostile wording: {offenders}"
@@ -341,3 +331,35 @@ def test_style_is_not_applied_to_the_neutral_friends() -> None:
 
     assert answer is not None
     assert answer.text[:1].isupper()
+
+
+def test_the_voice_is_tuned_by_ear_not_by_guess() -> None:
+    """The voice and pace that were actually chosen, so a silent edit is a failing test.
+
+    Three rounds of listening: ryan at 1.15 was "too fast, not deep enough"; ryan at 1.2 with pitch
+    0.93 was "a hair too slow, and the pitch sounds a bit off"; the answer was a naturally deep
+    voice at a pace close to its own. Measured median F0: ryan 144 Hz, joe 98 Hz.
+    """
+    persona = _roster()["friend-a"].persona
+    assert persona is not None and persona.voice is not None
+    assert persona.voice.voice == "en_US-joe-medium", "deepest American male piper voice measured"
+    assert persona.voice.speed == 1.05, "piper's length scale: above 1 is slower"
+    assert persona.voice.pitch == 1.0, "no resampling: a shifted voice was heard as off"
+
+
+def test_the_pitch_lever_actually_lowers_the_voice() -> None:
+    """A casting rule with a pitch is not the same audio as one without.
+
+    The check is on the *converted* audio, not on ``duration_s``: shifting the declared sample rate
+    makes the clip's own duration look shorter while the resampled output is longer. That inversion
+    is exactly why this test exists.
+    """
+    from ttrpg_chatbots.audio.pcm import PcmAudio, shift_pitch, to_discord_pcm
+
+    clip = PcmAudio(pcm=b"\x01\x00" * 22050, sample_rate=22050, channels=1)
+    deeper = shift_pitch(clip, 0.93)
+
+    assert deeper.sample_rate < clip.sample_rate, "a lower declared rate plays back deeper"
+    assert deeper.pcm == clip.pcm, "no sample is touched, so nothing is degraded"
+    assert len(to_discord_pcm(deeper)) > len(to_discord_pcm(clip)), "and it plays back longer"
+    assert shift_pitch(clip, 1.0) is clip, "neutral is free"

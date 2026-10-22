@@ -32,6 +32,27 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--voice", metavar="NAME", help="voice name (piper; same as TTRPG_TTS_VOICE)"
     )
     parser.add_argument("--json", action="store_true", help="machine-readable output")
+    parser.add_argument(
+        "--spoken",
+        metavar="TEXT",
+        help="print the spoken form of TEXT (what a voice reads) and stop",
+    )
+    parser.add_argument(
+        "--verify-voice",
+        action="store_true",
+        help="check the cached voice against its lock file",
+    )
+    parser.add_argument(
+        "--fetch-voice",
+        action="store_true",
+        help="download the locked voice, trying each source until one verifies",
+    )
+    parser.add_argument(
+        "--lock",
+        type=Path,
+        metavar="FILE",
+        help="voice lock file (default: <world>/voices.lock.json)",
+    )
     return parser.parse_args(argv)
 
 
@@ -52,6 +73,51 @@ def _report_available(*, as_json: bool) -> int:
         mark = "ready" if row.available else "unavailable"
         print(f"{row.name:<12}{mark:<13}{row.detail}")
     return 0
+
+
+def _world_dir() -> Path:
+    """Where the world's data lives: the same variable the bot uses."""
+    return Path(os.environ.get("TTRPG_FRIENDS_DATA", "examples/friends_world"))
+
+
+def _lock_path(explicit: Path | None) -> Path:
+    return explicit or _world_dir() / "voices.lock.json"
+
+
+def _run_lock(args) -> int | None:
+    """Handle the two voice-lock commands, or return None to carry on."""
+    if not (args.verify_voice or args.fetch_voice):
+        return None
+    from ttrpg_chatbots.tts import lock as lock_module
+    from ttrpg_chatbots.tts.engines.piper_engine import voice_dir
+
+    path = _lock_path(args.lock)
+    try:
+        pinned = lock_module.load(path)
+    except lock_module.LockError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 2
+    directory = voice_dir()
+    report = (
+        lock_module.fetch(pinned, directory) if args.fetch_voice else lock_module.verify(pinned, directory)
+    )
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "voice": report.voice,
+                    "ok": report.ok,
+                    "fetched": report.fetched,
+                    "problems": report.problems,
+                    "directory": str(directory),
+                    "lock": str(path),
+                },
+                indent=2,
+            )
+        )
+    else:
+        print(report.summary())
+    return 0 if report.ok else 1
 
 
 def _report_speech(synthesizer, clip, *, elapsed_s: float, as_json: bool, out: Path | None) -> int:
@@ -88,6 +154,16 @@ def _report_speech(synthesizer, clip, *, elapsed_s: float, as_json: bool, out: P
 def main(argv: list[str] | None = None) -> int:
     """Entry point for the ``ttrpg-chatbots-tts`` console script."""
     args = _parse_args(argv)
+
+    if args.spoken is not None:
+        from ttrpg_chatbots.tts.spoken import say
+
+        print(say(args.spoken))
+        return 0
+
+    handled = _run_lock(args)
+    if handled is not None:
+        return handled
 
     if args.list:
         return _report_available(as_json=args.json)

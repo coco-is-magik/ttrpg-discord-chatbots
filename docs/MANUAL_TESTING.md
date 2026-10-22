@@ -271,6 +271,109 @@ Log lines that correspond to each pass:
 
 Any of the four is a reason to re-open the decomposition rather than tune the phrasebook.
 
+### 2.8a Speech text (no Discord needed)
+
+The spoken form is separate from the text he types, and it is testable without a voice channel.
+
+```bash
+ttrpg-chatbots-tts --spoken '$250 watch'          # two hundred fifty dollars watch
+ttrpg-chatbots-tts --spoken '10% off'             # ten percent off
+ttrpg-chatbots-tts --spoken 'born in 1984'        # born in nineteen eighty-four
+ttrpg-chatbots-tts --spoken 'Dr. Smith vs. the NCAA'   # Doctor Smith versus the N C A A
+```
+
+Then hear it: `/voicetest action:speak text:it cost $250 in 1984`. If he reads the symbol aloud,
+the wrapper is missing from the build path -- see `docs/SPEECH.md` §1.
+
+| Check | Pass | If it fails |
+|---|---|---|
+| `$250` | *two hundred fifty dollars* | `money` is not running before `symbols` |
+| `10%` | *ten percent* | `symbols` is not running before `numbers` |
+| `1984` | *nineteen eighty-four* | the year range in `numbers` |
+| plain prose | unchanged | something is matching too greedily |
+
+### 2.8b The voice lock (no Discord needed)
+
+```bash
+ttrpg-chatbots-tts --verify-voice     # verified
+ttrpg-chatbots-tts --fetch-voice      # fetches anything missing, source by source
+```
+
+To prove a rebuild: move the model aside and fetch it back.
+
+```bash
+mv ~/.cache/ttrpg-chatbots/models/piper/en_US-joe-medium.onnx* /tmp/
+ttrpg-chatbots-tts --verify-voice     # "... is missing", exit 1
+ttrpg-chatbots-tts --fetch-voice      # fetches and verifies
+ttrpg-chatbots-tts --verify-voice     # verified
+```
+
+### 2.8c His material, without Discord
+
+The harness reads every line he can say and checks it against the brief. It needs no gateway and no
+voice, and it exits 1 on failure, so it is the quickest way to know whether a content edit broke
+something.
+
+```bash
+ttrpg-chatbots-persona             # the report
+ttrpg-chatbots-persona --quiet     # PASS, or the failing check with the offending line
+```
+
+Twelve checks: coverage per interest, every subject in his own voice, every anchor naming its own
+subject, stances fitting the budget, the register (no beats), length, warmth, catchphrases,
+distinctness, life depth, and stories having points. Expected today: `PASS TopGuy  subjects 39  lines
+91  median_words 5  two_sentence_pct 7.6`.
+
+| Check | Pass | If it fails |
+|---|---|---|
+| exit code 0 and `PASS` | every check is ok | the failing line is printed; the check name says which rule |
+| `median_words 5` | his lines are short | something long was added to a phrasebook |
+| `subjects 39` | ten interests, four each | a topic lost its items |
+
+Then ask him the things the material covers, in `#general`: `@TerrysTopGuy do you like hockey?`,
+`what about the playoffs?`, `how are the rangers doing?`, `do you fish?`, `who invented the
+computer?`, `what is the plot of dune?` (that last one should hedge, not bluff).
+
+### 2.9 His voice (friend-a, in a voice channel)
+
+There was no way to hear a friend until now: only the helper could join a call. `/voicetest` makes a
+**friend** join, speak and leave, using his own casting rule rather than the default voice.
+
+Join a voice channel yourself first — he joins *yours*.
+
+```text
+/voicetest action:join                     → friend-a: joined General
+/voicetest action:speak                    → friend-a: spoke 6.9s at 22050 Hz
+/voicetest action:speak text:there he is    → says exactly that
+/voicetest action:leave                    → friend-a: left General
+```
+
+**Speak twice.** That is the check that matters most, because it used to be impossible: the second
+`action:speak` must make sound. The first version of this command worked exactly once — see
+`PERSONA.md` §3d for the cause (`cleanup` from `__del__` wiping the shared queue). If the second one
+is silent, the log says `queued` instead of `spoke`, and `started` stays at 1.
+
+What pass sounds like — judge by ear, not by stopwatch:
+
+| Expected | If it is wrong |
+|---|---|
+| a **deep American bass**, unhurried, cheerful — Santa Claus who played hockey | `engine`/`voice` wrong in `voices.jsonl`; the command reports what it resolved |
+| about **6.9 s** for a twenty-word line (`joe-medium`, length scale 1.05, no pitch shift) | change `speed` in `examples/friends_world/voices.jsonl` **and** `data/bots.json`: **higher is slower**, 1.0 neutral. Restart to reload |
+| deep enough? | `data/samples/topguy.wav` is the rejected ryan-high take (144 Hz); `topguy-tuned.wav` is current (joe, 98 Hz); `topguy-alt-norman.wav` is the deeper alternative (95 Hz). `data/samples/voices/manifest.json` has the measured F0 of all 13 candidates |
+| silence after roughly the spoken length, then idle | playback never started: check the log line, it reports bytes, sample rate, engine and channel |
+| `could not join … Check Connect and Speak` | grant Connect + Speak to that bot in that channel; the friends already have both at guild level |
+
+Two facts worth knowing:
+
+* He joins **self-deafened**, because he does not listen to voice yet. An undeafened bot that hears
+  nothing is a mystery to debug later; a deafened one is honest.
+* The model lives in the TTS cache (`~/.cache/ttrpg-chatbots/models/piper/en_US-joe-medium.onnx`,
+  about 60 MB), not in the repository. A fresh box downloads it on first use unless
+  `TTRPG_TTS_OFFLINE=1`, in which case the command says the voice is missing rather than guessing.
+
+The same command is the seed of GROUP.md slice 6 (one voice per seat, queues, barge-in): it already
+resolves per-friend casting, so the next step is letting a *reply* speak, not just a test line.
+
 ### 2.8 Memory, and knowing things (friend-a, whole ladder on)
 
 Two checks that used to be impossible. Both are about the *gate* rather than the wording, so the

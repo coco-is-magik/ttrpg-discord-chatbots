@@ -28,6 +28,24 @@ _APHORISM = (
     "there it is",
 )
 
+#: Short trailing sentences that are backchannel, not punchlines. "ha. same" and "ugh. yeah" are how
+#: people mirror a complaint, and they were being rejected as beats -- measured on mirror.json, where
+#: two of six reaction lines were flagged. A beat is a flourish that closes a topic; these hand the
+#: turn back, which is the opposite.
+_BACKCHANNEL = (
+    "same",
+    "same here",
+    "yeah",
+    "right",
+    "exactly",
+    "fair",
+    "true",
+    "agreed",
+    "makes sense",
+    "i hear that",
+    "tell me about it",
+)
+
 
 def _sentences(text: str) -> list[str]:
     parts = text.replace("!", ".").replace("?", ".").split(".")
@@ -47,7 +65,14 @@ def read(text: str, *, story: bool = False) -> Fit:
     cleaned = " ".join((text or "").lower().split())
     sentences = _sentences(cleaned)
     if not story:
-        if len(sentences) >= 2 and len(sentences[-1].split()) <= 5:
+        # A trailing *question* is a hand-back, not a punchline: "morning. how is the fence going?" is
+        # one of the patterns the ladder is built around, and it was being rejected as a beat because
+        # the last sentence was short. The old corpus's beats were statements ("a bulb i replaced last
+        # month"), so the rule is about statements that land and stop.
+        trailing_question = bool(re.search(r"\?[^?]*$", (text or "").strip()))
+        last = sentences[-1].strip(" ,") if sentences else ""
+        backchannel = last in _BACKCHANNEL
+        if len(sentences) >= 2 and len(last.split()) <= 5 and not trailing_question and not backchannel:
             reasons.append("ends on a beat")
         for phrase in _EXPOSITION:
             if phrase in cleaned:

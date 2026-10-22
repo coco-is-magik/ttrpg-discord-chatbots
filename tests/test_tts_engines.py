@@ -11,6 +11,7 @@ from ttrpg_chatbots.tts import (
     resolve_synthesizer,
 )
 from ttrpg_chatbots.tts.engines import EngineSpec, espeak_engine, piper_engine
+from ttrpg_chatbots.tts.spoken import unwrap
 from ttrpg_chatbots.tts.synthesizer import clean_text
 
 from tts_support import FakeSynthesizer, fake_spec, tone
@@ -57,7 +58,7 @@ class TestResolve:
 
         chosen = resolve_synthesizer("second", specs=specs)
 
-        assert chosen is second
+        assert unwrap(chosen) is second
         assert (second.loads, first.loads) == (1, 0)
 
     def test_unknown_forced_engine_lists_the_choices(self) -> None:
@@ -69,7 +70,7 @@ class TestResolve:
         specs = [fake_spec("first", first), fake_spec("second", second)]
         monkeypatch.setenv("TTRPG_TTS_ENGINE", "second")
 
-        assert resolve_synthesizer(specs=specs) is second
+        assert unwrap(resolve_synthesizer(specs=specs)) is second
 
     def test_auto_picks_the_first_available_engine(self) -> None:
         unavailable, ready = FakeSynthesizer(), FakeSynthesizer()
@@ -78,7 +79,7 @@ class TestResolve:
             fake_spec("b", ready),
         ]
 
-        assert resolve_synthesizer(specs=specs) is ready
+        assert unwrap(resolve_synthesizer(specs=specs)) is ready
         assert unavailable.loads == 0
 
     def test_no_usable_engine_lists_every_reason(self) -> None:

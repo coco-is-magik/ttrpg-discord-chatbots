@@ -12,7 +12,7 @@
         "{hook}",
         "{hook}, {invite}",
         "been {hook} most of the day",
-        "{hook}. how about you"
+        "{hook}. how about you?"
       ]
     },
     "casual": {
@@ -21,7 +21,7 @@
         "{hook}",
         "{hook}. you?",
         "{short}",
-        "not much. {hook}"
+        "not much, just {hook}"
       ]
     },
     "dry": {
@@ -42,9 +42,9 @@
         ]
       },
       "variants": [
-        "{hook}. how is {fact_value}",
-        "{hook}. how is {fact_value} doing",
-        "{hook}. {fact_value} alright"
+        "{hook}. how is {fact_value}?",
+        "{hook}. how is {fact_value} going?",
+        "{hook}. {fact_value} alright?"
       ]
     },
     "event": {

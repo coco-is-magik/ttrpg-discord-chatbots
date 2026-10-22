@@ -42,7 +42,7 @@ in data:
 | Jolly, cheerful | exclamations, "Hah!", "Now the day is looking up" | greetings, thanks, agreement |
 | Ten subjects | `known_tags` + one `topic:` tag per subject, each with two anchors | `characters.jsonl`, `knowledge.jsonl` |
 | Catchphrases | "honest to god", "don't get me started", "i'll say it louder" | `r-a-topic-1/4/3` |
-| Deep American bass, jolly | `piper` `en_US-ryan-high` at 0.92× — **unverified, nobody has listened yet** | `voices.jsonl` |
+| Deep American bass, jolly | `piper` `en_US-joe-medium`, length scale **1.05** — chosen by measuring 13 candidates: 98 Hz median F0 against ryan-high's 144 Hz. See §3d | `voices.jsonl` |
 | Types like a person | lower case, dropped apostrophes, no full stop, 5% fast-typing slips | `persona.style` → `reply/style.py` |
 
 **Not the model of him, and worth saying:** the account is `TerrysTopGuy`; the person is `TopGuy`;
@@ -65,7 +65,7 @@ if a persona appears on either of them before that is a decision.
   "topics": ["topic:hockey"],     // enforced: must be a tag in the dataset AND in known_tags
   "signature": ["honest to god"],      // enforced: must appear in one of their templates
   "voice": {                      // enforced: must match a casting rule exactly
-    "engine": "piper", "voice": "en_US-ryan-high", "speed": 0.92,
+    "engine": "piper", "voice": "en_US-joe-medium", "speed": 1.05,
     "description": "free text, for humans"
   },
   "style": {                      // enforced: renders every line they say
@@ -208,9 +208,197 @@ So `KnowledgeItem.text` does the matching, `KnowledgeItem.reply` does the talkin
 renders `reply` when it exists and `text` otherwise. Lore items never set `reply` and behave
 exactly as before.
 
+## 3d. Hearing him
+
+`/voicetest action:join` (join a voice channel yourself first), then `action:speak`, then
+`action:leave`. He joins **self-deafened**, because he does not listen to voice yet. The model lives in
+the TTS cache, not the repository.
+
+### The two numbers
+
+| Lever | Where | Direction | Now |
+|---|---|---|---|
+| `speed` | piper's length scale | **higher is slower** | `1.05` |
+| `pitch` | resampling, applied after the engine | **lower is deeper** | `1.0` — off |
+
+`pitch` exists (see `audio/pcm.py::shift_pitch`) and works, but it is **not used**: it is a resample, so
+it shifts tempo along with pitch and colours the timbre. Heard in the channel as *"pitching the voice
+sounds a bit off"*, which is the honest verdict on a phase-vocoder-less transposition. The lever stays
+for a voice that needs it; the fix for "not deep enough" was a deeper voice.
+
+### Three rounds of listening, and the measurement that ended it
+
+| Round | Setting | Verdict |
+|---|---|---|
+| 1 | ryan-high, 1.15 | *"a bit too fast and not deep or confident enough"* |
+| 2 | ryan-high, 1.2 + pitch 0.93 | *"a hair too slow, pitching sounds a bit off"* |
+| 3 | **joe-medium, 1.05, no pitch** | naturally deep, pace close to its own |
+
+Round 2's problem was visible in the numbers before it was audible: the resample stretched the clip
+7.5% and moved the timbre, on a voice that was already the *highest* of every candidate. So instead of
+guessing at names, all the American male piper voices were rendered on the same sentence and their
+median fundamental frequency measured (autocorrelation over voiced frames, 60–350 Hz):
+
+| Voice | Median F0 | Line length at neutral | Peak |
+|---|---|---|---|
+| **`en_US-norman-medium`** | **95.0 Hz** | 6.8 s | 14,930 |
+| **`en_US-joe-medium`** ← chosen | **98.2 Hz** | 6.9 s | **22,765** |
+| `en_US-john-medium` | 98.9 Hz | 9.8 s | 9,004 |
+| `en_US-kusal-medium` | 105.0 Hz | 6.7 s | — |
+| `en_US-danny-low` | 106.0 Hz | 6.9 s | — |
+| `en_US-hfc_male-medium` | 109.7 Hz | 7.1 s | — |
+| `en_US-mike-medium` | 123.2 Hz | 6.4 s | — |
+| `en_US-bryce-medium` | 126.0 Hz | 8.6 s | — |
+| `en_US-arctic-medium` | 129.7 Hz | 7.1 s | — |
+| `en_US-l2arctic-medium` | 138.7 Hz | 8.3 s | — |
+| `en_US-sam-medium` | 140.4 Hz | 8.5 s | — |
+| `en_US-ryan-high` (was) | **144.1 Hz** | 6.1 s | 20,309 |
+| `en_US-lessac-high` | 193.4 Hz | 7.0 s | — |
+
+Three things this settles:
+
+* **The complaint was accurate.** ryan-high was the highest-pitched of thirteen candidates, not a
+  deep voice at all — the name promised more than the model delivers.
+* **Depth is not a quality tier.** The deepest voices are all `medium`; the two `high` models measured
+  the *highest*. There is no deep high-quality American male in piper, so "deep" and "120 MB model"
+  were never the same choice.
+* **joe over norman** despite being 3 Hz higher: nearly the same depth, and a markedly stronger
+  presence (22,765 peak against 14,930), which is what "confident" sounds like. Norman remains the
+  one-line alternative.
+
+Depth is measured, not judged: `data/samples/voices/manifest.json` holds every candidate's numbers,
+and the rendering script is reproducible in three lines.
+
+### Hearing the alternatives
+
+All saying the same twenty-word line, all git-ignored:
+
+| File | What it is |
+|---|---|
+| `data/samples/topguy-tuned.wav` | **current**: joe-medium at 1.05 |
+| `data/samples/topguy-alt-norman.wav` | norman-medium at 1.05 — 3 Hz deeper, quieter |
+| `data/samples/voices/en_US-joe-medium.wav` | every candidate at **neutral** pace, for comparison |
+| `data/samples/voices/manifest.json` | the measured F0 table |
+
+Switching voice is one edit in two places (`examples/friends_world/voices.jsonl` and the persona's
+`voice` block), then a restart. A test fails if the two disagree.
+
+### Keeping him, not just choosing him
+
+The model is 63 MB in a cache, so `examples/friends_world/voices.lock.json` pins it: size, SHA-256
+and MD5 per file, two independent sources, the CC0 provenance, and the five steps to rebuild from
+nothing.
+
+```bash
+ttrpg-chatbots-tts --verify-voice    # is the cached voice the one we chose?
+ttrpg-chatbots-tts --fetch-voice     # get it back, source by source
+```
+
+If every mirror ever disappears, joe is finetuned from `en_US-lessac-medium` -- recorded in the
+lock's provenance as the one-hop fallback. See `docs/SPEECH.md` §2.
+
+### What he says is not what he types
+
+`$250 watch` was read as *dollar sign two hundred fifty watch*. Speech has its own text form now
+(`tts/spoken/`), so he types the symbols and says the words: *two hundred fifty dollars watch*.
+Check any line without synthesising it:
+
+```bash
+ttrpg-chatbots-tts --spoken 'Dr. Smith paid $1,200 in 1984'
+```
+
+
+
+* **The speed was backwards.** Piper's `speed` is a length scale — 1.0 is neutral, **higher is
+  slower** — so the original 0.92 was making him *quicker*, the opposite of "unhurried".
+* **A bare cast is not his voice.** `VoiceCast()` with no directory resolves to the built-in narrator,
+  so `/voicetest` would have played a stranger. `FriendVoice` loads the world's `voices.jsonl`, and a
+  test asserts friend-a resolves to `piper` / `en_US-joe-medium` / >1.0 while friend-b (no rule)
+  gets the default.
+
+### The one that made him speak exactly once
+
+`DiscordAudioSource.cleanup()` cleared the **shared** `VoicePlayer`. discord.py calls `cleanup()` at
+the end of *every* stream, and the `AudioPlayer` that ended it is garbage collected exactly when the
+next one starts (`discord/player.py` calls `cleanup` from `__del__`) — so the audio queued for the
+*next* clip was deleted before it could be read. The player outlives the source; `cleanup` now
+releases nothing, and only `FriendVoice` drops the queue. Two tests hold it: one at the source level,
+one walking speak → stream ends → speak again.
+
+### Listening without Discord
+
+Rendered samples on the box, all saying the same twenty-word line:
+
+| File | What it is |
+|---|---|
+| `data/samples/topguy.wav` | the **first** setting (1.15, no pitch) — the baseline that was rejected |
+| `data/samples/topguy-tuned.wav` | **current**: speed 1.2, pitch 0.93 |
+| `data/samples/topguy-pitch-090.wav` | 0.90 — noticeably heavier |
+| `data/samples/topguy-pitch-096.wav` | 0.96 — closer to neutral |
+
+Any line, any setting, without the bot:
+
+```bash
+TTRPG_TTS_VOICE=en_US-joe-medium .venv/bin/ttrpg-chatbots-tts --say "your text" \
+  --engine piper --voice en_US-joe-medium --out /tmp/try.wav
+```
+
+Judge it by ear: deep American bass, cheerful, about 6.9 s for a twenty-word line at the current
+setting.
+
+## 5a. Proving it: `ttrpg-chatbots-persona`
+
+Reviewing 50 lines by eye cannot tell you that his opinions run out after one question, or that a
+quarter of his lines end on a punchline. Both were true of the old corpus, and both are numbers, so
+there is a harness (`bots/persona_harness.py`) with **twelve checks** over the whole material:
+every phrasebook line, every subject he claims, every story and plan.
+
+```bash
+ttrpg-chatbots-persona              # the full report
+ttrpg-chatbots-persona --quiet      # verdict and failures only, exit 1 on failure
+ttrpg-chatbots-persona --json       # machine-readable
+```
+
+```
+ok   coverage                 every interest has 3+ things to say
+ok   subjects_have_replies    every subject says something in his own voice
+ok   anchors_name_their_subject every question finds its own subject
+ok   fits_the_budget          every stance opens inside 12 words
+ok   register                 nothing lands on a beat or explains itself
+ok   length                   median under 18 words, nothing over 30
+ok   short_form               social lines do not stack up statements
+ok   warmth                   no line is cold to the human
+ok   signatures               every catchphrase is really in his mouth
+ok   distinct_lines           no phrasebook repeats itself
+ok   life_depth               his day has enough in it to keep talking
+ok   stories_land             every story has a point to arrive at
+
+PASS  TopGuy  subjects 39  lines 91  median_words 5  two_sentence_pct 7.6  distinct_pct 96.2
+```
+
+Against the old corpus: 7 words median but **51%** two-sentence lines and **29%** ending on a
+punchline. Now: 5 words median, **7.6%** two sentences, and no beats at all. The suite asserts the
+whole report passes, so a content edit that breaks any of it fails the tests and names the line.
+
+### What the harness caught that review did not
+
+| Finding | Mechanism |
+|---|---|
+| **Nine legacy lines had no `reply`** -- so the anchor text itself was spoken: *"You take only what you need and you thank the animal"* | `subjects_have_replies` |
+| **Four topics had two things to say**, so the second question about hockey repeated or hedged | `coverage` |
+| **Eight stances were one long sentence** over the twelve-word substance budget, so `render/trim` could not shorten them and *"do you like hockey?"* stopped answering at all | `fits_the_budget` |
+| **Two anchors named nothing** -- *"Why do measure twice?"*, *"Is a bad shot cruel?"* -- so they were unreachable however good the reply was | `anchors_name_their_subject` |
+| **A generic slot value was a trap**: `"his work"` made *"rough day at work"* match Terry Davis | `subject` routing test |
+| **Three catchphrases were not in his mouth** after the rewrite | `signatures` |
+| **`explain` had `{fact}` twice** in one family -- variety on paper only | `distinct_lines` |
+
+Two of those were the *gate* being wrong rather than the data, and both were fixed in
+`decide/persona_fit.py`: a trailing **question** is a hand-back, not a punchline (*"morning. how is
+the fence?"*), and **backchannel** is not a beat (*"ha. same"*, *"ugh. yeah"*).
+
 ## 6. What is still missing
 
-- **A voice that has been heard.** `en_US-ryan-high` is a guess from the piper voice names; no
+- **A voice that has been *settled*.** `en_US-joe-medium` was picked by measurement and heard once;
   model is installed here and the friends have no audio path until `GROUP.md` slice 6.
 - **A model.** With a language model the persona becomes a system prompt and the pool becomes
   examples, which is a different (and richer) mechanism. This file describes what holds *without*

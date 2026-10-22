@@ -72,9 +72,9 @@
         ]
       },
       "variants": [
-        "morning. how is {fact_value}",
-        "hey. how is {fact_value} doing",
-        "there he is. {fact_value} alright"
+        "morning. how is {fact_value} doing?",
+        "hey. how is {fact_value}?",
+        "there he is. {fact_value} alright?"
       ]
     }
   }

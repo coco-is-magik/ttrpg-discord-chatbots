@@ -31,6 +31,8 @@ from ttrpg_chatbots.reply.style import Style
 
 MAX_SPEED = 3.0
 MIN_SPEED = 0.1
+MIN_PITCH = 0.5
+MAX_PITCH = 2.0
 
 
 class PersonaError(ValueError):
@@ -48,6 +50,7 @@ class VoiceSpec:
     engine: str
     voice: str
     speed: float = 1.0
+    pitch: float = 1.0
     description: str = ""
 
     def __post_init__(self) -> None:
@@ -61,9 +64,17 @@ class VoiceSpec:
             raise PersonaError(
                 f"a voice speed must be between {MIN_SPEED} and {MAX_SPEED}, got {self.speed}"
             )
+        if isinstance(self.pitch, bool) or not isinstance(self.pitch, (int, float)):
+            raise PersonaError("a voice pitch must be a number")
+        if not MIN_PITCH <= float(self.pitch) <= MAX_PITCH:
+            raise PersonaError(
+                f"a voice pitch must be between {MIN_PITCH} and {MAX_PITCH} "
+                f"(1.0 unchanged, lower is deeper), got {self.pitch}"
+            )
 
     def describe(self) -> str:
-        return f"{self.engine}:{self.voice} at {self.speed:g}x"
+        pitch = "" if self.pitch == 1.0 else f", pitch {self.pitch:g}"
+        return f"{self.engine}:{self.voice} at {self.speed:g}x{pitch}"
 
 
 @dataclass(frozen=True)
@@ -148,6 +159,7 @@ class Persona:
                     engine=engine,
                     voice=voice_name,
                     speed=voice_record.get("speed", 1.0),
+                    pitch=voice_record.get("pitch", 1.0),
                     description=description,
                 )
             except PersonaError as error:

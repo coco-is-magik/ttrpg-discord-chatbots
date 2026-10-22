@@ -81,6 +81,17 @@ def resolve_synthesizer(
 
 
 def _load(spec: EngineSpec) -> SpeechSynthesizer:
+    """Build the engine and wrap it so no caller can forget the spoken form.
+
+    Wrapping at the single place engines are built, rather than at each call site: there are three
+    ways to reach an engine and only one of them gets remembered.
+    """
+    from ttrpg_chatbots.tts.spoken import wrap
+
+    return wrap(_build(spec))
+
+
+def _build(spec: EngineSpec) -> SpeechSynthesizer:
     synthesizer = spec.build()
     try:
         synthesizer.load()

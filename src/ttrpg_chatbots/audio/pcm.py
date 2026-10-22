@@ -67,6 +67,33 @@ class PcmAudio:
         )
 
 
+def shift_pitch(clip: PcmAudio, factor: float) -> PcmAudio:
+    """Deepen a clip by resampling it, with no extra dependency.
+
+    ``factor`` is the pitch ratio: 1.0 changes nothing, 0.9 is roughly two semitones down. No samples
+    are touched at all -- the *declared* sample rate is lowered, so the same audio is stretched when
+    it is converted for playback, and stretching is what lowers pitch. Duration grows by ``1/factor``.
+
+    The direction is worth stating because it reads backwards: a *higher* declared rate would mean
+    "this audio was recorded faster", which compresses it and raises the pitch. Measured while
+    building this: declaring 23710 Hz for 22050 Hz audio produced 178,552 bytes of Discord PCM
+    against 191,992 for the untouched clip -- shorter and higher, the opposite of the brief.
+
+    The honest trade: this is a pitch-and-tempo shift, not a phase-vocoder transposition, so a lower
+    voice also speaks more slowly. That suits a brief asking for "deep and unhurried"; a voice that
+    should be deep but *quick* needs the engine's own rate raised to compensate.
+    """
+    if not 0.5 <= factor <= 2.0:
+        raise ValueError(f"pitch factor must be between 0.5 and 2.0, got {factor}")
+    if factor == 1.0:
+        return clip
+    return PcmAudio(
+        pcm=clip.pcm,
+        sample_rate=max(1, int(round(clip.sample_rate * factor))),
+        channels=clip.channels,
+    )
+
+
 def to_discord_pcm(clip: PcmAudio) -> bytes:
     """Resample and channel-convert a clip into Discord's wire format."""
     data = clip.pcm

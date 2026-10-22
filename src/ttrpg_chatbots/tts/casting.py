@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 from ttrpg_chatbots import jsonl
-from ttrpg_chatbots.audio.pcm import PcmAudio
+from ttrpg_chatbots.audio.pcm import PcmAudio, shift_pitch
 from ttrpg_chatbots.tts import engines
 from ttrpg_chatbots.tts.engines import espeak_engine, piper_engine
 from ttrpg_chatbots.tts.synthesizer import SpeechSynthesizer, SynthesizerUnavailable
@@ -33,6 +33,8 @@ DEFAULT_MAX_LOADED = 4
 ESPEAK_WPM = 165
 
 MAX_SPEED = 3.0
+MIN_PITCH = 0.5
+MAX_PITCH = 2.0
 MAX_VOLUME = 2.0
 
 
@@ -55,12 +57,17 @@ class VoiceProfile:
 
     ``speed`` is the engine's length scale (1.0 normal, lower is faster). It is
     meaningful for piper and mapped to words-per-minute for espeak.
+
+    ``pitch`` is applied *after* the engine, by resampling, so it works for every engine and needs no
+    extra dependency: 1.0 is unchanged and lower is deeper. See
+    :func:`ttrpg_chatbots.audio.pcm.shift_pitch` for the trade it makes.
     """
 
     engine: str | None = None
     voice: str | None = None
     speed: float = 1.0
     volume: float = 1.0
+    pitch: float = 1.0
 
     def __post_init__(self) -> None:
         if self.engine is not None and not self.engine.strip():
@@ -76,11 +83,17 @@ class VoiceProfile:
             raise ValueError(f"speed must be in (0, {MAX_SPEED}], got {self.speed}")
         if not 0.0 < self.volume <= MAX_VOLUME:
             raise ValueError(f"volume must be in (0, {MAX_VOLUME}], got {self.volume}")
+        if not MIN_PITCH <= self.pitch <= MAX_PITCH:
+            raise ValueError(
+                f"pitch must be between {MIN_PITCH} and {MAX_PITCH} (1.0 is unchanged, "
+                f"lower is deeper), got {self.pitch}"
+            )
 
     def describe(self) -> str:
         engine = self.engine or "auto"
         voice = self.voice or "engine default"
-        return f"{engine}:{voice} speed={self.speed:g} volume={self.volume:g}"
+        pitch = "" if self.pitch == 1.0 else f" pitch={self.pitch:g}"
+        return f"{engine}:{voice} speed={self.speed:g} volume={self.volume:g}{pitch}"
 
 
 @dataclass(frozen=True)
@@ -219,6 +232,7 @@ def _rule(record: Mapping[str, Any], identifier: str, where: str) -> VoiceRule:
                 voice=_text(record, "voice", where),
                 speed=_number(record, "speed", where, 1.0),
                 volume=_number(record, "volume", where, 1.0),
+                pitch=_number(record, "pitch", where, 1.0),
             ),
             characters=frozenset(_texts(record, "characters", where)),
             tags=frozenset(_texts(record, "tags", where)),
@@ -331,7 +345,13 @@ SynthesizerFactory = Callable[[VoiceProfile], SpeechSynthesizer]
 
 
 def default_factory(profile: VoiceProfile) -> SpeechSynthesizer:
-    """Build the engine a profile asks for, never a substitute."""
+    """Build the engine a profile asks for, never a substitute, always speaking the spoken form."""
+    from ttrpg_chatbots.tts.spoken import wrap
+
+    return wrap(_engine_for(profile))
+
+
+def _engine_for(profile: VoiceProfile) -> SpeechSynthesizer:
     engine_name = profile.engine or _first_available_engine()
     if engine_name == piper_engine.NAME:
         return piper_engine.PiperSynthesizer(
@@ -386,7 +406,13 @@ class VoiceCast:
         return self._directory.resolve(speaker)
 
     def synthesize(self, text: str, speaker: Speaker) -> PcmAudio:
-        return self._engine(self.profile_for(speaker)).synthesize(text)
+        profile = self.profile_for(speaker)
+        clip = self._engine(profile).synthesize(text)
+        if profile.pitch == 1.0:
+            return clip
+        # Applied here rather than in the engines: a voice is defined by the casting rule, so every
+        # consumer (a command, a reply, a rendered sample) hears the same person.
+        return shift_pitch(clip, profile.pitch)
 
     def loaded_profiles(self) -> tuple[VoiceProfile, ...]:
         return tuple(self._loaded)

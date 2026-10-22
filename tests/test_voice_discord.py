@@ -34,30 +34,38 @@ def test_padding_keeps_the_stream_open_with_silence() -> None:
     assert source.read() == SILENT
 
 
-def test_cleanup_stops_playback_and_releases_sources() -> None:
+def test_cleanup_leaves_the_shared_queue_alone() -> None:
+    """cleanup must not touch the player: it is called once per stream, the player outlives them.
+
+    This test used to assert the opposite (that cleanup dropped the queue), which is what made him
+    speak exactly once -- see the docstring on DiscordAudioSource.cleanup.
+    """
     player = VoicePlayer()
     queued = FakeSource([FRAME])
     player.enqueue(queued)
 
     DiscordAudioSource(player).cleanup()
 
-    assert queued.closes == 1
-    assert player.is_idle()
+    assert queued.closes == 0, "a finished stream does not close the next clip"
+    assert not player.is_idle(), "the queued clip is still there to play"
 
 
 def test_play_in_hands_the_source_to_the_voice_client() -> None:
     class FakeVoiceClient:
         def __init__(self) -> None:
             self.played = []
+            self.after = "unset"
 
-        def play(self, source) -> None:
+        def play(self, source, *, after=None) -> None:
             self.played.append(source)
+            self.after = after
 
     client = FakeVoiceClient()
     player = VoicePlayer()
     player.enqueue(FakeSource([FRAME]))
 
-    source = play_in(client, player)
+    source = play_in(client, player, after=lambda error: None)
 
     assert client.played == [source]
     assert isinstance(source, DiscordAudioSource)
+    assert callable(client.after), "the caller is told when the stream ends"

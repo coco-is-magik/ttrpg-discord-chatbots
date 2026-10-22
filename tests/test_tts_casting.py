@@ -16,6 +16,7 @@ from ttrpg_chatbots.tts.casting import (
     load_voice_directory,
 )
 from ttrpg_chatbots.tts.engines import espeak_engine, piper_engine
+from ttrpg_chatbots.tts.spoken import SpokenSynthesizer, unwrap
 from ttrpg_chatbots.tts.synthesizer import SynthesizerUnavailable
 
 from reply_support import DEMO_WORLD
@@ -397,17 +398,23 @@ class TestVoiceCast:
 
 
 class TestDefaultFactory:
+    """The factory builds the engine a profile asks for, wrapped so it speaks the spoken form."""
+
     def test_a_piper_profile_builds_piper(self) -> None:
         engine = default_factory(
             VoiceProfile(engine="piper", voice="en_US-lessac-medium", speed=0.9)
         )
-        assert isinstance(engine, piper_engine.PiperSynthesizer)
+        assert isinstance(unwrap(engine), piper_engine.PiperSynthesizer)
         assert engine.name == "piper"
+
+    def test_every_built_engine_is_wrapped_for_speech(self) -> None:
+        """Wrapping at the build site is what makes it unforgettable: no caller has to remember."""
+        assert isinstance(default_factory(VoiceProfile(engine="piper", voice="x")), SpokenSynthesizer)
 
     @pytest.mark.parametrize("speed,expected", [(1.0, 165), (0.2, 300), (3.0, 80)])
     def test_espeak_speed_maps_to_words_per_minute(self, speed: float, expected: int) -> None:
         engine = default_factory(VoiceProfile(engine="espeak-ng", voice="en", speed=speed))
-        assert isinstance(engine, espeak_engine.EspeakSynthesizer)
+        assert isinstance(unwrap(engine), espeak_engine.EspeakSynthesizer)
         assert engine.words_per_minute == expected
 
     def test_an_unknown_engine_is_refused(self) -> None:
@@ -416,4 +423,9 @@ class TestDefaultFactory:
 
     def test_an_unpinned_profile_uses_the_first_available_engine(self, monkeypatch) -> None:
         monkeypatch.setattr(casting, "_first_available_engine", lambda: piper_engine.NAME)
-        assert isinstance(default_factory(VoiceProfile()), piper_engine.PiperSynthesizer)
+        assert isinstance(unwrap(default_factory(VoiceProfile())), piper_engine.PiperSynthesizer)
+
+
+def test_pitch_outside_its_range_is_refused() -> None:
+    with pytest.raises(ValueError, match="pitch must be between"):
+        VoiceProfile(engine="piper", voice="en_US-ryan-high", pitch=0.2)

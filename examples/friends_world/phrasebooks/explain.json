@@ -1,26 +1,23 @@
 {
   "job": "explain",
-  "note": "Phase three, and only reachable at depth 1 or more. This is the one place he is allowed to say why he is doing the thing, because somebody asked. It is a reason, not a fact: a fact is true for everybody. The subject family is for a question about the world: the text is a stance he holds, not a fact he is reciting, and it arrives from decide/subject rather than from his own day. The point family is the only way the point of a story is ever spoken, and it is only reachable when the story has just been told and the question asked what it meant.",
+  "note": "Phase three, and only reachable at depth 1 or more. This is the one place he is allowed to say why he is doing the thing, because somebody asked. It is a reason, not a fact: a fact is true for everybody. The subject family is for a question about the world: the text is a stance he holds, not a fact he is reciting, and it arrives from decide/subject rather than from his own day. The point family is the only way the point of a story is ever spoken, and it is only reachable when the story has just been told and the question asked what it meant. The subject and point families carry a single variant on purpose: there is one honest way to state a stance and one way to state a point, and padding them with the same placeholder twice was variety on paper only.",
   "families": {
     "detail": {
       "when": {},
       "variants": [
         "{why}",
-        "honestly, {why}",
-        "{why}. no better reason"
+        "honestly, {why}"
       ]
     },
     "subject": {
       "when": {},
       "variants": [
-        "{fact}",
         "{fact}"
       ]
     },
     "point": {
       "when": {},
       "variants": [
-        "{story_point}",
         "{story_point}"
       ]
     }

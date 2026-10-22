@@ -5,7 +5,17 @@
 # This rule exists now so the voice is pinned data -- docs/PERSONA.md and tests/test_persona.py
 # both compare against it, and a mismatch is a failing test rather than a surprise on game night.
 #
-# The brief: deep, American, clear and cheerful -- a bass Santa Claus. `en_US-ryan-high` is the
-# deepest of the piper American male voices at high quality; speed below 1.0 gives it room to
-# rumble. UNVERIFIED: no piper model is installed on this box, so nobody has listened to it yet.
-{"id": "cast-topguy", "characters": ["friend-a", "TopGuy"], "engine": "piper", "voice": "en_US-ryan-high", "speed": 0.92, "volume": 1.0}
+# TUNED 2026-10-22, twice. First attempt: ryan at 1.15, reported "too fast, not deep enough".
+# Second: ryan at 1.2 with pitch 0.93 -- the resample coloured the voice and read as off.
+# Now: a naturally deep voice instead of a shifted one. Measured median F0 over the same
+# sentence: ryan-high 144 Hz, joe-medium 98 Hz, norman-medium 95 Hz (see docs/PERSONA.md 3d).
+# `pitch` is deliberately 1.0 -- no resampling, so the timbre is the model's own.
+#
+# The brief: deep, American, clear and cheerful -- a bass Santa Claus. Piper's length_scale runs
+# the other way round: 1.0 is normal and higher is slower, so a little above 1 is unhurried.
+# 1.05, not 1.2: joe already reads slower than ryan did at neutral (6.9 s vs 6.0 s for the test
+# sentence), and 1.2 on top of that was reported "a hair too slow".
+#
+# VERIFIED 2026-10-22: the model is downloaded (in the tts model cache, not the repo), 22 kHz mono,
+# a twenty-word line renders in about 5.5 s at roughly 0.4x realtime on this CPU.
+{"id": "cast-topguy", "characters": ["friend-a", "TopGuy"], "engine": "piper", "voice": "en_US-joe-medium", "speed": 1.05, "volume": 1.0}

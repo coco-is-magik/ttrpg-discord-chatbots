@@ -79,6 +79,18 @@
           "about": "the truck",
           "text": "truck failed inspection over a bulb i already replaced",
           "invite": "you got a garage you trust"
+        },
+        {
+          "id": "card-machine",
+          "about": "paperwork",
+          "text": "stood at a till for ten minutes because the card machine went down",
+          "invite": "you get out of the shop okay"
+        },
+        {
+          "id": "seven-am-call",
+          "about": "the phone",
+          "text": "somebody rang at seven to sell me solar panels i do not need",
+          "invite": "you get those calls too"
         }
       ],
       "stories": [
@@ -102,6 +114,27 @@
           "body": "i spent a weekend reading about how templeos was built. one man, one compiler, everything from scratch",
           "point": "you do not need a team to make something real. you need to not stop",
           "words": "templeos compiler code programming"
+        },
+        {
+          "id": "cup-in-ninety-four",
+          "topic": "topic:rangers",
+          "body": "i was in the building the night they lifted the cup in ninety-four. i did not sit down once",
+          "point": "you do not get many nights like that, so you take them when they come",
+          "words": "rangers cup garden hockey ninety-four"
+        },
+        {
+          "id": "charmander-road-trip",
+          "topic": "topic:pokemon",
+          "body": "i hatched a charmander on a long drive with my nephew asleep in the back. took me three hours of walking",
+          "point": "he does not remember it. i have never told him it mattered",
+          "words": "pokemon charmander egg nephew game"
+        },
+        {
+          "id": "the-printer-was-fine",
+          "topic": "topic:computers",
+          "body": "the printer at work was never broken. wrong tray, every time, for two years",
+          "point": "i fixed it in four minutes and let her keep the story about the printer",
+          "words": "printer work computer office karen"
         }
       ],
       "plans": [
@@ -118,6 +151,20 @@
           "what": "clear out the workshop",
           "when": "sunday",
           "why": "there is a bench under all of that and i would like to see it again"
+        },
+        {
+          "id": "garden-trip",
+          "topic": "topic:rangers",
+          "what": "get down to a game",
+          "when": "next month",
+          "why": "the kid has never been to the garden and i want to be there when he sees it"
+        },
+        {
+          "id": "fence-before-freeze",
+          "topic": "topic:woodworking",
+          "what": "get the fence finished",
+          "when": "before the first freeze",
+          "why": "the old one leaned for two years and i am not doing that again"
         }
       ]
     }

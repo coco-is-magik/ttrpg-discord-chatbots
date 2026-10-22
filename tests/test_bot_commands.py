@@ -139,8 +139,10 @@ class _FakeVoiceClient:
     def is_connected(self) -> bool:
         return self.connected
 
-    def play(self, source) -> None:
+    def play(self, source, *, after=None) -> None:
+        # discord.py's signature; `after` is how the caller learns the stream ended.
         self.played.append(source)
+        self.after = after
 
     @property
     def guild(self):
@@ -305,6 +307,7 @@ def test_every_command_the_guide_documents_is_registered() -> None:
         "ungift",
         "unlock",
         "voices",
+        "voicetest",
         "willpower",
     }
 

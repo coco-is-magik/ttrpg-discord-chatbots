@@ -29,7 +29,11 @@
         "confident",
         "action-oriented"
       ],
-      "values": ["honour", "honesty", "integrity"],
+      "values": [
+        "honour",
+        "honesty",
+        "integrity"
+      ],
       "topics": [
         "topic:hockey",
         "topic:rangers",
@@ -43,9 +47,9 @@
         "topic:woodworking"
       ],
       "signature": [
-        "my dad had it on every saturday",
-        "two sizes too big",
-        "let somebody else take the credit"
+        "you do not switch teams",
+        "the only place nobody can get hold of me",
+        "nobody out there gets to hide behind anybody"
       ],
       "style": {
         "case": "lower",
@@ -55,9 +59,9 @@
       },
       "voice": {
         "engine": "piper",
-        "voice": "en_US-ryan-high",
-        "speed": 0.92,
-        "description": "Deep, clear American bass with a cheerful rumble: a Santa Claus who played hockey. Unverified -- no model installed yet."
+        "voice": "en_US-joe-medium",
+        "speed": 1.05,
+        "description": "Deep, clear American bass with a cheerful rumble: a Santa Claus who played hockey. en_US-joe-medium at length scale 1.05. Chosen by measurement, not by name: median F0 98 Hz against ryan-high's 144 Hz, which was heard as \"too light\". No pitch shifting -- a resampled voice was heard as off."
       }
     }
   },

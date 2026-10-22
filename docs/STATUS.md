@@ -12,13 +12,17 @@ lands; it should never be more than one slice out of date.
 
 | | |
 |---|---|
-| Tests | **1738 passing**, ~36 s, no network, no GPU |
+| Tests | **1860 passing**, ~38 s, no network, no GPU |
 | Bots live | 4 applications: `ttrpg-bot` (helper) + `friend-a/b/c` |
 | Permissions | **8/8 each** in `#general` |
-| Slash commands | **51/51** synced to guild 1364544268609523762 |
+| Slash commands | **54/54** synced to guild 1364544268609523762 |
 | Who speaks | `friend-a` only, `reply: mention`; `friend-b`/`friend-c` are `reply: off` |
 | Conversation | **ten phases on the module ladder**, live behind `TTRPG_CONVERSATION=ladder`; subject questions answered by the ladder too (`decide/subject`) |
 | Modules | **57/57 built**, manifest clean |
+| Voice | friend-a speaks: `piper` **`en_US-joe-medium`** at length scale **1.05**, no pitch shift — chosen by measuring 13 candidates (98 Hz vs ryan-high's 144 Hz); `/voicetest join\|speak\|leave` |
+| Voice lock | `examples/friends_world/voices.lock.json`: sha256 + md5 per file, two sources, CC0 provenance, rebuild steps; `ttrpg-chatbots-tts --verify-voice\|--fetch-voice` |
+| Speech text | `tts/spoken/` — five modules + a fixed order, wrapped around every engine at build time; `--spoken TEXT` prints the spoken form |
+| Persona | `ttrpg-chatbots-persona` — twelve checks over his whole material; 39 subjects, 91 lines, median 5 words, 7.6% two-sentence, no beats |
 | Memory | **SQLite** `data/memory.db` -- facts, topics, tellings, journal -- written only by `memory/db`; `/memory` and `/forget` on the helper. See `docs/STORAGE.md` |
 | Personality | **friend-a is TopGuy** (`docs/PERSONA.md`); b and c deliberately neutral |
 | Typing | friend-a types lower-case with dropped apostrophes and the odd slip; b and c stay tidy |

@@ -50,6 +50,7 @@ from ttrpg_chatbots.bots import (
     log_findings,
     report,
 )
+from ttrpg_chatbots.bots.voice import VoiceUnavailable
 from ttrpg_chatbots.config import ConfigError, DiscordConfig, load_discord_config
 from ttrpg_chatbots.conversation import Conversation, ConversationError
 from ttrpg_chatbots.dice.parts import RollParts
@@ -470,6 +471,83 @@ async def forget(interaction: discord.Interaction, key: str) -> None:
         await interaction.followup.send(f"forgot `{key}`: {', '.join(dropped)}")
     else:
         await interaction.followup.send(f"nobody was holding `{key}`. Try /memory")
+
+
+@command(
+    name="voicetest",
+    description="Testing surface: make a friend join your voice channel, speak in it, or leave",
+)
+@app_commands.describe(
+    action="what to do with the friend's voice",
+    friend="which friend (default friend-a)",
+    text="what he should say, if action is speak",
+)
+@app_commands.choices(
+    action=[
+        app_commands.Choice(name="join -- join the voice channel you are in", value="join"),
+        app_commands.Choice(name="speak -- say something in it", value="speak"),
+        app_commands.Choice(name="leave -- disconnect", value="leave"),
+    ]
+)
+async def voicetest(
+    interaction: discord.Interaction,
+    action: app_commands.Choice[str],
+    friend: str = "friend-a",
+    text: str | None = None,
+) -> None:
+    """Join, speak or leave with a *friend's* own voice -- the thing there was no way to test before.
+
+    The voice lives on the friend's client, not the helper's: a VoiceClient belongs to the connection
+    that joined, so the channel has to be looked up in the friend's own guild cache.
+    """
+    await interaction.response.defer(thinking=True)
+    client = getattr(interaction.client, "friends", {}).get(friend)
+    if client is None:
+        await interaction.followup.send(
+            f"`{friend}` is not connected. `/friendcheck` shows which friends are online."
+        )
+        return
+
+    room = _voice_room(client, friend)
+    chosen = (getattr(action, "value", action) or "").strip().lower()
+    try:
+        if chosen == "join":
+            voice_state = getattr(getattr(interaction, "user", None), "voice", None)
+            target = getattr(voice_state, "channel", None)
+            if target is None:
+                await interaction.followup.send("join a voice channel first, then run this")
+                return
+            guild = client.get_guild(interaction.guild_id or 0)
+            channel = guild.get_channel(target.id) if guild is not None else None
+            if channel is None:
+                await interaction.followup.send(
+                    f"{friend} cannot see {target.name}; check View Channel there"
+                )
+                return
+            await interaction.followup.send(f"{friend}: {await room.join(channel)}")
+        elif chosen == "speak":
+            line = text or "there he is. hockey is the best game ever invented"
+            await interaction.followup.send(f"{friend}: {await room.say(line)}")
+        elif chosen == "leave":
+            await interaction.followup.send(f"{friend}: {await room.leave()}")
+        else:
+            await interaction.followup.send("action must be join, speak or leave")
+    except VoiceUnavailable as error:
+        await interaction.followup.send(f"{friend}: {error}")
+    except Exception as error:  # noqa: BLE001 - a test command reports, it does not crash
+        LOGGER.warning("voicetest failed for %s: %s", friend, error)
+        await interaction.followup.send(f"{friend}: {type(error).__name__}: {error}")
+
+
+def _voice_room(client, friend: str):
+    """One voice room per friend, created on first use and kept for the process."""
+    room = getattr(client, "voice_room", None)
+    if room is None:
+        from ttrpg_chatbots.bots.voice import FriendVoice
+
+        room = FriendVoice(friend=friend)
+        client.voice_room = room
+    return room
 
 
 @command(

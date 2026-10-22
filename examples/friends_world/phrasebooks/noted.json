@@ -17,8 +17,8 @@
     "recall": {
       "when": {},
       "variants": [
-        "how is {fact_value} doing",
-        "how is {fact_value}",
+        "how is {fact_value} doing?",
+        "how is {fact_value}?",
         "{fact_value} alright?"
       ]
     }

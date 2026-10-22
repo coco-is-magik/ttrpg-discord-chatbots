@@ -190,8 +190,39 @@ class FriendBot(discord.Client):
             LOGGER.info("%s is listening and answers when mentioned", self.spec.id)
         if self.spec.persona is not None:
             LOGGER.info("%s is %s", self.spec.id, self.spec.persona.describe())
+            self._check_voice_lock()
         LOGGER.info("%s", self.memory.describe())
         await self.check_permissions()
+
+    def _check_voice_lock(self) -> None:
+        """Report whether the voice this persona names is actually on this box.
+
+        A friend who speaks with a missing model fails at the worst moment -- when somebody has just
+        said something to him -- so the check happens once, at startup, and the warning carries the
+        command that fixes it. Never raises: a broken lock must not stop the sheet portal.
+        """
+        voice = getattr(self.spec.persona, "voice", None)
+        if voice is None:
+            return
+        from ttrpg_chatbots.bots.voice import data_directory
+        from ttrpg_chatbots.tts import lock as lock_module
+        from ttrpg_chatbots.tts.engines.piper_engine import voice_dir
+
+        path = data_directory() / "voices.lock.json"
+        try:
+            pinned = lock_module.load(path)
+        except lock_module.LockError as error:
+            LOGGER.warning("%s: no usable voice lock (%s)", self.spec.id, error)
+            return
+        report = lock_module.verify(pinned, voice_dir())
+        if report.ok:
+            LOGGER.info("%s: voice %s verified against its lock", self.spec.id, pinned.voice)
+            return
+        LOGGER.warning(
+            "%s: %s -- run `ttrpg-chatbots-tts --fetch-voice` to restore it",
+            self.spec.id,
+            report.summary(),
+        )
 
     async def on_message(self, message: discord.Message) -> None:
         """Record what was heard, then answer if this friend is addressed."""
@@ -486,6 +517,14 @@ class FriendBot(discord.Client):
             story_id = about.split("|")[1]
             if story_id:
                 self.memory.remember_told(story_id)
+        # The person spoke: who they are, when, and what it was about. This used to happen only on the
+        # old path, so once the ladder took over, `sessions` and `last_seen` froze at their pre-ladder
+        # values -- the relationship never warmed up and the gap never reset. Measured, not guessed:
+        # the first friend has been answering through the ladder for days with `sessions` stuck at 17.
+        self.memory.note(person=speaker or "")
+        topic = about.split("|")[0]
+        if topic.startswith("topic:"):
+            self.memory.remember_topic(topic)
         try:
             self.memory.save()
         except MemoryError as error:

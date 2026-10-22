@@ -709,3 +709,90 @@ def test_bringing_something_up_marks_it_raised_for_the_day(monkeypatch) -> None:
 
     assert message.replies, "he answered the question about the dog"
     assert friend.memory.fact("pet.name").meta.get("raised"), "and recorded that he did"
+
+
+def test_answering_through_the_ladder_records_the_conversation(monkeypatch) -> None:
+    # Measured defect: `note()` lived only on the old path, so after the ladder took over the
+    # relationship froze -- sessions and last_seen stopped moving, warmth never grew, and the gap
+    # between visits never reset.
+    monkeypatch.setenv("TTRPG_CONVERSATION", "ladder")
+    friend = _MentionedFriend(_friend(reply="mention"), chat=_Chat())
+    before = friend.memory.sessions
+
+    asyncio.run(friend.on_message(_mention(friend, "<@1> do you like hockey?")))
+
+    assert friend.memory.sessions == before + 1, "the visit is counted"
+    assert friend.memory.last_seen, "and the gap can reset next time"
+    assert friend.memory.topics.get("topic:hockey"), "and what they asked about is kept"
+
+
+def test_a_missing_voice_is_a_warning_with_the_fix(monkeypatch, caplog) -> None:
+    """A friend who speaks with no model fails at the worst moment, so startup says so instead.
+
+    The warning has to carry the command that fixes it; "the voice is missing" without one is a
+    diagnosis with no treatment.
+    """
+    import logging
+
+    from ttrpg_chatbots.bots.supervisor import FriendBot
+
+    spec = _voiced_friend()
+    monkeypatch.setattr(
+        "ttrpg_chatbots.tts.lock.load",
+        lambda path: _pinned(),
+    )
+    monkeypatch.setattr(
+        "ttrpg_chatbots.tts.lock.verify",
+        lambda pinned, directory: _report(ok=False, problems=["en_US-fake.onnx is missing"]),
+    )
+
+    with caplog.at_level(logging.WARNING):
+        FriendBot(spec)._check_voice_lock()
+
+    assert "--fetch-voice" in caplog.text, caplog.text
+
+
+def test_a_verified_voice_says_so(monkeypatch, caplog) -> None:
+    import logging
+
+    from ttrpg_chatbots.bots.supervisor import FriendBot
+
+    monkeypatch.setattr("ttrpg_chatbots.tts.lock.load", lambda path: _pinned())
+    monkeypatch.setattr(
+        "ttrpg_chatbots.tts.lock.verify",
+        lambda pinned, directory: _report(ok=True, problems=[]),
+    )
+
+    with caplog.at_level(logging.INFO):
+        FriendBot(_voiced_friend())._check_voice_lock()
+
+    assert "verified against its lock" in caplog.text
+
+
+def _voiced_friend() -> BotSpec:
+    """A friend with a persona that names a voice, which is what triggers the startup check."""
+    from ttrpg_chatbots.bots.persona import Persona, VoiceSpec
+
+    return BotSpec(
+        id="friend-a",
+        role="friend",
+        listen=False,
+        persona=Persona(name="TopGuy", voice=VoiceSpec(engine="piper", voice="en_US-fake")),
+    )
+
+
+def _pinned():
+    from ttrpg_chatbots.tts.lock import LockedFile, VoiceLock
+
+    return VoiceLock(
+        voice="en_US-fake",
+        engine="piper",
+        files=(LockedFile(name="en_US-fake.onnx", bytes=1, sha256="a" * 64),),
+        sources=("https://example.invalid/{file}",),
+    )
+
+
+def _report(*, ok: bool, problems: list[str]):
+    from ttrpg_chatbots.tts.lock import LockReport
+
+    return LockReport(voice="en_US-fake", ok=ok, problems=problems)

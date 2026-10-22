@@ -654,7 +654,7 @@ The shape, as implemented (`bots/persona.py`):
   "values": ["honour", "honesty", "integrity"],
   "topics": ["topic:hockey"],                 // enforced against known_tags
   "signature": ["That is the truth of it"],   // enforced against the templates
-  "voice": { "engine": "piper", "voice": "en_US-ryan-high", "speed": 0.92 }
+  "voice": { "engine": "piper", "voice": "en_US-joe-medium", "speed": 1.05 }
 }
 ```
 
@@ -801,6 +801,12 @@ tool for the GM seat only).
 scenes earlier is honoured, and nothing moved a dot on a sheet.
 
 ### 6 — "Faces and voices"
+**Started:** `bots/voice.py` + `/voicetest` give a friend join/speak/leave with his own casting, and
+`en_US-joe-medium` is downloaded, pinned by `voices.lock.json`, and rendering
+(`/voicetest join|speak|leave`); speech has its own text form (`tts/spoken/`, see `docs/SPEECH.md`).
+What remains is the per-seat queue, barge-in, and
+letting replies speak.
+
 The applications already exist from 3a, so this phase is about *how they sound*: two voices per
 friend (IC and OOC), a playback queue per seat with the same TTL and barge-in rules as text, and
 mute/volume. Distinct avatars and names come free with separate applications, which is why

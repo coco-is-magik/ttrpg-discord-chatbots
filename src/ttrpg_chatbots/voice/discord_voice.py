@@ -33,11 +33,30 @@ class DiscordAudioSource(discord.AudioSource):
         return False
 
     def cleanup(self) -> None:
-        self._player.clear()
+        """Release what this source owns: nothing.
+
+        discord.py calls this at the end of *every* stream, and the AudioPlayer that ended it is
+        garbage collected at the same moment the next one starts (``discord/player.py`` calls
+        ``cleanup`` from ``AudioPlayer.__del__``). Clearing the shared :class:`VoicePlayer` here
+        therefore deleted the audio of the clip that had just been queued: the measured cause of
+        "he speaks once and never again". The player outlives the source, so only the owner
+        (:class:`~ttrpg_chatbots.bots.voice.FriendVoice`) decides when the queue is dropped.
+        """
 
 
-def play_in(voice_client: discord.VoiceClient, player: VoicePlayer, *, pad_silence=False):
-    """Start playback in a connected voice client and return the source."""
+def play_in(
+    voice_client: discord.VoiceClient,
+    player: VoicePlayer,
+    *,
+    pad_silence: bool = False,
+    after=None,
+):
+    """Start playback in a connected voice client and return the source.
+
+    ``after`` is handed to discord.py and fires when the stream ends -- however it ends. The caller
+    needs it to know the channel is free again; without it, "is it still playing?" has to be asked of
+    discord.py, and a stale answer there means silence forever.
+    """
     source = DiscordAudioSource(player, pad_silence=pad_silence)
-    voice_client.play(source)
+    voice_client.play(source, after=after)
     return source

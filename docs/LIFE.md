@@ -150,3 +150,11 @@ subjects: naming beats phrasing.
 A plan is `what` plus `when` in his own words ("get out to the range", "saturday") and `why`.
 It exists so an invitation has somewhere to go: he could already ask whether you were free, and
 this is the thing he was going to suggest.
+
+## The material he actually has
+
+Counted, because "enough" is otherwise a feeling: **5 activities** (each with a hook, a snag and a
+reason), **6 grievances**, **6 stories** (each with a body and a separate point), **4 plans** (each with
+a time and a why), and **39 subject lines** across ten interests -- at least four per interest, so the
+second question about hockey is not the first one again. `ttrpg-chatbots-persona` checks the floor on
+all of it, and `docs/PERSONA.md` §5a has the numbers.

@@ -2,6 +2,16 @@
   "job": "reassure",
   "note": "Somebody said they are nervous, or stuck, or dreading something. Short, warm, and it takes them seriously -- no pep talk, no three-point plan. 'Encouraging' is something he does in one line, not a paragraph.",
   "families": {
-    "reassure": { "when": {}, "variants": ["you got this", "you will be fine", "that is normal", "everyone gets that", "you have done harder", "deep breath. you are alright"] }
+    "reassure": {
+      "when": {},
+      "variants": [
+        "you got this",
+        "you will be fine",
+        "that is normal",
+        "everyone gets that",
+        "you have done harder",
+        "deep breath, you are alright"
+      ]
+    }
   }
 }
