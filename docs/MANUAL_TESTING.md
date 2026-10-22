@@ -271,6 +271,44 @@ Log lines that correspond to each pass:
 
 Any of the four is a reason to re-open the decomposition rather than tune the phrasebook.
 
+### 2.8 Memory, and knowing things (friend-a, whole ladder on)
+
+Two checks that used to be impossible. Both are about the *gate* rather than the wording, so the
+failure is usually a module deciding wrongly, not a phrasebook.
+
+| # | Do this | Pass looks like | If it fails, blame |
+|---|---|---|---|
+| 1 | `@TerrysTopGuy my dog is called otis` | a short reply, and `friend-a will remember pet.name=otis` in the log | `memory/encode`, `bots/memory` |
+| 2 | `/memory` | `pet.name = **otis**` under friend-a | the write path never ran |
+| 3 | `@TerrysTopGuy how is the dog?` | he asks after it by name ("how is otis doing") — the *name* is the answer | `memory/retrieve`, `decide/recall` |
+| 4 | ask `how is the dog?` again the same day | he has already asked today, so this is a hedge or a different answer — **the cap working, not a bug** | `decide/recall` (`raised`) |
+| 5 | `@TerrysTopGuy what is the plot of dune?` | `?` or another hedge — **never** a question about the dog | `decide/family` mode table |
+| 6 | restart the bot, then `@TerrysTopGuy how is the dog?` | he still knows | the fact was never saved |
+| 7 | `/forget pet.name`, then `@TerrysTopGuy how is the dog?` | he no longer knows | `bots/memory.forget` |
+| 8 | `@TerrysTopGuy do you like hockey?` | a stance, in his voice, inside the budget — **not** a paragraph | `decide/subject`, `explain.json` |
+| 9 | `@TerrysTopGuy howre the rangers doing?` | the Rangers, despite the spelling — this was the 0.651 case | `decide/subject` (no ceiling on a name) |
+| 10 | `@TerrysTopGuy what is the sunken crown?` | a hedge, because nobody in this world knows it | `decide/subject` returning nothing |
+| 11 | `@TerrysTopGuy what are you up to` (today, 2026-10-22) | his activity, and **the season opener this week** — the calendar, not the schedule | `bots/ladder.events`, `values._event_phrase` |
+| 12 | same question on 2026-10-28 | "opener today" or similar, and on a quiet day just the activity | the `short` field in `calendar.json` |
+| 13 | `@TerrysTopGuy what are you up to`, then `how did that go?` | **a story** — the one about the thing he just offered (the axe, if he was on the fence) | `decide/story`, the `words` field in `life.json` |
+| 14 | then `what was the point of that?` | **the point**, not the story again | `explain.json` (`point`), `decide/job` |
+| 15 | `@TerrysTopGuy how did the fence go?` (cold, nothing before it) | a story — a question about the past deserves an answer | `decide/story` (`asked`) |
+| 16 | two long messages, then `my weekend was long` | a story, unprompted | `decide/story` (`leaned_in`) |
+| 17 | the same, but end with a question (`what are you up to`) | **the hook, not a story** | `looks_like_question` |
+| 18 | `@TerrysTopGuy doing anything later?` | an invitation with somewhere to go ("want to get out to the range saturday") | `decide/family` (`plan`), `life.json` plans |
+| 19 | say yes to that | a confirmation, not another "sounds good" | `pending_plan` in `bots/memory` |
+
+Two things worth knowing when reading the log:
+
+```
+friend-a will remember pet.name=otis
+friend-a answered through the ladder (… job=hedge > subject=nothing > recall=pet.name (raised) …)
+```
+
+`recall=… (raised)` means they raised it; `(session)` means he opened with it; `(no room)` means he
+wanted to and the budget said no — which is a pass, not a failure. The trail also carries
+`events=` now, so a day with nothing in it is visible rather than guessed at.
+
 ### 2.7 The phases (friend-a, whole ladder on)
 
 `TTRPG_CONVERSATION=ladder` answers every phase he has a phrasebook for; knowledge questions still go

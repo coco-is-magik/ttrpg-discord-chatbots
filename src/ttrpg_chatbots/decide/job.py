@@ -13,14 +13,41 @@ from __future__ import annotations
 from ttrpg_chatbots.conv.types import Intent, Job, Phase
 
 
-def choose(*, intent: Intent, phase: Phase, depth: int = 0, known: bool = False) -> Job:
+def choose(
+    *,
+    intent: Intent,
+    phase: Phase,
+    depth: int = 0,
+    known: str = "",
+    story: str = "",
+    point: bool = False,
+) -> Job:
     """The one job this turn does.
+
+    `known` says *what kind* of thing he can draw on, because they are not interchangeable:
+    `"self"` is his own life (which answers "what are you up to" and "why?"), `"world"` is a subject
+    he has something to say about, and `"fact"` is something the other person told him -- which is
+    never an answer about the world, only a reason to ask after it.
 
     Depth deliberately does **not** turn a hook into an explanation. Measured live: "what are you up
     to" arrived after a long message, the conversation was already deep, and the answer was a reason
     instead of the thing he is doing. Depth belongs to the *follow-up* ("why?"), not to a fresh
     question about his day.
     """
+    if point:
+        # The point of a story he just told is an explanation, not another story. Getting this
+        # wrong told the same story twice when asked what it meant.
+        return "explain"
+    if story in ("asked", "follow_up"):
+        # They asked about something that happened, or asked a question about the thing he just
+        # offered. That is stronger evidence than the lexicon, which does not know the difference
+        # between "how did the fence go" and "what is the plot of dune" -- both are unmatched
+        # questions to it, and only one of them is a story.
+        return "tell_story"
+    if story == "leaned_in" and intent in ("about_me", "explain_me", "remark"):
+        # Unprompted, so the ordinary job keeps a say: two long turns is not a licence to answer a
+        # question about the world with the deer.
+        return "tell_story"
     if intent == "greet":
         return "greet"
     if intent == "complain":
@@ -33,12 +60,12 @@ def choose(*, intent: Intent, phase: Phase, depth: int = 0, known: bool = False)
         return "noted"
     if intent in ("agree", "meta"):
         return "acknowledge"
-    if intent == "about_me":
-        return "offer_hook" if known else "hedge"
+    if intent in ("about_me", "plans"):
+        return "offer_hook" if known == "self" else "hedge"
     if intent == "explain_me":
-        return "explain" if known else "hedge"
+        return "explain" if known == "self" else "hedge"
     if intent == "about_world":
-        return "explain" if known else "hedge"
+        return "explain" if known == "world" else "hedge"
     if intent == "joke":
         return "mirror"
     return "acknowledge"

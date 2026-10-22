@@ -43,13 +43,17 @@ Family = Literal[
     "reaction",
     "detail",
     "reassure",
+    "story",
+    "point",
     "closing",
     "noted",
+    "recall",
     "hedge",
 ]
 Intent = Literal[
     "greet",
     "about_me",
+    "plans",
     "explain_me",
     "about_world",
     "complain",
@@ -201,6 +205,7 @@ class Event:
     label: str
     days_away: int = 0
     topics: tuple[str, ...] = ()
+    short: str = ""  # what a person would call it out loud
 
 
 @dataclass(frozen=True)

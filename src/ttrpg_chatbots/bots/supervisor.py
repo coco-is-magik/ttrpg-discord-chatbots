@@ -21,13 +21,14 @@ import os
 import re
 from collections import deque
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 import discord
 
 from ttrpg_chatbots.bots.identity import ROLE_FRIEND, BotSpec
 from ttrpg_chatbots.bots.ladder import Ladder
-from ttrpg_chatbots.bots.memory import FriendMemory, MemoryError
+from ttrpg_chatbots.bots.memory import FriendMemory, MemoryError, migrate_legacy
+from ttrpg_chatbots.memory.encode import read as encode_facts
 from ttrpg_chatbots.bots.permissions import audit, log_findings
 from ttrpg_chatbots.bots.roster import Roster, RosterError
 from ttrpg_chatbots.reply.context import DEFAULT_WINDOW, Context, Turn
@@ -136,16 +137,21 @@ class FriendBot(discord.Client):
     def _ladder_answers(self, text: str) -> bool:
         """Whether the ladder owns this message, or the old classifier does.
 
-        Only the phases a friend actually has content for. A knowledge question stays with the old
-        path until world knowledge is wired in as a tool, because the ladder answering it from a
-        phrasebook would be a downgrade.
+        Asked of the ladder itself, which runs the same decision the answer will run -- intent,
+        phase, floor, job, and whether a phrasebook exists. A hardcoded list of intents was wrong
+        exactly once, and that once was "how is the dog?".
         """
-        if self.ladder is None:
+        ladder = self.ladder
+        if ladder is None:
             return False
-        intent = intent_of(text)
         if self.conversation == "greet":
-            return intent == "greet"
-        return intent in LADDER_INTENTS
+            return intent_of(text) == "greet"
+        return ladder.owns(
+            text=text,
+            memory=self.memory,
+            speaker=getattr(self, "last_message", {}).get("author", ""),
+            turns=tuple(self.history),
+        )
 
     @property
     def style(self):
@@ -223,6 +229,7 @@ class FriendBot(discord.Client):
         self.received += 1
         self.last_message = dict(self.last_delivery)
         self._remember_human(message, content)
+        self._learn(content)
         addressed = self._addressed(message)
         if os.environ.get("TTRPG_LISTEN_TRACE") == "1":
             reference = getattr(message, "reference", None)
@@ -281,6 +288,44 @@ class FriendBot(discord.Client):
             if parent not in allowed:
                 return f"#channel {getattr(channel, 'id', '?')} is not in its allowed list"
         return "already answered this message id"
+
+    def _learn(self, content: str) -> None:
+        """Keep what this person volunteered about themselves, if it earns it.
+
+        Encoding is patterns, promotion is a rule, and both live in `memory/`. This method is the
+        only place they meet the disk, so there is one writer per friend and one place to look when
+        a fact does not stick.
+        """
+        candidates = encode_facts(content, said_by="them")
+        if not candidates:
+            return
+        kept = self.memory.remember_facts(candidates)
+        if not kept:
+            return
+        try:
+            self.memory.save()
+        except MemoryError as error:
+            LOGGER.warning("%s could not save what it learned: %s", self.spec.id, error)
+            return
+        LOGGER.info(
+            "%s will remember %s",
+            self.spec.id,
+            ", ".join(f"{fact.key}={fact.value}" for fact in kept),
+        )
+
+    def _mark_recalled(self, trail) -> None:
+        """Note that he brought something up, so he does not bring it up again today."""
+        steps = dict(trail.steps)
+        if steps.get("family") != "recall":
+            return
+        key = steps.get("recall", "").split(" ")[0]
+        if not key or key == "nothing":
+            return
+        self.memory.mark_raised(key, day=date.today().isoformat())
+        try:
+            self.memory.save()
+        except MemoryError as error:
+            LOGGER.warning("%s could not save its memory: %s", self.spec.id, error)
 
     def _remember_sent(self, sent) -> None:
         """Remember the id of a message he posted, so a reply-arrow can be recognised later."""
@@ -425,12 +470,22 @@ class FriendBot(discord.Client):
             LOGGER.warning("%s could not send its reply: %s", self.spec.id, error)
             return
         self._remember_sent(sent)
+        self._mark_recalled(out.trail)
         identifier = getattr(message, "id", None)
         if identifier is not None:
             self.answered.append(identifier)
         self.replied += 1
         self.last_reply = out.text
-        self._remember_reply(out.text, f"ladder:{out.trail.steps[3][1] if len(out.trail.steps) > 3 else '?'}")
+        steps = dict(out.trail.steps)
+        job = steps.get("job", "?")
+        about = steps.get("about", "|")
+        # `ladder|job|topic|story_id`: what he said, and what it was about. The next turn reads
+        # this, which is how a follow-up reaches the point of a story.
+        self._remember_reply(out.text, f"ladder|{job}|{about}")
+        if job == "tell_story":
+            story_id = about.split("|")[1]
+            if story_id:
+                self.memory.remember_told(story_id)
         try:
             self.memory.save()
         except MemoryError as error:
@@ -575,6 +630,14 @@ def build_entries(
     create_chat=None,
 ) -> tuple[Entry, ...]:
     """Clients for every enabled bot that has a token, plus a log line for every dormant one."""
+    # Before any friend loads, make sure the database has whatever the old JSON files held.
+    try:
+        imported = migrate_legacy()
+    except MemoryError as error:
+        LOGGER.warning("could not migrate the old memory files: %s", error)
+    else:
+        if imported:
+            LOGGER.info("imported memory for %s from the old JSON files", ", ".join(imported))
     if create_helper is None:
         # Imported here, not at module scope: bot.py imports this package for /botcheck.
         from ttrpg_chatbots.bot import create_bot as create_helper

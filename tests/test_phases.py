@@ -7,19 +7,21 @@ one-word "why?", a complaint with no detail in it.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 import pytest
 
 from ttrpg_chatbots.bots.ladder import Ladder
 from ttrpg_chatbots.bots.memory import FriendMemory
-from ttrpg_chatbots.conv.types import Abstain, Line
+from ttrpg_chatbots.conv.types import Abstain, Event, Line
 from ttrpg_chatbots.decide.shelf import Shelf, load_shelf
 from ttrpg_chatbots.decide.values import build, missing
 from ttrpg_chatbots.decide.variant import PhrasebookError
 from ttrpg_chatbots.govern.harness import run_phases
 from ttrpg_chatbots.life.render import load_lives
+from ttrpg_chatbots.life.state import Plan, Story
+from ttrpg_chatbots.memory.long import Fact
 from ttrpg_chatbots.perceive.clock import read_clock
 from ttrpg_chatbots.reply.context import Turn
 
@@ -36,6 +38,7 @@ PHASES = (
     "noted",
     "offer_hook",
     "reassure",
+    "tell_story",
 )
 
 
@@ -193,6 +196,12 @@ def test_every_phase_answers_every_time_without_sounding_written() -> None:
     assert set(reports) == set(PHASES)
     for job, report in reports.items():
         assert report.said == report.attempts, f"{job} went quiet: {report.abstains}"
+        if job == "tell_story":
+            # The one place he may be long: a story is two sentences of something that happened,
+            # and it is only here because somebody asked for it.
+            assert 10 <= report.median_words <= 30, f"{job} is not a story"
+            assert report.max_words <= 30, f"{job} broke the story ceiling"
+            continue
         assert report.median_words <= 4, f"{job} is writing essays"
         assert report.max_words <= 14, f"{job} broke the ceiling"
         assert report.beat_rate == 0, f"{job} ends lines on a beat"
@@ -212,12 +221,53 @@ def test_two_books_claiming_one_job_are_refused(tmp_path) -> None:
 
 def test_every_slot_in_every_phrasebook_is_fillable_by_its_own_job() -> None:
     # A typo in a slot name is otherwise invisible until it happens to be chosen, and then the stage
-    # abstains for a reason nobody reads. This checks the whole shelf against the real dataset.
+    # abstains for a reason nobody reads. This checks the whole shelf against the real dataset,
+    # including the recall families, which only have values when there is something to remember.
     shelf = load_shelf(WORLD / "phrasebooks")
     life = load_lives(WORLD / "life.json")["friend-a"]
+    remembered = Fact(key="pet.name", value="otis", meta={"word": "dog"})
 
     for job in shelf.jobs():
-        slots = build(job=job, life=life, day=DAY, name="tav")
+        slots = build(
+            job=job,
+            life=life,
+            day=DAY,
+            name="tav",
+            facts=(remembered,),
+            remembered=remembered,
+            subject_text="a stance he holds about something he knows",
+            events=(Event(label="the season opener", days_away=1, short="opener"),),
+            story=Story(id="axe", body="a body that happened", point="a point about it"),
+            plan=Plan(id="range", what="get out to the range", when="saturday"),
+            # The point is only handed over when it was asked for, so the check has to ask.
+            point=True,
+        )
         for family in shelf.for_job(job).families.values():
             for template in family.variants:
                 assert not missing(template, slots), f"{job}: {template!r} cannot be filled"
+
+
+def test_his_day_changes_when_the_calendar_does() -> None:
+    # The gap this closes: with no events, every "what are you up to" for the rest of the year is
+    # answered from the same handful of activities, because nothing in his world moves but the clock.
+    ladder = Ladder(friend="friend-a", data=WORLD)
+    memory = FriendMemory("friend-a", person="tav")
+
+    quiet = ladder.line(text="what are you up to", memory=memory, day=date(2026, 11, 20))
+    news = ladder.line(text="what are you up to", memory=memory, day=date(2026, 10, 27))
+
+    assert isinstance(quiet, Line) and isinstance(news, Line)
+    assert "opener" in news.text.lower(), "the season opener is tomorrow and he mentions it"
+    assert "opener" not in quiet.text.lower()
+
+
+def test_an_event_is_never_added_by_appending_a_second_sentence() -> None:
+    # The event family has a bare variant for exactly this reason: a pleasantries budget allows one
+    # sentence, so "{hook}. {event}" cannot fit and would fall back to the plain hook.
+    ladder = Ladder(friend="friend-a", data=WORLD)
+    out = ladder.line(
+        text="what are you up to", memory=FriendMemory("friend-a"), day=date(2026, 12, 25)
+    )
+
+    assert isinstance(out, Line)
+    assert out.text.count(".") <= 1

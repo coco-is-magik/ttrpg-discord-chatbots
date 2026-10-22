@@ -1,11 +1,81 @@
 {
   "job": "greet",
-  "note": "Four kinds of hello. Nothing here explains anything, and nothing ends with a button: the whole family is short enough to type one-handed.",
+  "note": "Four kinds of hello. Nothing here explains anything, and nothing ends with a button: the whole family is short enough to type one-handed. The recall family is the only one that mentions something he was told: at most once a day, and only at the start of a session or when they raise it themselves (decide/recall).",
   "families": {
-    "time_morning": { "when": { "part_of_day": ["morning"], "relationship": ["acquainted", "friend"] }, "variants": ["morning", "morning bud"] },
-    "time_evening": { "when": { "part_of_day": ["evening"], "relationship": ["acquainted", "friend"] }, "variants": ["evening", "evening you"] },
-    "warm": { "when": { "relationship": ["friend"] }, "variants": ["there he is", "hey you", "look what the cat dragged in"] },
-    "casual": { "when": {}, "variants": ["hey", "yo", "hey hey", "alright"] },
-    "dry": { "when": { "relationship": ["new"] }, "variants": ["hello", "hey there"] }
+    "time_morning": {
+      "when": {
+        "part_of_day": [
+          "morning"
+        ],
+        "relationship": [
+          "acquainted",
+          "friend"
+        ]
+      },
+      "variants": [
+        "morning",
+        "morning bud"
+      ]
+    },
+    "time_evening": {
+      "when": {
+        "part_of_day": [
+          "evening"
+        ],
+        "relationship": [
+          "acquainted",
+          "friend"
+        ]
+      },
+      "variants": [
+        "evening",
+        "evening you"
+      ]
+    },
+    "warm": {
+      "when": {
+        "relationship": [
+          "friend"
+        ]
+      },
+      "variants": [
+        "there he is",
+        "hey you",
+        "look what the cat dragged in"
+      ]
+    },
+    "casual": {
+      "when": {},
+      "variants": [
+        "hey",
+        "yo",
+        "hey hey",
+        "alright"
+      ]
+    },
+    "dry": {
+      "when": {
+        "relationship": [
+          "new"
+        ]
+      },
+      "variants": [
+        "hello",
+        "hey there"
+      ]
+    },
+    "recall": {
+      "when": {
+        "relationship": [
+          "acquainted",
+          "friend"
+        ]
+      },
+      "variants": [
+        "morning. how is {fact_value}",
+        "hey. how is {fact_value} doing",
+        "there he is. {fact_value} alright"
+      ]
+    }
   }
 }

@@ -16,11 +16,16 @@ from ttrpg_chatbots.conv.types import Budget
 FLOOR = 3
 CEILING = 14
 CONTENT_FLOOR = 12
+# A story is two sentences of something that happened. Measured: the bodies are 20-22 words, so a
+# substance budget of twelve refused every one of them and the story stage went silent.
+STORY_FLOOR = 26
 
 
-def budget(*, their_words: int, phase: str = "pleasantries") -> Budget:
+def budget(*, their_words: int, phase: str = "pleasantries", story: bool = False) -> Budget:
     """Their length plus two, clamped; two sentences only when the conversation has depth."""
     words = max(FLOOR, min(CEILING, int(their_words) + 2))
+    if story:
+        return Budget(max_words=STORY_FLOOR, max_sentences=2)
     if phase == "substance":
         words = max(CONTENT_FLOOR, words)
     sentences = 2 if phase == "substance" else 1

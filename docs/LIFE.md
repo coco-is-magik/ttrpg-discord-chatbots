@@ -135,3 +135,18 @@ An activity carries four lengths of the same truth, and each is for a different 
 
 `hook` is deliberately three or four words. Measured: answering "what are you up to" with `doing`
 produced a fourteen-word description, which is the monologue the whole design is trying to avoid.
+
+## Stories, and the point
+
+A story is `body` plus `point`, and the split is the design: `body` is what happened, and it is
+only ever said when `decide/story` says the moment is right. `point` is what it meant, and it is
+reachable **only** by asking what the point was, which is the difference between a story and a
+sermon. `words` lists the names the story goes by ("fence axe garage handle"), so a question
+that names the thing reaches the right story -- the same lesson as the entity index for
+subjects: naming beats phrasing.
+
+## Plans
+
+A plan is `what` plus `when` in his own words ("get out to the range", "saturday") and `why`.
+It exists so an invitation has somewhere to go: he could already ask whether you were free, and
+this is the thing he was going to suggest.

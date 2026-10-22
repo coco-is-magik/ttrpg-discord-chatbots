@@ -140,3 +140,10 @@ sidequests, in the order they'd pay off:
    block to be able to persist its state across days rather than restart every morning.
 
 None of these are built. Item 1 is the one that changes the most for the least.
+
+## The `short` field on a calendar entry
+
+`title` is what the entry is called (`the season opener`); `short` is what a person says out
+loud (`opener`). The spoken line uses `short` when it exists, because a hook budget is a few
+words and "the season opener is this week" does not fit one. Same idea as an activity's
+`hook` -- see `LIFE.md`.

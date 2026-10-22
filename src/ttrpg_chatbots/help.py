@@ -100,6 +100,8 @@ GROUPS: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = (
             ("stop", "stop speaking"),
             ("voices", "which voice each character uses"),
             ("friendcheck", "are the friends online, can they send, and what did they last hear?"),
+            ("memory", "what the friends remember about you, and what they have brought up"),
+            ("forget", "make a friend forget one thing you told it"),
             ("botcheck", "what this bot is not allowed to do, and how to fix it"),
             ("ping", "is the bot awake?"),
         ),

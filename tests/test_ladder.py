@@ -117,13 +117,13 @@ def test_job_is_exactly_one_thing() -> None:
     assert job.choose(intent="complain", phase="hook") == "mirror"
     # A hook is only available when there is a life to draw on. Without one the honest answer is a
     # hedge, not a phrasebook line about nothing.
-    assert job.choose(intent="about_me", phase="hook", depth=0, known=True) == "offer_hook"
+    assert job.choose(intent="about_me", phase="hook", depth=0, known="self") == "offer_hook"
     assert job.choose(intent="about_me", phase="hook", depth=0) == "hedge"
     # Depth does not turn a hook into a reason: measured live, "what are you up to" arrived
     # deep into a conversation and got a reason instead of the thing he was doing.
-    assert job.choose(intent="about_me", phase="substance", depth=3, known=True) == "offer_hook"
+    assert job.choose(intent="about_me", phase="substance", depth=3, known="self") == "offer_hook"
         # The reason job belongs to the follow-up, not to depth.
-    assert job.choose(intent="explain_me", phase="substance", depth=1, known=True) == "explain"
+    assert job.choose(intent="explain_me", phase="substance", depth=1, known="self") == "explain"
 
 
 def test_who_speaks_depends_on_the_room() -> None:
@@ -229,10 +229,15 @@ def test_a_greeting_runs_the_whole_ladder() -> None:
     assert isinstance(out, Line)
     rungs = [module for module, _ in out.trail.steps]
     assert rungs == [
-        "intent", "phase", "length", "floor", "job", "who", "form", "family", "variant",
+        "intent", "phase", "length", "floor", "job", "subject", "events", "recall", "story", "about",
+        "who", "form", "family",
+        "variant",
         "fill", "trim", "audition",
     ]
     assert out.trail.steps[2][1] == "Budget(max_words=3, max_sentences=1)"
+    # The recall rung is visible even when nothing was recalled: "nothing" is an answer, and seeing
+    # it in the trail is how a gate that worked is told apart from a gate that never ran.
+    assert dict(out.trail.steps)["recall"] == "nothing"
 
 
 def test_unaddressed_silence_is_an_abstain() -> None:
@@ -250,8 +255,8 @@ def test_a_stranger_gets_a_drier_hello_than_a_friend() -> None:
     friend = reply(scene=_scene("hey"), book=load(BOOK))
     stranger = reply(scene=_scene("hey", relationship=Relationship()), book=load(BOOK))
 
-    assert friend.trail.steps[7][1] == "time_morning"
-    assert stranger.trail.steps[7][1] == "casual"
+    assert friend.trail.steps[12][1] == "time_morning"
+    assert stranger.trail.steps[12][1] == "casual"
 
 
 def test_greetings_rotate_and_are_allowed_to_repeat() -> None:

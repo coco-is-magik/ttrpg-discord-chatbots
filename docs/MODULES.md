@@ -49,6 +49,7 @@ Still planned: none -- all 50 modules exist and have tests. What does *not* exis
 | `memory.decay` | what should be forgotten? | long, now → ids | stale + never recalled |
 | `memory.open` | what is still unresolved? | `Memory` → `Open` | pending invitation |
 | `memory.relationship` | how well does he know them? | sessions, gap → `Relationship` | new → acquainted → friend |
+| `memory.db` | where do the facts actually live? | SQLite: facts, topics, tellings, journal | one writer; backup and integrity check |
 | `memory.store` | the only disk adapter | path ↔ dict | atomic write, corrupt file |
 | `bots.memory` **built** | one friend's durable memory | file → `FriendMemory` | reload |
 | `reply.context` **built** | what was said just before? | turns → `Context` | window, previous act |
@@ -66,6 +67,9 @@ Still planned: none -- all 50 modules exist and have tests. What does *not* exis
 | `decide.form` | what shape? | job, budget → `Form` | tight budget → word/clause |
 | `decide.family` | which kind of phrasing? | job, relationship, moment → `Family` | morning + friend → time_morning |
 | `decide.shelf` | which phrasebook answers this job? | job → `Phrasebook \| None` | no borrowing between jobs |
+| `decide.recall` | should he bring up what they told him? | facts, text, gap → `Recall \| None` | one mode per job, once a day |
+| `decide.story` | is now the moment for a story, and which one? | depth, topic, text → `Telling \| None` | three triggers, none of them a mood |
+| `decide.subject` | which subject did they name, and what does he know? | text, index → `Subject \| None` | the name is the gate, distance only ranks |
 | `decide.values` | what values does this line get? | job, life, name → slots | a greeting cannot see his complaints |
 | `decide.variant` | which specific line? | family, phrasebook, recent → id | never repeats within N |
 | `decide.length` | how many words? | their words, phase → `Budget` | 2 words in → ≤4 out |
@@ -133,14 +137,14 @@ direction: nothing may exist while it is still marked *planned*.
 
 ## Where the build stands
 
-**53 of 53 modules exist** (the manifest test refuses drift in either direction; `ttrpg-chatbots-conv
+**57 of 57 modules exist** (the manifest test refuses drift in either direction; `ttrpg-chatbots-conv
 --harness` prints the measurement). The ladder answers **nine phases** live behind
-`TTRPG_CONVERSATION=ladder`; knowledge questions still go through the old classifier, because world
-knowledge is not wired in as a tool yet and a phrasebook bluffing at it would be a downgrade.
+`TTRPG_CONVERSATION=ladder`, and subject questions are answered by the ladder too, through
+`decide/subject`. The old compression classifier is only reached when that switch is off.
 
 | | old corpus | the ladder |
 |---|---|---|
-| words, median | 7 | **1–4**, by phase |
+| words, median | 7 | **1–4** by phase, **18** for a story somebody asked for |
 | two-sentence lines | 51% | **0%** |
 | ends on a beat | 29% | **0%** |
 | distinct lines | 100% | **5–10%** (reused) |
@@ -161,6 +165,12 @@ That last row is the design intent, not a defect: a person says "hey" the same w
    (`test_ladder.py`).
 7. A phrasebook that fights the budget is visible: the harness reports a **trim rate** and the phases
    test fails above 5% (`test_phases.py`).
+8. A fact is only raised in the mode its job welcomes, at most once a day (`test_recall.py`).
+9. A subject he remembers by name is answered even when the phrasing is odd -- no ceiling on top of
+   a name (`test_subject.py`).
+10. A story is only told for one of three reasons, never for a question about the world, and never
+    while somebody is asking something (`test_story.py`).
+11. The point of a story is unreachable unless the story came first (`test_story.py`).
 
 Manual verification, with the module that owns each possible failure, is `MANUAL_TESTING.md` §2.5 and
 §2.7.

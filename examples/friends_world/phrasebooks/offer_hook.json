@@ -1,9 +1,67 @@
 {
   "job": "offer_hook",
-  "note": "What are you up to. One thing, named in a few words, with the invitation as an offer to compare rather than a request to continue. Nothing here is a finished thought: the point is to be asked something back.",
+  "note": "What are you up to. One thing, named in a few words, with the invitation as an offer to compare rather than a request to continue. Nothing here is a finished thought: the point is to be asked something back. The event family is for a day with something in it: the calendar turns 'what are you up to' into news, which is the only thing that makes his week different from last week. The plan family is the invitation having somewhere to go: he can already ask whether you are free, and this is the thing he was going to suggest.",
   "families": {
-    "warm": { "when": { "relationship": ["friend"] }, "variants": ["{hook}", "{hook}, {invite}", "been {hook} most of the day", "{hook}. how about you"] },
-    "casual": { "when": {}, "variants": ["{hook}", "{hook}. you?", "{short}", "not much. {hook}"] },
-    "dry": { "when": { "relationship": ["new"] }, "variants": ["{hook}", "{short}"] }
+    "warm": {
+      "when": {
+        "relationship": [
+          "friend"
+        ]
+      },
+      "variants": [
+        "{hook}",
+        "{hook}, {invite}",
+        "been {hook} most of the day",
+        "{hook}. how about you"
+      ]
+    },
+    "casual": {
+      "when": {},
+      "variants": [
+        "{hook}",
+        "{hook}. you?",
+        "{short}",
+        "not much. {hook}"
+      ]
+    },
+    "dry": {
+      "when": {
+        "relationship": [
+          "new"
+        ]
+      },
+      "variants": [
+        "{hook}",
+        "{short}"
+      ]
+    },
+    "recall": {
+      "when": {
+        "relationship": [
+          "friend"
+        ]
+      },
+      "variants": [
+        "{hook}. how is {fact_value}",
+        "{hook}. how is {fact_value} doing",
+        "{hook}. {fact_value} alright"
+      ]
+    },
+    "event": {
+      "when": {},
+      "variants": [
+        "{event_phrase}",
+        "{hook}, {event_phrase}",
+        "{hook}. {event_phrase}"
+      ]
+    },
+    "plan": {
+      "when": {},
+      "variants": [
+        "{plan_what} {plan_when}",
+        "want to {plan_what} {plan_when}",
+        "{hook}. want to {plan_what}"
+      ]
+    }
   }
 }

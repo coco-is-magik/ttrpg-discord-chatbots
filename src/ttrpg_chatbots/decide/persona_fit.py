@@ -34,17 +34,25 @@ def _sentences(text: str) -> list[str]:
     return [part.strip() for part in parts if part.strip()]
 
 
-def read(text: str) -> Fit:
-    """Fit, with the reasons it does not."""
+def read(text: str, *, story: bool = False) -> Fit:
+    """Fit, with the reasons it does not.
+
+    `story` exempts the two rules that are about *quips* rather than sentences. "my grandfather's axe
+    hung in the garage for twenty years, the head was fine and the handle was rotten" is flagged as
+    "explains itself" and "ends on a beat" -- both true, and both exactly what a story is supposed to
+    do. The rules exist because a short reply that explains itself reads like a forum post; a story
+    somebody asked for is allowed to land.
+    """
     reasons: list[str] = []
     cleaned = " ".join((text or "").lower().split())
     sentences = _sentences(cleaned)
-    if len(sentences) >= 2 and len(sentences[-1].split()) <= 5:
-        reasons.append("ends on a beat")
-    for phrase in _EXPOSITION:
-        if phrase in cleaned:
-            reasons.append("explains itself")
-            break
+    if not story:
+        if len(sentences) >= 2 and len(sentences[-1].split()) <= 5:
+            reasons.append("ends on a beat")
+        for phrase in _EXPOSITION:
+            if phrase in cleaned:
+                reasons.append("explains itself")
+                break
     for phrase in _APHORISM:
         if phrase in cleaned:
             reasons.append("closes like a fortune cookie")

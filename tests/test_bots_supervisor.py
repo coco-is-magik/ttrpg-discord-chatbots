@@ -22,7 +22,9 @@ from ttrpg_chatbots.bots.supervisor import (
     explain_failure,
     run,
 )
+from ttrpg_chatbots.memory.long import Fact
 from ttrpg_chatbots.respond import Answer
+
 
 
 class _Client:
@@ -634,16 +636,33 @@ def test_the_whole_ladder_takes_over_the_phases_it_owns(monkeypatch) -> None:
     assert friend.replied == 5
 
 
-def test_a_knowledge_question_still_goes_to_the_old_path(monkeypatch) -> None:
-    # World knowledge is not wired into the ladder yet, so those questions keep the classifier that
-    # actually knows something. A downgrade here would be worse than the old behaviour.
+def test_a_knowledge_question_goes_through_the_ladder_too(monkeypatch) -> None:
+    # The old classifier is no longer consulted when the ladder is on: it answers subjects from the
+    # same dataset, but through one set of rules -- budget, beat gate, persona fit, depth. A subject
+    # it does not know hedges rather than bluffing, which is still the ladder's answer to give.
     monkeypatch.setenv("TTRPG_CONVERSATION", "ladder")
     chat = _Chat()
     friend = _MentionedFriend(_friend(reply="mention"), chat=chat)
+    message = _mention(friend, "<@1> do you like hockey?")
 
-    asyncio.run(friend.on_message(_mention(friend, "<@1> what is the plot of dune")))
+    asyncio.run(friend.on_message(message))
 
-    assert chat.calls == [("what is the plot of dune", "friend-a", "Tav")]
+    assert chat.calls == []
+    assert message.replies, "the ladder answered"
+    assert len(message.replies[0][0].split()) <= 14, "and inside the same budget as everything else"
+
+
+def test_an_unknown_subject_hedges_instead_of_bluffing(monkeypatch) -> None:
+    monkeypatch.setenv("TTRPG_CONVERSATION", "ladder")
+    chat = _Chat()
+    friend = _MentionedFriend(_friend(reply="mention"), chat=chat)
+    message = _mention(friend, "<@1> what is the plot of dune")
+
+    asyncio.run(friend.on_message(message))
+
+    assert chat.calls == []
+    said = message.replies[0][0]
+    assert len(said.split()) <= 4, f"a hedge is short, got {said!r}"
 
 
 def test_the_greet_only_switch_leaves_the_other_phases_alone(monkeypatch) -> None:
@@ -654,3 +673,39 @@ def test_the_greet_only_switch_leaves_the_other_phases_alone(monkeypatch) -> Non
     asyncio.run(friend.on_message(_mention(friend, "<@1> what are you up to")))
 
     assert chat.calls == [("what are you up to", "friend-a", "Tav")]
+
+
+def test_a_fact_you_volunteer_is_kept(tmp_path, monkeypatch) -> None:
+    # The write path of memory: encode -> promote -> one file. Nothing else in the bot writes facts.
+    monkeypatch.setenv("TTRPG_FRIENDS_MEMORY_DIR", str(tmp_path))
+    chat = _Chat()
+    friend = _MentionedFriend(_friend(reply="mention"), chat=chat)
+
+    asyncio.run(friend.on_message(_mention(friend, "<@1> my dog is called otis")))
+
+    assert [(fact.key, fact.value) for fact in friend.memory.facts] == [("pet.name", "otis")]
+    assert (tmp_path / "memory.db").is_file(), "the fact must be in the database, not just in RAM"
+
+
+def test_a_like_said_once_is_not_kept(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("TTRPG_FRIENDS_MEMORY_DIR", str(tmp_path))
+    friend = _MentionedFriend(_friend(reply="mention"), chat=_Chat())
+
+    asyncio.run(friend.on_message(_mention(friend, "<@1> i really like hockey")))
+
+    assert friend.memory.facts == ()
+    assert friend.memory._pending, "but it is counted, so saying it twice promotes it"
+
+
+def test_bringing_something_up_marks_it_raised_for_the_day(monkeypatch) -> None:
+    # Otherwise every greeting for the rest of the day asks about the same dog.
+    monkeypatch.setenv("TTRPG_CONVERSATION", "ladder")
+    chat = _Chat()
+    friend = _MentionedFriend(_friend(reply="mention"), chat=chat)
+    friend.memory.remember_facts([Fact(key="pet.name", value="otis", meta={"word": "dog"})])
+    message = _mention(friend, "<@1> how is the dog?")
+
+    asyncio.run(friend.on_message(message))
+
+    assert message.replies, "he answered the question about the dog"
+    assert friend.memory.fact("pet.name").meta.get("raised"), "and recorded that he did"

@@ -81,8 +81,45 @@
           "invite": "you got a garage you trust"
         }
       ],
-      "stories": [],
-      "plans": []
+      "stories": [
+        {
+          "id": "grandfathers-axe",
+          "topic": "topic:woodworking",
+          "body": "my grandfather's axe hung in the garage for twenty years. the head was fine, the handle was rotten",
+          "point": "i could have bought a new one for less than the handle cost. that was never the point of it",
+          "words": "fence axe garage handle wood"
+        },
+        {
+          "id": "first-deer",
+          "topic": "topic:hunting",
+          "body": "my first deer, i was fifteen and i missed it clean. my uncle did not say a word the whole way home",
+          "point": "he told me later that a man who laughs at your miss will not be there for your next one",
+          "words": "deer hunting shot uncle rifle"
+        },
+        {
+          "id": "templeos-weekend",
+          "topic": "topic:cs-history",
+          "body": "i spent a weekend reading about how templeos was built. one man, one compiler, everything from scratch",
+          "point": "you do not need a team to make something real. you need to not stop",
+          "words": "templeos compiler code programming"
+        }
+      ],
+      "plans": [
+        {
+          "id": "range-saturday",
+          "topic": "topic:hunting",
+          "what": "get out to the range",
+          "when": "saturday",
+          "why": "the rifle has been apart for a month and i want it sighted in before the season"
+        },
+        {
+          "id": "workshop-sunday",
+          "topic": "topic:woodworking",
+          "what": "clear out the workshop",
+          "when": "sunday",
+          "why": "there is a bench under all of that and i would like to see it again"
+        }
+      ]
     }
   }
 }

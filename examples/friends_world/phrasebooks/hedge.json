@@ -1,7 +1,25 @@
 {
   "job": "hedge",
-  "note": "Nothing to draw on. Deliberately versatile rather than apologetic: a question mark can be confusion, or an invitation to explain, or a flat refusal, and which one it is depends on the conversation. Never a paragraph about not knowing.",
+  "note": "Nothing to draw on. Deliberately versatile rather than apologetic: a question mark can be confusion, or an invitation to explain, or a flat refusal, and which one it is depends on the conversation. Never a paragraph about not knowing. The recall family is for a question about something he remembers by name but cannot answer -- asked after the dog, he asks after the dog.",
   "families": {
-    "hedge": { "when": {}, "variants": ["?", "huh?", "say more?", "you lost me", "not sure i follow", "what do you need"] }
+    "hedge": {
+      "when": {},
+      "variants": [
+        "?",
+        "huh?",
+        "say more?",
+        "you lost me",
+        "not sure i follow",
+        "what do you need"
+      ]
+    },
+    "recall": {
+      "when": {},
+      "variants": [
+        "how is {fact_value} doing",
+        "how is {fact_value} these days",
+        "what is {fact_value} up to"
+      ]
+    }
   }
 }

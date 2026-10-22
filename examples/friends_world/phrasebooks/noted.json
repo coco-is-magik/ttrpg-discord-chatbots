@@ -2,6 +2,25 @@
   "job": "noted",
   "note": "Somebody said something and there is nothing to add. This is the most common reply in any group chat and it is not a failure: a short noise of having heard, no summary of what they said, no question attached. Versatile on purpose -- these fit almost any statement.",
   "families": {
-    "noted": { "when": {}, "variants": ["yeah", "nice", "ah right", "fair enough", "right", "ha", "yeah, that tracks"] }
+    "noted": {
+      "when": {},
+      "variants": [
+        "yeah",
+        "nice",
+        "ah right",
+        "fair enough",
+        "right",
+        "ha",
+        "yeah, that tracks"
+      ]
+    },
+    "recall": {
+      "when": {},
+      "variants": [
+        "how is {fact_value} doing",
+        "how is {fact_value}",
+        "{fact_value} alright?"
+      ]
+    }
   }
 }

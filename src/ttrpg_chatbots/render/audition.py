@@ -23,11 +23,20 @@ class Verdict:
     reason: str = ""
 
 
-def judge(*, text: str, budget: Budget, fit: Fit | None = None, repeated: bool = False) -> Verdict:
+def judge(
+    *,
+    text: str,
+    budget: Budget,
+    fit: Fit | None = None,
+    repeated: bool = False,
+    story: bool = False,
+) -> Verdict:
     """Accept or reject, with the first reason that applies."""
     if not text.strip():
         return Verdict(False, "nothing to say")
-    if repeated and len(text.split()) >= REPEAT_REFUSED_WORDS:
+    if repeated and not story and len(text.split()) >= REPEAT_REFUSED_WORDS:
+        # A story is the exception, and deliberately: it was asked for, and a person asked the same
+        # question twice tells the same story again. Refusing it produced 106 silences in 108.
         return Verdict(False, "he just said that")
     if not budget.fits(text):
         return Verdict(False, "over budget")

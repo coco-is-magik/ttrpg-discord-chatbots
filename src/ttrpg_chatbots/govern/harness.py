@@ -148,6 +148,7 @@ PHASE_MESSAGES: dict[str, tuple[str, ...]] = {
     "offer_hook": ("what are you up to", "what are you doing", "whats up", "you around"),
     "explain": ("why?", "why though", "why is that"),
     "hedge": ("what is the plot of dune", "tell me about the guild", "who is agrippa"),
+    "tell_story": ("how did the fence go?", "what happened with the truck?", "how was the weekend"),
     "noted": ("i have been rebuilding a fence myself", "the truck is in the shop", "my dog is called otis"),
 }
 

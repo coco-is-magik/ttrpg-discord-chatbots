@@ -9,6 +9,12 @@ worth having because they measure *what follows what*, and that is now a first-c
 
 ---
 
+> **Where this stands now.** The conversation ladder answers social moves, his own life, what he
+> remembers about you, *and* subject questions (`decide/subject` reuses `reply/entities` and
+> `reply/ncd` for that). So the compression classifier described here is no longer the live path
+> when `TTRPG_CONVERSATION=ladder`; it is the fallback when that switch is off, and the place the
+> ladder borrowed two ideas from: naming beats phrasing, and distance is for ranking, not gating.
+
 ## 1. Three inputs, in order
 
 | Layer | Module | Decides | Deterministic |

@@ -408,6 +408,71 @@ def _audit_channels(interaction: discord.Interaction, spec) -> list:
 
 
 @command(
+    name="memory",
+    description="What the friends remember about you",
+)
+async def memory(interaction: discord.Interaction) -> None:
+    """Show the durable memory, because memory you cannot inspect is memory that surprises you.
+
+    One file per friend under ``data/friends/``, so this is a view of what is actually on disk --
+    not a summary of it. If a fact is missing here, the bug is upstream in `memory.encode`.
+    """
+    await interaction.response.defer(thinking=True, ephemeral=True)
+    friends = getattr(interaction.client, "friends", {})
+    if not friends:
+        await interaction.followup.send("no friend is connected, so nobody has a memory yet")
+        return
+
+    lines: list[str] = []
+    for name, client in sorted(friends.items()):
+        remembered = getattr(client, "memory", None)
+        if remembered is None:
+            continue
+        lines.append(f"**{name}**")
+        lines.append(f"· you are `{remembered.person or 'unnamed'}`")
+        if remembered.last_seen:
+            lines.append(f"· last spoke {remembered.last_seen}")
+        if remembered.facts:
+            for fact in sorted(remembered.facts, key=lambda item: item.key):
+                raised = fact.meta.get("raised")
+                note = f" (mentioned {raised})" if raised else ""
+                lines.append(f"· `{fact.key}` = **{fact.value}**{note}")
+        else:
+            lines.append("· nothing you have told it yet")
+        if remembered.pending_plan:
+            lines.append("· has an unanswered invitation from you")
+        lines.append("")
+    await interaction.followup.send("\n".join(lines).strip() or "nothing remembered yet")
+
+
+@command(
+    name="forget",
+    description="Make a friend forget one thing you told it",
+)
+@app_commands.describe(key="The key shown by /memory, such as pet.name")
+async def forget(interaction: discord.Interaction, key: str) -> None:
+    """Drop one fact. Deleting memory has to be as easy as making it, or nobody will trust the rest."""
+    await interaction.response.defer(thinking=True, ephemeral=True)
+    friends = getattr(interaction.client, "friends", {})
+    dropped: list[str] = []
+    for name, client in sorted(friends.items()):
+        remembered = getattr(client, "memory", None)
+        if remembered is None:
+            continue
+        if remembered.forget(key.strip()):
+            try:
+                remembered.save()
+            except MemoryError as error:
+                await _fail(interaction, error)
+                return
+            dropped.append(name)
+    if dropped:
+        await interaction.followup.send(f"forgot `{key}`: {', '.join(dropped)}")
+    else:
+        await interaction.followup.send(f"nobody was holding `{key}`. Try /memory")
+
+
+@command(
     name="friendcheck",
     description="Are the friends online, and can they send and hear?",
 )

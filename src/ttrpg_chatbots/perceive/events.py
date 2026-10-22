@@ -13,11 +13,16 @@ from ttrpg_chatbots.conv.types import Event
 def read(calendar, today: date, *, days: int = 7) -> tuple[Event, ...]:
     """Today's events first, then what is coming inside the window."""
     events = [
-        Event(label=entry.title, days_away=0, topics=entry.topics)
+        Event(label=entry.title, days_away=0, topics=entry.topics, short=entry.short)
         for entry in calendar.ongoing(today)
     ]
     for item in calendar.upcoming(today, days=days):
         events.append(
-            Event(label=item.entry.title, days_away=item.days_away, topics=item.entry.topics)
+            Event(
+                label=item.entry.title,
+                days_away=item.days_away,
+                topics=item.entry.topics,
+                short=item.entry.short,
+            )
         )
     return tuple(events)

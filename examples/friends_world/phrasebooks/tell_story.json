@@ -1,0 +1,13 @@
+{
+  "job": "tell_story",
+  "note": "Phase three. The only place he is allowed two sentences, and he is only here because somebody asked. The body is what happened; the point is deliberately in another file (explain) so it can only arrive if it is asked for.",
+  "families": {
+    "story": {
+      "when": {},
+      "variants": [
+        "{story_body}",
+        "{story_body}. still have it"
+      ]
+    }
+  }
+}

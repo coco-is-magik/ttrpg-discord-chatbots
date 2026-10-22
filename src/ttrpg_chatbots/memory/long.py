@@ -64,6 +64,23 @@ class LongTerm:
     def by_prefix(self, prefix: str) -> tuple[Fact, ...]:
         return tuple(fact for key, fact in sorted(self._facts.items()) if key.startswith(prefix))
 
+    def tag(self, key: str, **meta: Any) -> Fact | None:
+        """Attach bookkeeping to a fact without changing what it says or how often it was said.
+
+        Used for things *he* did with the fact rather than things he learned: "raised on Tuesday" is
+        not evidence the person mentioned the dog again.
+        """
+        existing = self._facts.get(key)
+        if existing is None:
+            return None
+        updated = replace(existing, meta={**existing.meta, **meta})
+        self._facts[key] = updated
+        return updated
+
+    def forget(self, key: str) -> bool:
+        """Drop a fact. Returns whether there was one."""
+        return self._facts.pop(key, None) is not None
+
     def to_records(self) -> dict[str, Any]:
         return {"facts": {key: fact.value for key, fact in sorted(self._facts.items())}}
 

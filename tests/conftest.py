@@ -20,6 +20,17 @@ def _refuse(*args, **kwargs):
 
 
 @pytest.fixture(autouse=True)
+def isolate_memory(tmp_path, monkeypatch):
+    """Point every friend's memory at a throwaway database.
+
+    Memory is written by answering a message, and a test that answers a message must not write the
+    real `data/memory.db` -- which it did, once, through `build_entries` migrating at startup.
+    """
+    monkeypatch.setenv("TTRPG_FRIENDS_MEMORY_DIR", str(tmp_path / "memory"))
+    monkeypatch.setenv("TTRPG_MEMORY_DB", str(tmp_path / "memory" / "memory.db"))
+
+
+@pytest.fixture(autouse=True)
 def block_network(monkeypatch):
     """Refuse outbound connections for every test."""
     monkeypatch.setattr(socket.socket, "connect", _refuse)

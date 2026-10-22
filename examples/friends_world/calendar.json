@@ -4,14 +4,145 @@
   "friends": {
     "friend-a": {
       "entries": [
-        { "id": "winter", "kind": "season", "title": "winter", "when": { "months": [12, 1, 2] }, "note": "cold, and dark by five" },
-        { "id": "summer", "kind": "season", "title": "summer", "when": { "months": [6, 7, 8] }, "note": "hot, and light until late" },
-        { "id": "hockey-season", "kind": "annual-range", "title": "the hockey season", "when": { "annual": ["09-15", "06-15"] }, "topics": ["topic:hockey", "topic:rangers"], "note": "there are games on again" },
-        { "id": "christmas", "kind": "annual-day", "title": "Christmas", "when": { "on": "12-25" }, "note": "the family comes over", "removes": ["errands", "workshop-morning", "workshop-late-morning", "out-back"], "adds": [{ "id": "christmas-dinner", "start": "13:00", "end": "16:00", "doing": "sitting down to dinner with the family" }] },
-        { "id": "new-year", "kind": "annual-day", "title": "New Year's Day", "when": { "on": "01-01" }, "note": "a slow start", "removes": ["errands", "workshop-morning"] },
-        { "id": "season-opener", "kind": "oneoff", "title": "the season opener", "when": { "dates": ["2026-10-28", "2026-10-28"] }, "note": "first home game", "topics": ["topic:rangers"] },
-        { "id": "truck-service", "kind": "oneoff", "title": "the truck is in the shop", "when": { "dates": ["2026-11-03", "2026-11-05"] }, "removes": ["errands"], "adds": [{ "id": "garage", "start": "09:00", "end": "11:00", "doing": "at the garage, waiting on the truck" }] },
-        { "id": "up-north", "kind": "oneoff", "title": "away up north", "when": { "dates": ["2027-03-10", "2027-03-17"] }, "note": "no signal up there", "removes": ["*"], "doing": "away up north" }
+        {
+          "id": "winter",
+          "kind": "season",
+          "title": "winter",
+          "when": {
+            "months": [
+              12,
+              1,
+              2
+            ]
+          },
+          "note": "cold, and dark by five",
+          "short": "cold one"
+        },
+        {
+          "id": "summer",
+          "kind": "season",
+          "title": "summer",
+          "when": {
+            "months": [
+              6,
+              7,
+              8
+            ]
+          },
+          "note": "hot, and light until late",
+          "short": "hot one"
+        },
+        {
+          "id": "hockey-season",
+          "kind": "annual-range",
+          "title": "the hockey season",
+          "when": {
+            "annual": [
+              "09-15",
+              "06-15"
+            ]
+          },
+          "topics": [
+            "topic:hockey",
+            "topic:rangers"
+          ],
+          "note": "there are games on again",
+          "short": "hockey is back"
+        },
+        {
+          "id": "christmas",
+          "kind": "annual-day",
+          "title": "Christmas",
+          "when": {
+            "on": "12-25"
+          },
+          "note": "the family comes over",
+          "removes": [
+            "errands",
+            "workshop-morning",
+            "workshop-late-morning",
+            "out-back"
+          ],
+          "adds": [
+            {
+              "id": "christmas-dinner",
+              "start": "13:00",
+              "end": "16:00",
+              "doing": "sitting down to dinner with the family"
+            }
+          ],
+          "short": "christmas here"
+        },
+        {
+          "id": "new-year",
+          "kind": "annual-day",
+          "title": "New Year's Day",
+          "when": {
+            "on": "01-01"
+          },
+          "note": "a slow start",
+          "removes": [
+            "errands",
+            "workshop-morning"
+          ],
+          "short": "slow start"
+        },
+        {
+          "id": "season-opener",
+          "kind": "oneoff",
+          "title": "the season opener",
+          "when": {
+            "dates": [
+              "2026-10-28",
+              "2026-10-28"
+            ]
+          },
+          "note": "first home game",
+          "topics": [
+            "topic:rangers"
+          ],
+          "short": "opener"
+        },
+        {
+          "id": "truck-service",
+          "kind": "oneoff",
+          "title": "the truck is in the shop",
+          "when": {
+            "dates": [
+              "2026-11-03",
+              "2026-11-05"
+            ]
+          },
+          "removes": [
+            "errands"
+          ],
+          "adds": [
+            {
+              "id": "garage",
+              "start": "09:00",
+              "end": "11:00",
+              "doing": "at the garage, waiting on the truck"
+            }
+          ],
+          "short": "truck is in the shop"
+        },
+        {
+          "id": "up-north",
+          "kind": "oneoff",
+          "title": "away up north",
+          "when": {
+            "dates": [
+              "2027-03-10",
+              "2027-03-17"
+            ]
+          },
+          "note": "no signal up there",
+          "removes": [
+            "*"
+          ],
+          "doing": "away up north",
+          "short": "away up north"
+        }
       ]
     }
   }

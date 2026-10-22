@@ -71,14 +71,55 @@ class Grievance:
 
 
 @dataclass(frozen=True)
+class Story:
+    """Something that happened, with the point he draws from it.
+
+    Two fields, and the split is the whole design. ``body`` is what he says when the moment comes --
+    short, in the past tense, with a snag in it. ``point`` is what he says only if he is asked what
+    he learned or why it matters, which is the difference between a story and a sermon.
+    """
+
+    id: str
+    body: str
+    point: str = ""
+    topic: str = ""
+    # The names this story goes by, so "how did the fence go" reaches it. Same lesson as the
+    # entity index for subjects: naming beats phrasing.
+    words: str = ""
+
+    def __post_init__(self) -> None:
+        for field in ("id", "body"):
+            value = getattr(self, field)
+            if not isinstance(value, str) or not value.strip():
+                raise LifeError(f"story {self.id!r} needs a non-blank {field!r}")
+
+
+@dataclass(frozen=True)
+class Plan:
+    """Something he wants to do, so an invitation has somewhere to go."""
+
+    id: str
+    what: str  # "get out to the range"
+    when: str = ""  # "saturday" -- his words, not a timestamp
+    why: str = ""
+    topic: str = ""
+
+    def __post_init__(self) -> None:
+        for field in ("id", "what"):
+            value = getattr(self, field)
+            if not isinstance(value, str) or not value.strip():
+                raise LifeError(f"plan {self.id!r} needs a non-blank {field!r}")
+
+
+@dataclass(frozen=True)
 class Life:
     """One friend's ongoing life: what they are doing, and what they are annoyed about."""
 
     friend: str
     activities: tuple[Activity, ...] = ()
     grievances: tuple[Grievance, ...] = ()
-    stories: tuple[Mapping[str, Any], ...] = ()
-    plans: tuple[Mapping[str, Any], ...] = ()
+    stories: tuple[Story, ...] = ()
+    plans: tuple[Plan, ...] = ()
 
     def __bool__(self) -> bool:
         return bool(self.activities or self.grievances)
@@ -90,6 +131,10 @@ class Life:
     def grievance(self, day: date | str | None = None) -> Grievance | None:
         """The complaint they have been carrying around today."""
         return _pick(self.grievances, f"{self.friend}:grievance:{_day(day)}")
+
+    def plan(self, day: date | str | None = None) -> Plan | None:
+        """The thing he would invite you to today."""
+        return _pick(self.plans, f"{self.friend}:plan:{_day(day)}")
 
     def describe(self) -> str:
         activity = self.current()

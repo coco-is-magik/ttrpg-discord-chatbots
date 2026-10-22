@@ -17,7 +17,7 @@ from collections.abc import Mapping, Sequence
 from datetime import date
 from typing import Any
 
-from ttrpg_chatbots.life.state import Activity, Grievance, Life
+from ttrpg_chatbots.life.state import Activity, Grievance, Life, Plan, Story
 
 # Answering "what are you up to".
 DOING: tuple[str, ...] = (
@@ -146,8 +146,8 @@ def load_lives(path) -> dict[str, Life]:
                 grievances=tuple(
                     Grievance(**item) for item in record.get("grievances") or ()
                 ),
-                stories=tuple(record.get("stories") or ()),
-                plans=tuple(record.get("plans") or ()),
+                stories=tuple(Story(**item) for item in record.get("stories") or ()),
+                plans=tuple(Plan(**item) for item in record.get("plans") or ()),
             )
         except (LifeError, TypeError) as error:
             raise LifeError(f"{target}: {friend}: {error}") from error

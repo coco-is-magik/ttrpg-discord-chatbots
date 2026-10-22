@@ -16,16 +16,20 @@ def read(
     named_subject: bool = False,
     depth: int = 0,
     asked_why: bool = False,
+    known_subject: bool = False,
+    story: bool = False,
 ) -> Phase:
     """The most specific phase the evidence supports.
 
-    `asked_why` is the one question that jumps the queue: "why?" is a request for the reason, and the
-    reason is the substance tier. Treating it as pleasantries is how a person gets a shrug instead of
-    an answer.
+    Two things jump the queue. `asked_why`: "why?" is a request for the reason, and the reason is the
+    substance tier -- treating it as pleasantries is how a person gets a shrug instead of an answer.
+    `known_subject`: a question about something he has facts about is a content question, and content
+    needs the room the substance budget gives it. `story`: the same, for the one thing that is
+    genuinely longer than a sentence.
     """
     if closing:
         return "closing"
-    if depth >= 1 or asked_why:
+    if depth >= 1 or asked_why or known_subject or story:
         return "substance"
     if named_subject:
         return "hook"

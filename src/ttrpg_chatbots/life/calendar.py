@@ -49,6 +49,7 @@ class Entry:
     kind: str
     title: str
     note: str = ""
+    short: str = ""  # "hockey's back" -- two or three words, for a spoken line
     # when
     months: tuple[int, ...] = ()
     on: tuple[int, int] | None = None  # (month, day), every year
@@ -287,6 +288,7 @@ def _entry(record: Mapping[str, Any]) -> Entry:
         kind=kind,
         title=str(record.get("title") or record["id"]),
         note=str(record.get("note") or ""),
+        short=str(record.get("short") or ""),
         months=months,
         on=on_pair,
         annual=annual,
