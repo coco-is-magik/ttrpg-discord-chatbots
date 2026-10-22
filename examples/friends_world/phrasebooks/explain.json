@@ -1,0 +1,7 @@
+{
+  "job": "explain",
+  "note": "Phase three, and only reachable at depth 1 or more. This is the one place he is allowed to say why he is doing the thing, because somebody asked. It is a reason, not a fact: a fact is true for everybody.",
+  "families": {
+    "detail": { "when": {}, "variants": ["{why}", "honestly, {why}", "{why}. no better reason"] }
+  }
+}

@@ -13,12 +13,15 @@ from __future__ import annotations
 import statistics
 from collections import Counter
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from ttrpg_chatbots.conv.types import Abstain, Line, Relationship, Utterance
 from ttrpg_chatbots.decide.persona_fit import read as fit
+from ttrpg_chatbots.decide.shelf import Shelf
 from ttrpg_chatbots.decide.variant import Phrasebook
 from ttrpg_chatbots.govern.loop import Scene, reply
 from ttrpg_chatbots.govern.repeat import Recent
+from ttrpg_chatbots.life.state import Life
 from ttrpg_chatbots.perceive.clock import Moment, read_clock
 from ttrpg_chatbots.reply.style import Style
 
@@ -34,6 +37,13 @@ class Report:
     attempts: int = 0
     lines: tuple[str, ...] = ()
     abstains: Counter[str] = field(default_factory=Counter)
+    # Lines the trimmer shortened. Not an error in itself, but a high rate means the phrasebook and
+    # the budget disagree -- measured live: a comiseration was trimmed from twelve words to "yeah".
+    trimmed: int = 0
+
+    @property
+    def trim_rate(self) -> float:
+        return self.trimmed / self.attempts if self.attempts else 0.0
 
     @property
     def said(self) -> int:
@@ -66,13 +76,16 @@ class Report:
             f"abstained {self.attempts - self.said}" + (f" ({reasons})" if reasons else "") + "\n"
             f"words: median {self.median_words:g}, max {self.max_words}\n"
             f"distinct: {self.distinct_ratio:.0%} ({len(set(self.lines))} of {self.said})\n"
-            f"ends on a beat: {self.beat_rate:.0%}"
+            f"ends on a beat: {self.beat_rate:.0%}\n"
+            f"trimmed: {self.trim_rate:.0%}"
         )
 
 
 def run(
     *,
-    book: Phrasebook,
+    book: Phrasebook | None = None,
+    books: Shelf | None = None,
+    life: Life | None = None,
     messages: tuple[str, ...] = ("hey", "hey", "morning", "yo"),
     relationships: tuple[Relationship, ...] = (),
     moments: tuple[Moment, ...] = (),
@@ -86,10 +99,10 @@ def run(
         Relationship(stage="friend", warmth=3),
     )
     times = moments or (
-        read_clock(__import__("datetime").datetime(2026, 10, 21, 8, 10)),
-        read_clock(__import__("datetime").datetime(2026, 10, 21, 13, 0)),
-        read_clock(__import__("datetime").datetime(2026, 10, 21, 19, 20)),
-        read_clock(__import__("datetime").datetime(2026, 10, 22, 0, 40)),
+        read_clock(datetime(2026, 10, 21, 8, 10)),
+        read_clock(datetime(2026, 10, 21, 13, 0)),
+        read_clock(datetime(2026, 10, 21, 19, 20)),
+        read_clock(datetime(2026, 10, 22, 0, 40)),
     )
     report = Report()
     said: list[str] = []
@@ -105,8 +118,11 @@ def run(
                             addressed="named",
                             moment=moment,
                             relationship=person,
+                            life=life,
+                            name="tav",
                         ),
                         book=book,
+                        books=books,
                         style=style,
                         recent=ledger,
                     )
@@ -114,5 +130,41 @@ def run(
                         report.abstains[out.reason] += 1
                     else:
                         said.append(out.text)
+                        steps = dict(out.trail.steps)
+                        if steps.get("fill") and steps.get("trim") != steps.get("fill"):
+                            report.trimmed += 1
     report.lines = tuple(said)
     return report
+
+
+# The messages each phase is for. Not the ones a phrasebook would like to receive: a two-word
+# question, a one-word "why?", a complaint with no detail in it.
+PHASE_MESSAGES: dict[str, tuple[str, ...]] = {
+    "greet": ("hey", "hey", "morning", "yo"),
+    "acknowledge": ("thanks", "thanks", "yeah", "sounds good"),
+    "close": ("good night", "night", "good night"),
+    "reassure": ("i am nervous about tomorrow", "i am stuck on this", "i am dreading it"),
+    "mirror": ("rough day at work", "today was a mess", "ugh"),
+    "offer_hook": ("what are you up to", "what are you doing", "whats up", "you around"),
+    "explain": ("why?", "why though", "why is that"),
+    "hedge": ("what is the plot of dune", "tell me about the guild", "who is agrippa"),
+    "noted": ("i have been rebuilding a fence myself", "the truck is in the shop", "my dog is called otis"),
+}
+
+
+def run_phases(
+    *,
+    books: Shelf,
+    life: Life | None = None,
+    style: Style | None = None,
+) -> dict[str, Report]:
+    """One report per phase a shelf can actually answer."""
+    reports: dict[str, Report] = {}
+    for job in books.jobs():
+        messages = PHASE_MESSAGES.get(job)
+        if messages is None:
+            continue
+        reports[job] = run(
+            books=books, messages=messages, repeats=3, style=style, life=life
+        )
+    return reports

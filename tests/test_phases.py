@@ -1,0 +1,223 @@
+"""The other phases, one at a time.
+
+Same shape as `test_greeter.py`, one section per phase, so a failure names the phase that broke rather
+than the responder. The messages are the ones a person actually types: a two-word question, a
+one-word "why?", a complaint with no detail in it.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+from pathlib import Path
+
+import pytest
+
+from ttrpg_chatbots.bots.ladder import Ladder
+from ttrpg_chatbots.bots.memory import FriendMemory
+from ttrpg_chatbots.conv.types import Abstain, Line
+from ttrpg_chatbots.decide.shelf import Shelf, load_shelf
+from ttrpg_chatbots.decide.values import build, missing
+from ttrpg_chatbots.decide.variant import PhrasebookError
+from ttrpg_chatbots.govern.harness import run_phases
+from ttrpg_chatbots.life.render import load_lives
+from ttrpg_chatbots.perceive.clock import read_clock
+from ttrpg_chatbots.reply.context import Turn
+
+WORLD = Path("examples/friends_world")
+EVENING = read_clock(datetime(2026, 10, 21, 20, 15))
+DAY = EVENING.now.date()
+PHASES = (
+    "acknowledge",
+    "close",
+    "explain",
+    "greet",
+    "hedge",
+    "mirror",
+    "noted",
+    "offer_hook",
+    "reassure",
+)
+
+
+def _memory() -> FriendMemory:
+    return FriendMemory("friend-a", sessions=14, person="tav", topics={"topic:rangers": 3})
+
+
+def _say(text: str, *, turns: tuple[Turn, ...] = (), friend: str = "friend-a"):
+    """One message through the ladder, with the day pinned so the life does not move under it."""
+    ladder = Ladder(friend=friend, data=WORLD)
+    return ladder.line(
+        text=text, memory=_memory(), moment=EVENING, turns=turns, day=DAY
+    )
+
+
+def _lean_in(*lines: str) -> tuple[Turn, ...]:
+    """Human turns long enough to count as leaning in."""
+    return tuple(
+        Turn(speaker="tav", text=line, act=None, is_bot=False)
+        for line in (lines or ("i have been rebuilding a fence myself this month",))
+    )
+
+
+# --- the shelf ----------------------------------------------------------------------------------
+
+
+def test_the_shelf_has_one_book_per_phase() -> None:
+    shelf = load_shelf(WORLD / "phrasebooks")
+
+    assert shelf.jobs() == PHASES
+
+
+def test_the_shelf_never_borrows_between_jobs() -> None:
+    shelf = load_shelf(WORLD / "phrasebooks")
+
+    assert shelf.for_job("greet") is not None
+    assert shelf.for_job("sing") is None
+
+
+def test_a_missing_phrasebook_directory_is_an_empty_shelf(tmp_path) -> None:
+    assert load_shelf(tmp_path / "nothing") == Shelf(books={})
+
+# --- values -------------------------------------------------------------------------------------
+
+
+def test_a_hook_gets_the_thing_he_is_doing() -> None:
+    life = load_lives(WORLD / "life.json")["friend-a"]
+    slots = build(job="offer_hook", life=life, day=DAY)
+
+    assert slots["hook"]
+    assert len(slots["hook"].split()) <= 5, "a hook is a few words, not a description"
+    assert "doing" in slots and "why" in slots
+
+
+def test_a_mirror_gets_a_grievance_and_a_greeting_gets_nothing() -> None:
+    life = load_lives(WORLD / "life.json")["friend-a"]
+
+    mirrored = build(job="mirror", life=life, day=DAY)
+    greeted = build(job="greet", life=life, day=DAY)
+
+    assert mirrored["grievance"]
+    assert "grievance" not in greeted, "a greeting has no business knowing his complaints"
+
+
+def test_missing_reports_the_slot_that_cannot_be_filled() -> None:
+    assert missing("{hook} and {name}", {"hook": "fencing"}) == ("name",)
+    assert missing("{hook}", {"hook": "fencing"}) == ()
+
+
+# --- one phase at a time ------------------------------------------------------------------------
+
+
+def test_a_hook_names_one_thing_shortly() -> None:
+    out = _say("what are you up to")
+
+    assert isinstance(out, Line)
+    assert len(out.text.split()) <= 5
+    assert dict(out.trail.steps)["job"] == "offer_hook"
+
+
+def test_a_rough_day_gets_a_reaction_and_not_a_monologue() -> None:
+    out = _say("rough day at work")
+    life = load_lives(WORLD / "life.json")["friend-a"]
+
+    assert isinstance(out, Line)
+    assert dict(out.trail.steps)["family"] == "reaction"
+    grievance = life.grievance(DAY).text
+    assert grievance not in out.text, "the grievance arrived before they leaned in"
+
+
+def test_leaning_in_gets_the_grievance() -> None:
+    out = _say("rough day at work", turns=_lean_in())
+    life = load_lives(WORLD / "life.json")["friend-a"]
+
+    assert isinstance(out, Line)
+    assert dict(out.trail.steps)["family"] == "detail"
+    assert life.grievance(DAY).text.lower() in out.text.lower()
+
+
+def test_why_reaches_the_reason() -> None:
+    out = _say("why?")
+    life = load_lives(WORLD / "life.json")["friend-a"]
+
+    assert isinstance(out, Line)
+    assert dict(out.trail.steps)["job"] == "explain"
+    assert life.current(DAY).why.lower() in out.text.lower()
+
+
+def test_a_question_he_cannot_answer_hedges_shortly() -> None:
+    out = _say("what is the plot of dune?")
+
+    assert isinstance(out, Line)
+    assert dict(out.trail.steps)["job"] == "hedge"
+    assert len(out.text.split()) <= 4
+
+
+def test_being_nervous_gets_one_encouraging_line() -> None:
+    out = _say("i am nervous about tomorrow")
+
+    assert isinstance(out, Line)
+    assert dict(out.trail.steps)["job"] == "reassure"
+
+
+def test_saying_goodnight_ends_it() -> None:
+    out = _say("good night")
+
+    assert isinstance(out, Line)
+    assert dict(out.trail.steps)["job"] == "close"
+    assert len(out.text.split()) <= 3
+
+
+def test_thanks_is_acknowledged_not_answered() -> None:
+    out = _say("thanks")
+
+    assert isinstance(out, Line)
+    assert dict(out.trail.steps)["job"] == "acknowledge"
+
+
+def test_a_friend_with_no_life_hedges_rather_than_inventing_one() -> None:
+    out = _say("what are you up to", friend="friend-z")
+
+    if isinstance(out, Line):
+        assert dict(out.trail.steps)["job"] == "hedge"
+    else:
+        assert isinstance(out, Abstain)
+
+
+# --- the numbers --------------------------------------------------------------------------------
+
+
+def test_every_phase_answers_every_time_without_sounding_written() -> None:
+    shelf = load_shelf(WORLD / "phrasebooks")
+    reports = run_phases(books=shelf, life=load_lives(WORLD / "life.json")["friend-a"])
+
+    assert set(reports) == set(PHASES)
+    for job, report in reports.items():
+        assert report.said == report.attempts, f"{job} went quiet: {report.abstains}"
+        assert report.median_words <= 4, f"{job} is writing essays"
+        assert report.max_words <= 14, f"{job} broke the ceiling"
+        assert report.beat_rate == 0, f"{job} ends lines on a beat"
+        assert report.distinct_ratio < 0.5, f"{job} invents a new line every time"
+        # A trim means the phrasebook and the budget disagree. Live, a comiseration was trimmed from
+        # twelve words to "yeah" -- the content gone and the reaction left behind.
+        assert report.trim_rate < 0.05, f"{job} needs the trimmer: {report.trim_rate:.0%}"
+
+
+def test_two_books_claiming_one_job_are_refused(tmp_path) -> None:
+    (tmp_path / "a.json").write_text('{"job": "greet", "families": {"x": {"variants": ["hey"]}}}')
+    (tmp_path / "b.json").write_text('{"job": "greet", "families": {"x": {"variants": ["yo"]}}}')
+
+    with pytest.raises(PhrasebookError, match="two books claim"):
+        load_shelf(tmp_path)
+
+
+def test_every_slot_in_every_phrasebook_is_fillable_by_its_own_job() -> None:
+    # A typo in a slot name is otherwise invisible until it happens to be chosen, and then the stage
+    # abstains for a reason nobody reads. This checks the whole shelf against the real dataset.
+    shelf = load_shelf(WORLD / "phrasebooks")
+    life = load_lives(WORLD / "life.json")["friend-a"]
+
+    for job in shelf.jobs():
+        slots = build(job=job, life=life, day=DAY, name="tav")
+        for family in shelf.for_job(job).families.values():
+            for template in family.variants:
+                assert not missing(template, slots), f"{job}: {template!r} cannot be filled"

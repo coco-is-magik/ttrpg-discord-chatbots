@@ -10,9 +10,12 @@ from ttrpg_chatbots.conv.types import Budget, Form, Job
 
 def choose(*, job: Job, budget: Budget) -> Form:
     """The shortest shape that can do this job."""
+    if job == "hedge":
+        # A hedge is a look, not a sentence: "?", "huh?", "you lost me".
+        return "word"
     if budget.max_words <= 2:
         return "word"
-    if job in ("greet", "acknowledge", "mirror"):
+    if job in ("greet", "acknowledge", "mirror", "close", "reassure"):
         return "clause"
     if budget.max_words <= 6:
         return "clause_question"

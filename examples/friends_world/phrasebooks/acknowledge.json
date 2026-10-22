@@ -1,0 +1,9 @@
+{
+  "job": "acknowledge",
+  "note": "Thanks, apologies, agreements, comfort, goodbyes. One short beat, no reassurance speech, nothing that asks to be answered.",
+  "families": {
+    "warm": { "when": { "relationship": ["friend"] }, "variants": ["any time", "you got it", "of course", "no worries at all"] },
+    "casual": { "when": {}, "variants": ["sure", "no worries", "yeah no problem", "all good"] },
+    "dry": { "when": { "relationship": ["new"] }, "variants": ["sure", "of course", "no problem"] }
+  }
+}

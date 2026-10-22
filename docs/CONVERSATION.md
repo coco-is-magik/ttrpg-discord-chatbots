@@ -129,12 +129,62 @@ familiarity sounds like.
 
 ### Proving it on a person
 
-The ladder runs live for greetings only, behind `TTRPG_CONVERSATION=greet`; everything else still
-goes to the old classifier. The script is `docs/MANUAL_TESTING.md` §2.5: eight checks, each naming
-the module that owns a failure, plus four outcomes that would mean the decomposition is wrong rather
-than the phrasebook.
+The ladder runs live behind `TTRPG_CONVERSATION`: `greet` answers greetings only, `ladder` answers
+every phase the friend has a phrasebook for and leaves knowledge questions to the old classifier
+(until world knowledge is wired in as a tool). The script is `docs/MANUAL_TESTING.md` §2.5 and §2.7.
 
-## 7. Risks
+## 7. The phases, as built
+
+Nine jobs, one file each in `examples/friends_world/phrasebooks/`. A phase is added by dropping a
+file in; removed by deleting one. The shelf refuses to lend one job's lines to another.
+
+| Phase | Job | Answers | Slots it may use | Measured |
+|---|---|---|---|---|
+| Opening | `greet` | "hey" | clock, relationship | median 1 word |
+| Opening | `close` | "good night" | — | median 1 word |
+| Pleasantries | `acknowledge` | "thanks", "yeah" | — | median 1 word |
+| Pleasantries | `noted` | a statement with nothing to add to | — | median 1 word |
+| Pleasantries | `reassure` | "i am nervous about tomorrow" | — | median 1 word |
+| Pleasantries | `mirror` | "rough day at work" | his grievance, **only at depth ≥ 1** | median 1.5 words |
+| Hook | `offer_hook` | "what are you up to" | `{hook}`, `{invite}`, `{short}` | median 4 words |
+| Substance | `explain` | "why?" | `{why}` | median 2 words |
+| Any | `hedge` | a question he cannot answer | — | median 1 word |
+
+`ttrpg-chatbots-conv --harness` prints one report per phase: attempts, abstains, median and maximum
+words, distinctness, beat rate, and how often the trimmer had to intervene. `--say "..." --explain`
+prints the eight rungs for a single message.
+
+### What the phases cost in the data
+
+* `life.json` gained a **`hook`** per activity -- "rebuilding the back fence", "messing with an old
+  computer". A hook is a few words; `doing` is a description and `phase` is a status, and using either
+  for "what are you up to" is how a person starts monologuing.
+* Every `why` and every grievance was **shortened to what fits in one breath**. A reason is a reason,
+  not a paragraph with a twist.
+* The `reply` slot split from `text` for the same reason: a template carries the *stance*, and a fact
+  carries the anchor.
+
+### The five defects the live channel found that review did not
+
+1. **A hook answered with a reason.** "what are you up to" arrived after a long message, depth was
+   already 1, and `decide.job` used depth to promote the hook to an explanation. Depth belongs to the
+   follow-up, not to a fresh question about his day; `explain` is now reached only by a why-question.
+2. **The trimmer cut a comiseration to "yeah".** The mirror detail family was `"{reaction}. {grievance}"`
+   -- two beats, twelve words, over budget -- so `render.trim` dropped the *content* and kept the
+   reaction. Two fixes: the detail family is the grievance alone, and the harness now reports a
+   **trim rate** so a phrasebook that fights the budget is visible instead of silent.
+3. **A question with no question mark became a statement.** "what is the plot of dune" (no "?") is a
+   question; `looks_like_question` reads the opening word as well as the punctuation.
+4. **A statement got "?"** -- "i have been rebuilding a fence myself this month" was treated as an
+   unanswerable question. Statements now get `noted`, whose whole job is a short noise of having
+   heard, because that is the most common reply in any group chat.
+5. **A goodbye got "you got it".** Goodbyes were acknowledgements; they are now `close`, whose
+   phrasebook has one rule -- answer it and let them go.
+
+Every one of those was invisible in the tests and obvious in a channel. That is the argument for the
+harness *and* for testing with a person, not one or the other.
+
+## 8. Risks
 
 - **Telegraph.** Mitigation: `Abstain` everywhere; silence over improvisation.
 - **Debugging.** Mitigation: the trace is mandatory, plus `conv --explain "hey"` printing the rungs.

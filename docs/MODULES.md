@@ -65,6 +65,8 @@ Still planned: none -- all 50 modules exist and have tests. What does *not* exis
 | `decide.who` | friend or character? | situation, table → `Who` | ttrpg scene → character |
 | `decide.form` | what shape? | job, budget → `Form` | tight budget → word/clause |
 | `decide.family` | which kind of phrasing? | job, relationship, moment → `Family` | morning + friend → time_morning |
+| `decide.shelf` | which phrasebook answers this job? | job → `Phrasebook \| None` | no borrowing between jobs |
+| `decide.values` | what values does this line get? | job, life, name → slots | a greeting cannot see his complaints |
 | `decide.variant` | which specific line? | family, phrasebook, recent → id | never repeats within N |
 | `decide.length` | how many words? | their words, phase → `Budget` | 2 words in → ≤4 out |
 | `decide.reciprocate` | does he hand the turn back? | job, tone → `Reciprocate` | hook → question |
@@ -131,27 +133,34 @@ direction: nothing may exist while it is still marked *planned*.
 
 ## Where the build stands
 
-**51 of 51 modules exist** (`ttrpg-chatbots-conv --harness` runs the measurement; the manifest test
-refuses drift in either direction). The ladder is wired live for **one** job — greetings — behind
-`TTRPG_CONVERSATION=greet`, and every other job still goes through the old classifier.
+**53 of 53 modules exist** (the manifest test refuses drift in either direction; `ttrpg-chatbots-conv
+--harness` prints the measurement). The ladder answers **nine phases** live behind
+`TTRPG_CONVERSATION=ladder`; knowledge questions still go through the old classifier, because world
+knowledge is not wired in as a tool yet and a phrasebook bluffing at it would be a downgrade.
 
-Measured on the greet phrasebook, 144 attempts over three relationships and four times of day:
-
-| | old corpus | greet ladder |
+| | old corpus | the ladder |
 |---|---|---|
-| words, median | 7 | **1** |
+| words, median | 7 | **1–4**, by phase |
 | two-sentence lines | 51% | **0%** |
 | ends on a beat | 29% | **0%** |
-| distinct lines | 100% | **7%** (10 lines, reused) |
+| distinct lines | 100% | **5–10%** (reused) |
+| answered when addressed | — | **100%** of 1,080 measured attempts |
 
 That last row is the design intent, not a defect: a person says "hey" the same way all week.
 
-### Three rules the greet phase added, now enforced by tests
+### Rules the phases added, each now enforced by a test
 
 1. `decide/variant` never offers a line the budget cannot fit — a too-long variant does not exist as
    a candidate (`test_greeter.py`).
 2. A missing family yields no lines; it does not borrow another family's (`test_ladder.py`).
-3. A phrasebook answers its own job only, and abstains otherwise: `the greet phrasebook does not do
-   acknowledge` (`test_greeter.py`).
+3. A phrasebook answers its own job only, and abstains otherwise (`test_greeter.py`).
+4. `decide/shelf` will not hand over a book for a job it does not own (`test_phases.py`).
+5. Depth gates the detail: a grievance cannot appear before the other person has leaned in
+   (`test_phases.py`).
+6. A question with no question mark is still a question, and a statement is never treated as one
+   (`test_ladder.py`).
+7. A phrasebook that fights the budget is visible: the harness reports a **trim rate** and the phases
+   test fails above 5% (`test_phases.py`).
 
-Manual verification, with the module that owns each possible failure, is `MANUAL_TESTING.md` §2.5.
+Manual verification, with the module that owns each possible failure, is `MANUAL_TESTING.md` §2.5 and
+§2.7.

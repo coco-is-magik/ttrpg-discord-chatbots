@@ -15,11 +15,17 @@ def read(
     closing: bool = False,
     named_subject: bool = False,
     depth: int = 0,
+    asked_why: bool = False,
 ) -> Phase:
-    """The most specific phase the evidence supports."""
+    """The most specific phase the evidence supports.
+
+    `asked_why` is the one question that jumps the queue: "why?" is a request for the reason, and the
+    reason is the substance tier. Treating it as pleasantries is how a person gets a shrug instead of
+    an answer.
+    """
     if closing:
         return "closing"
-    if depth >= 1:
+    if depth >= 1 or asked_why:
         return "substance"
     if named_subject:
         return "hook"

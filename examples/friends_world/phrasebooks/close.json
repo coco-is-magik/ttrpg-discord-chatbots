@@ -1,0 +1,7 @@
+{
+  "job": "close",
+  "note": "Somebody is going. Answer it and let them go -- no 'before you go', no last question, no summary of the conversation. A goodbye that tries to keep you is the most machine-like thing in a group chat.",
+  "families": {
+    "closing": { "when": {}, "variants": ["night", "night bud", "later", "see you", "catch you later", "night you"] }
+  }
+}

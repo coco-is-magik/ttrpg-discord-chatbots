@@ -115,8 +115,15 @@ def test_depth_counts_only_leaning_in() -> None:
 def test_job_is_exactly_one_thing() -> None:
     assert job.choose(intent="greet", phase="opening") == "greet"
     assert job.choose(intent="complain", phase="hook") == "mirror"
-    assert job.choose(intent="about_me", phase="hook", depth=0) == "offer_hook"
-    assert job.choose(intent="about_me", phase="substance", depth=1) == "explain"
+    # A hook is only available when there is a life to draw on. Without one the honest answer is a
+    # hedge, not a phrasebook line about nothing.
+    assert job.choose(intent="about_me", phase="hook", depth=0, known=True) == "offer_hook"
+    assert job.choose(intent="about_me", phase="hook", depth=0) == "hedge"
+    # Depth does not turn a hook into a reason: measured live, "what are you up to" arrived
+    # deep into a conversation and got a reason instead of the thing he was doing.
+    assert job.choose(intent="about_me", phase="substance", depth=3, known=True) == "offer_hook"
+        # The reason job belongs to the follow-up, not to depth.
+    assert job.choose(intent="explain_me", phase="substance", depth=1, known=True) == "explain"
 
 
 def test_who_speaks_depends_on_the_room() -> None:
@@ -135,7 +142,10 @@ def test_family_uses_the_clock_and_the_relationship() -> None:
     assert family.choose(job="greet", relationship=FRIEND, part_of_day="morning") == "time_morning"
     assert family.choose(job="greet", relationship=FRIEND, part_of_day="evening") == "time_evening"
     assert family.choose(job="greet", relationship=Relationship(), part_of_day="afternoon") == "casual"
-    assert family.choose(job="mirror", relationship=Relationship(), part_of_day="night") == "dry"
+    # For mirror the phase outranks the register: a reaction first, the grievance only once they
+    # have leaned in.
+    assert family.choose(job="mirror", relationship=Relationship(), part_of_day="night") == "reaction"
+    assert family.choose(job="mirror", relationship=FRIEND, part_of_day="night", depth=1) == "detail"
 
 
 def test_reciprocation_never_nags() -> None:
@@ -187,9 +197,11 @@ def test_audition_rejects_what_it_should() -> None:
     assert audition.judge(text="hey", budget=Budget(3, 1)).ok is True
     assert audition.judge(text="", budget=Budget(3, 1)).reason == "nothing to say"
     assert audition.judge(text="a b c d e f g", budget=Budget(3, 1)).reason == "over budget"
-    assert audition.judge(text="a b c d", budget=Budget(9, 1), repeated=True).reason == "he just said that"
-    # a two-word line may repeat: that is what people do
-    assert audition.judge(text="hey", budget=Budget(3, 1), repeated=True).ok is True
+    # Only a long line echoing itself is refused. A hook is one activity per day, so saying
+    # "rebuilding the back fence" twice is a person, and refusing it produced 95 silences in 144.
+    assert audition.judge(text="a b c d e", budget=Budget(9, 1), repeated=True).ok is True
+    long_line = "a b c d e f g h i"
+    assert audition.judge(text=long_line, budget=Budget(12, 1), repeated=True).reason == "he just said that"
 
 
 def test_a_line_must_have_words() -> None:
@@ -218,7 +230,7 @@ def test_a_greeting_runs_the_whole_ladder() -> None:
     rungs = [module for module, _ in out.trail.steps]
     assert rungs == [
         "intent", "phase", "length", "floor", "job", "who", "form", "family", "variant",
-        "trim", "audition",
+        "fill", "trim", "audition",
     ]
     assert out.trail.steps[2][1] == "Budget(max_words=3, max_sentences=1)"
 
@@ -261,4 +273,11 @@ def test_intent_mapping_covers_the_lexicon() -> None:
     assert intent_of("hey") == "greet"
     assert intent_of("rough day") == "complain"
     assert intent_of("thanks") == "meta"
-    assert intent_of("what is the plot of dune") == "meta"
+    assert intent_of("i am nervous") == "comfort"
+    assert intent_of("good night") == "decline"
+    # Anything the lexicon does not know is a question the ladder cannot answer, which is a hedge.
+    # It used to become an acknowledgement, so "what is the plot of dune" got "any time".
+    assert intent_of("what is the plot of dune") == "about_world"
+    assert intent_of("why?") == "explain_me"
+    # A statement is somebody talking, not a question he failed to understand.
+    assert intent_of("i have been rebuilding a fence myself") == "remark"

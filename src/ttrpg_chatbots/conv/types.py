@@ -22,10 +22,14 @@ Job = Literal[
     "greet",
     "acknowledge",
     "mirror",
+    "reassure",
     "offer_hook",
     "explain",
     "tell_story",
+    "hedge",
+    "noted",
     "decline",
+    "close",
     "ask_back",
 ]
 Form = Literal["word", "clause", "clause_question", "two_beat"]
@@ -36,9 +40,25 @@ Family = Literal[
     "time_evening",
     "name_based",
     "dry",
+    "reaction",
+    "detail",
+    "reassure",
+    "closing",
+    "noted",
+    "hedge",
 ]
 Intent = Literal[
-    "greet", "about_me", "about_world", "complain", "agree", "decline", "joke", "meta"
+    "greet",
+    "about_me",
+    "explain_me",
+    "about_world",
+    "complain",
+    "comfort",
+    "agree",
+    "decline",
+    "joke",
+    "remark",
+    "meta",
 ]
 Tone = Literal["neutral", "warm", "terse", "teasing", "flat"]
 Who = Literal["friend", "character"]

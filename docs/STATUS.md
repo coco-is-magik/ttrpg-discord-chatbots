@@ -4,7 +4,7 @@ Dated snapshot, not a wish list. `DESIGN.md` says where the project is *going*; 
 is true *today*, so a later session can pick up without re-deriving it. Update it when a slice
 lands; it should never be more than one slice out of date.
 
-**Last updated:** 2026-10-21.
+**Last updated:** 2026-10-22.
 
 ---
 
@@ -12,12 +12,13 @@ lands; it should never be more than one slice out of date.
 
 | | |
 |---|---|
-| Tests | **1655 passing**, ~30 s, no network, no GPU |
+| Tests | **1681 passing**, ~31 s, no network, no GPU |
 | Bots live | 4 applications: `ttrpg-bot` (helper) + `friend-a/b/c` |
 | Permissions | **8/8 each** in `#general` |
 | Slash commands | **51/51** synced to guild 1364544268609523762 |
 | Who speaks | `friend-a` only, `reply: mention`; `friend-b`/`friend-c` are `reply: off` |
-| Conversation | **greet phase on the module ladder**, live behind `TTRPG_CONVERSATION=greet`; everything else still the old classifier |
+| Conversation | **nine phases on the module ladder**, live behind `TTRPG_CONVERSATION=ladder`; knowledge questions still take the old classifier |
+| Modules | **53/53 built**, manifest clean (`ttrpg-chatbots-conv --manifest`) |
 | Personality | **friend-a is TopGuy** (`docs/PERSONA.md`); b and c deliberately neutral |
 | Typing | friend-a types lower-case with dropped apostrophes and the odd slip; b and c stay tidy |
 | Memory | short-term: last 8 turns in RAM. long-term: `data/friends/friend-a.json` |
@@ -132,6 +133,11 @@ The corpus it came from is already at `corpora/switchboard/`; to rebuild the tab
   `TTRPG_FRIEND_A_TOKEN_FILE` at `.env.frienda` fails with "holds N non-blank line(s)"; the fix is
   `"env_file": ".env.frienda"` in `bots.json`. This actually happened on 2026-10-21 and the error
   now names it.
+- **`@Bot` usually pings the bot's *role*, not the bot.** Discord creates a managed role with the
+  application's name, that role is not mentionable, and the message then arrives as `<@&id>` with
+  **both `mentions` and `mention_roles` empty**. The only surviving evidence is the markup in
+  `content`, which `FriendBot._role_named` parses. Without that, every message looks unaddressed and
+  nothing at all is logged — the failure mode that looks exactly like a dead bot.
 - **`pytest` already passes `-q`.** Adding your own `-q` gives `-qq` and suppresses the summary
   line; run plain `pytest` when you want the count.
 - **`./start-bot.sh` with no argument runs in the foreground.** Use `-d` / `--background`.

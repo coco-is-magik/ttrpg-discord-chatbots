@@ -18,19 +18,22 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 import discord
 
-from ttrpg_chatbots.bots.greeter import Greeter
 from ttrpg_chatbots.bots.identity import ROLE_FRIEND, BotSpec
+from ttrpg_chatbots.bots.ladder import Ladder
 from ttrpg_chatbots.bots.memory import FriendMemory, MemoryError
 from ttrpg_chatbots.bots.permissions import audit, log_findings
 from ttrpg_chatbots.bots.roster import Roster, RosterError
 from ttrpg_chatbots.reply.context import DEFAULT_WINDOW, Context, Turn
 from ttrpg_chatbots.conv.types import Abstain, Line
+from ttrpg_chatbots.govern.loop import intent_of
+
 from ttrpg_chatbots.reply.intents import (
     SOCIAL_AGREEMENT,
     SOCIAL_GREETING,
@@ -38,6 +41,21 @@ from ttrpg_chatbots.reply.intents import (
     match_intent,
 )
 
+# The intents the ladder answers when the whole ladder is on. A knowledge question is not here
+# yet: until world knowledge is wired in as a tool, the old classifier is better at it.
+LADDER_INTENTS = frozenset(
+    {
+        "greet",
+        "about_me",
+        "explain_me",
+        "complain",
+        "comfort",
+        "remark",
+        "agree",
+        "meta",
+        "decline",
+    }
+)
 LOGGER = logging.getLogger(__name__)
 
 PROBE_READY_TIMEOUT = 30.0
@@ -78,11 +96,20 @@ class FriendBot(discord.Client):
         self.last_reply = ""
         # Message ids already answered, so a redelivered event cannot produce a second reply.
         self.answered: deque[int] = deque(maxlen=200)
+        # The ids of messages *he* sent. Discord does not always include the referenced message
+        # in a reply payload, so matching ids is the only reliable way to know a reply-arrow was
+        # aimed at him.
+        self.sent: deque[int] = deque(maxlen=200)
+        # Test switch: treat bot-authored messages as people. Used by --friendcheck and by the
+        # live end-to-end probe, because no human can type for us. Off unless asked for.
+        self.trust_bots = os.environ.get("TTRPG_TRUST_BOTS") == "1"
         # What survives a restart: who this person is, when they last spoke, and anything left
         # hanging (an invitation they have not answered).
-        # Which phase, if any, is being proved on real traffic. Empty means the old path only.
+        # Which phase, if any, is being proved on real traffic. "greet" answers greetings only;
+        # "ladder" answers every phase the friend has a phrasebook for and leaves the rest to the
+        # old classifier. Empty means the old path only.
         self.conversation = os.environ.get("TTRPG_CONVERSATION", "").strip().lower()
-        self._greeter: Greeter | None = None
+        self._ladder: Ladder | None = None
         try:
             self.memory = FriendMemory.load(spec.id)
         except MemoryError as error:
@@ -97,13 +124,28 @@ class FriendBot(discord.Client):
         return Context.of(self.history, window=DEFAULT_WINDOW)
 
     @property
-    def greeter(self) -> Greeter | None:
-        """The greet stage, when it is switched on; ``None`` keeps the old path."""
-        if self.conversation != "greet":
+    def ladder(self) -> Ladder | None:
+        """The conversation ladder, when a phase is switched on; ``None`` keeps the old path."""
+        if self.conversation not in ("greet", "ladder"):
             return None
-        if self._greeter is None:
-            self._greeter = Greeter(friend=self.spec.id, style=self.style)
-        return self._greeter
+        if self._ladder is None:
+            jobs = ("greet",) if self.conversation == "greet" else None
+            self._ladder = Ladder(friend=self.spec.id, style=self.style, jobs=jobs)
+        return self._ladder
+
+    def _ladder_answers(self, text: str) -> bool:
+        """Whether the ladder owns this message, or the old classifier does.
+
+        Only the phases a friend actually has content for. A knowledge question stays with the old
+        path until world knowledge is wired in as a tool, because the ladder answering it from a
+        phrasebook would be a downgrade.
+        """
+        if self.ladder is None:
+            return False
+        intent = intent_of(text)
+        if self.conversation == "greet":
+            return intent == "greet"
+        return intent in LADDER_INTENTS
 
     @property
     def style(self):
@@ -160,20 +202,47 @@ class FriendBot(discord.Client):
             "bot": "yes" if getattr(message.author, "bot", False) else "no",
             "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         }
+        if os.environ.get("TTRPG_LISTEN_TRACE") == "1":
+            # Delivery only, before any filtering: the difference between "not addressed" and
+            # "never arrived" is invisible otherwise, and that ambiguity is what makes a working
+            # bot look dead.
+            LOGGER.info(
+                "%s TRACE delivery from %s (bot=%s) in #%s: %s",
+                self.spec.id,
+                self.last_delivery["author"],
+                self.last_delivery["bot"],
+                self.last_delivery["channel"],
+                content[:80],
+            )
         if message.author == self.user:
             return
-        if getattr(message.author, "bot", False):
+        if getattr(message.author, "bot", False) and not self.trust_bots:
             # Another bot is talking. Counted above, but not remembered: a group where the
             # bots answer each other is the chorus the design exists to avoid.
             return
         self.received += 1
         self.last_message = dict(self.last_delivery)
         self._remember_human(message, content)
-        mentioned = self.user is not None and self.user in getattr(message, "mentions", ())
-        if mentioned:
+        addressed = self._addressed(message)
+        if os.environ.get("TTRPG_LISTEN_TRACE") == "1":
+            reference = getattr(message, "reference", None)
             LOGGER.info(
-                "%s was mentioned by %s in #%s: %s",
+                "%s TRACE addressed=%s me=%s mentions=%s roles=%s held=%s reply_to=%s sent_ids=%s",
                 self.spec.id,
+                addressed,
+                getattr(self.user, "id", None),
+                [getattr(member, "id", None) for member in getattr(message, "mentions", ())],
+                [getattr(role, "id", None) for role in getattr(message, "mention_roles", ()) or ()],
+                [getattr(role, "id", None) for role in self._held_roles(message)],
+                getattr(reference, "message_id", None),
+                list(self.sent)[-3:],
+            )
+        if addressed:
+            how = "mentioned" if (self._named(message) or self._role_named(message)) else "replied to"
+            LOGGER.info(
+                "%s was %s by %s in #%s: %s",
+                self.spec.id,
+                how,
                 self.last_message["author"],
                 self.last_message["channel"],
                 content[:100],
@@ -189,14 +258,113 @@ class FriendBot(discord.Client):
 
         if self._should_reply(message):
             await self._answer(message)
+        elif addressed:
+            # Addressed but refused: say why, once, at INFO. Silence with no log is what made a
+            # working bot look dead.
+            LOGGER.info(
+                "%s did not answer %s: %s",
+                self.spec.id,
+                self.last_message["author"],
+                self._why_not(message),
+            )
+
+    def _why_not(self, message: discord.Message) -> str:
+        """The reason a message that was addressed got no answer."""
+        if self.spec.reply != "mention":
+            return "reply is off"
+        if self.chat is None:
+            return "no classifiers loaded"
+        allowed = self.spec.channels
+        channel = getattr(message, "channel", None)
+        if allowed and channel is not None and getattr(channel, "id", None) not in allowed:
+            parent = getattr(channel, "parent_id", None)
+            if parent not in allowed:
+                return f"#channel {getattr(channel, 'id', '?')} is not in its allowed list"
+        return "already answered this message id"
+
+    def _remember_sent(self, sent) -> None:
+        """Remember the id of a message he posted, so a reply-arrow can be recognised later."""
+        identifier = getattr(sent, "id", None)
+        if identifier is not None:
+            self.sent.append(identifier)
+
+    def _held_roles(self, message: discord.Message) -> list:
+        """The roles he holds in this guild, as far as the message can tell us."""
+        guild = getattr(message, "guild", None)
+        member = getattr(guild, "me", None) if guild is not None else None
+        if member is None and guild is not None and self.user is not None:
+            getter = getattr(guild, "get_member", None)
+            member = getter(getattr(self.user, "id", None)) if getter else None
+        return list(getattr(member, "roles", ()) or ())
+
+    def _role_named(self, message: discord.Message) -> bool:
+        """Whether a ping of one of *his* roles was aimed at him.
+
+        Typing `@TerrysTopGuy` in Discord autocompletes to the managed role Discord created for
+        the application, which arrives as `<@&id>` -- `mention_roles`, not `mentions`. That is how
+        a person naturally addresses a bot, and ignoring it made every message look unaddressed.
+        """
+        mentioned = {getattr(role, "id", None) for role in getattr(message, "mention_roles", ()) or ()}
+        # A managed bot role is usually *not mentionable*, and Discord then leaves
+        # `mention_roles` empty even though the text holds `<@&id>`. The markup in the content is
+        # the only evidence that survives, so read it as well.
+        for identifier in re.findall(r"<@&(\d+)>", message.content or ""):
+            mentioned.add(int(identifier))
+        if not mentioned:
+            return False
+        names = {
+            str(getattr(self.user, "name", "")).lower(),
+            str(getattr(self.user, "display_name", "")).lower(),
+        }
+        for role in self._held_roles(message):
+            if getattr(role, "id", None) not in mentioned:
+                continue
+            # A managed role is the one Discord created for this application. A plain role is
+            # accepted only when it carries his name, so a shared "@players" ping is not a summons.
+            if getattr(role, "managed", False):
+                return True
+            if str(getattr(role, "name", "")).lower() in names:
+                return True
+        return False
+
+    def _named(self, message: discord.Message) -> bool:
+        """Whether his name is in the message's mention list, by id."""
+        me = getattr(self.user, "id", None)
+        return any(getattr(member, "id", None) == me for member in getattr(message, "mentions", ()))
+
+    def _addressed(self, message: discord.Message) -> bool:
+        """Named with an @, or a direct reply to something he said.
+
+        A reply is a person turning to face him. Discord does not add a mention when you use the
+        reply arrow, so requiring `mentions` missed the most natural way to talk to a bot -- the
+        reader sees their message vanish into silence with nothing in the log to explain it.
+        """
+        if self.user is None:
+            return False
+        # Compare ids, never objects: `mentions` holds Member instances and `self.user` is a
+        # ClientUser, and object equality across those is not something to rely on.
+        me = getattr(self.user, "id", None)
+        if self._named(message) or self._role_named(message):
+            return True
+        reference = getattr(message, "reference", None)
+        if reference is None:
+            return False
+        for target in (
+            getattr(reference, "resolved", None),
+            getattr(reference, "cached_message", None),
+        ):
+            author = getattr(target, "author", None)
+            if author is not None and getattr(author, "id", None) == me:
+                return True
+        return getattr(reference, "message_id", None) in self.sent
 
     def _should_reply(self, message: discord.Message) -> bool:
-        """Only an explicit mention, in a configured channel, when switched on."""
+        """Only an explicit mention or a reply, in a configured channel, when switched on."""
         if self.spec.reply != "mention" or self.chat is None:
             return False
         if getattr(message, "guild", None) is None:
             return False
-        if self.user is None or self.user not in getattr(message, "mentions", ()):
+        if not self._addressed(message):
             return False
         # A gateway can redeliver an event after a resume. Answering the same message twice is
         # the one failure a reader sees as "the bot is broken", so it is refused here rather than
@@ -220,44 +388,54 @@ class FriendBot(discord.Client):
         text = message.content or ""
         for mention in (self.user.mention, f"<@!{self.user.id}>"):
             text = text.replace(mention, " ")
+        # Role pings too: `@TerrysTopGuy` usually arrives as `<@&role_id>`, and leaving it in the
+        # text hands the classifier markup instead of a sentence.
+        for role in self._held_roles(message):
+            identifier = getattr(role, "id", None)
+            if identifier is not None:
+                text = text.replace(f"<@&{identifier}>", " ")
         return " ".join(text.split()) or "hey"
 
-    async def _answer_greeting(
+    async def _answer_through_ladder(
         self, message: discord.Message, text: str, speaker: str | None
     ) -> None:
-        """Answer a greeting through the ladder, or stay quiet for the reason it gives."""
-        greeter = self.greeter
-        if greeter is None:  # pragma: no cover - guarded by the caller
+        """Answer through the ladder, or stay quiet for the reason it gives."""
+        ladder = self.ladder
+        if ladder is None:  # pragma: no cover - guarded by the caller
             return
         try:
             out = await asyncio.to_thread(
-                greeter.line, text=text, memory=self.memory, speaker=speaker or ""
+                ladder.line,
+                text=text,
+                memory=self.memory,
+                speaker=speaker or "",
+                turns=tuple(self.history),
             )
-        except Exception as error:  # noqa: BLE001 - never take the bot down for a greeting
-            LOGGER.warning("%s could not greet: %s", self.spec.id, error)
+        except Exception as error:  # noqa: BLE001 - never take the bot down for a reply
+            LOGGER.warning("%s could not answer through the ladder: %s", self.spec.id, error)
             return
         if isinstance(out, Abstain):
             self.stayed_quiet += 1
-            LOGGER.info("%s stayed quiet on a greeting: %s", self.spec.id, out.reason)
+            LOGGER.info("%s stayed quiet: %s", self.spec.id, out.reason)
             return
         assert isinstance(out, Line)
         try:
-            await message.reply(out.text, mention_author=False)
+            sent = await message.reply(out.text, mention_author=False)
         except discord.HTTPException as error:
-            LOGGER.warning("%s could not send its greeting: %s", self.spec.id, error)
+            LOGGER.warning("%s could not send its reply: %s", self.spec.id, error)
             return
+        self._remember_sent(sent)
         identifier = getattr(message, "id", None)
         if identifier is not None:
             self.answered.append(identifier)
         self.replied += 1
         self.last_reply = out.text
-        self._remember_reply(out.text, "social:greeting")
-        self.memory.remember_topic("social:greeting")
+        self._remember_reply(out.text, f"ladder:{out.trail.steps[3][1] if len(out.trail.steps) > 3 else '?'}")
         try:
             self.memory.save()
         except MemoryError as error:
             LOGGER.warning("%s could not save its memory: %s", self.spec.id, error)
-        LOGGER.info("%s greeted (%s)", self.spec.id, out.trail.describe())
+        LOGGER.info("%s answered through the ladder (%s)", self.spec.id, out.trail.describe())
 
     async def _answer(self, message: discord.Message) -> None:
         """Ask the classifier off the event loop, then reply in the same channel.
@@ -274,8 +452,8 @@ class FriendBot(discord.Client):
         # another "sounds good". This is the smallest honest use of long-term memory: the plan
         # survives a restart because it is in his file, not in RAM.
         intent = match_intent(text)
-        if self.greeter is not None and intent == SOCIAL_GREETING:
-            await self._answer_greeting(message, text, speaker)
+        if self._ladder_answers(text):
+            await self._answer_through_ladder(message, text, speaker)
             return
         force_tag = None
         if self.memory.pending_plan and intent == SOCIAL_AGREEMENT:
@@ -307,10 +485,11 @@ class FriendBot(discord.Client):
             )
             return
         try:
-            await message.reply(answer.text, mention_author=False)
+            sent = await message.reply(answer.text, mention_author=False)
         except discord.HTTPException as error:
             LOGGER.warning("%s could not send its reply: %s", self.spec.id, error)
             return
+        self._remember_sent(sent)
         self.replied += 1
         self.last_reply = answer.text
         identifier = getattr(message, "id", None)

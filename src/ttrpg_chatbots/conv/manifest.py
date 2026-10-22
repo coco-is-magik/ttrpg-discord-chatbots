@@ -86,6 +86,8 @@ MODULES: tuple[ModuleSpec, ...] = (
     _m("decide", "decide.form", "what shape should the line take?", "built"),
     _m("decide", "decide.family", "which kind of phrasing?", "built"),
     _m("decide", "decide.variant", "which specific line?", "built"),
+    _m("decide", "decide.shelf", "which phrasebook answers this job?", "built"),
+    _m("decide", "decide.values", "what values does this line get?", "built"),
     _m("decide", "decide.length", "how many words?", "built"),
     _m("decide", "decide.reciprocate", "does he hand the turn back?", "built"),
     _m("decide", "decide.persona_fit", "does this candidate sound like him?", "built"),

@@ -51,6 +51,7 @@ class Activity:
     why: str  # "i liked the look of the wood"
     invite: str = ""  # "you ever mess with stocks?"
     topic: str = ""
+    hook: str = ""  # "sanding a rifle stock" -- three or four words, for "what are you up to"
 
     def __post_init__(self) -> None:
         for field in ("id", "doing", "short", "phase", "why"):

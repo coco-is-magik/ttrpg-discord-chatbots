@@ -271,6 +271,68 @@ Log lines that correspond to each pass:
 
 Any of the four is a reason to re-open the decomposition rather than tune the phrasebook.
 
+### 2.7 The phases (friend-a, whole ladder on)
+
+`TTRPG_CONVERSATION=ladder` answers every phase he has a phrasebook for; knowledge questions still go
+to the old classifier until world knowledge is wired in as a tool. Each check names the module that
+owns a failure, so a bad answer is a one-file fix.
+
+| # | Say this | Pass looks like | If it fails, blame |
+|---|---|---|---|
+| 1 | `@TerrysTopGuy what are you up to` | one thing he is doing, in a few words — *not* a reason, not a paragraph | `decide/job`, `decide/values` |
+| 2 | `@TerrysTopGuy rough day at work` | a short reaction ("yeah, i hear that") with **no** story of his own | `decide/family` (depth), `mirror.json` |
+| 3 | then `@TerrysTopGuy i have been rebuilding a fence myself this month` | a reaction, and now his own grievance appears | `decide/depth`, `mirror.json` |
+| 4 | `@TerrysTopGuy why?` | **the reason** for the thing he just said | `decide/phase`, `explain.json` |
+| 5 | `@TerrysTopGuy i have been rebuilding a fence myself` (a statement, no question) | a short noise of having heard ("yeah", "nice") — **never "?"** | `govern/loop` `looks_like_question`, `noted.json` |
+| 6 | `@TerrysTopGuy i am nervous about tomorrow` | one encouraging line, no pep talk | `reassure.json` |
+| 7 | `@TerrysTopGuy good night` | a goodbye and nothing else — no last question | `decide/job` (`close`), `close.json` |
+| 8 | `@TerrysTopGuy what is the plot of dune?` | the old classifier's answer, **not** the ladder's | `bots/supervisor` routing |
+| 9 | `@TerrysTopGuy thanks` | "any time" or similar | `acknowledge.json` |
+
+Then read four in a row out loud. Nothing should end on a punchline, explain itself, or ask a question
+it does not need to ask.
+
+The numbers behind those checks, and the five defects a live channel found that review did not, are in
+`docs/CONVERSATION.md` §7.
+
+### 2.6 What counts as "talking to him"
+
+This is the thing that made a working bot look dead, so it is worth knowing exactly:
+
+| You do | He answers |
+|---|---|
+| `@TerrysTopGuy hey` — picked from the member list | yes, a user mention |
+| `@TerrysTopGuy hey` — picked from **the role** (what Discord autocompletes first) | yes — role pings are parsed from the text too |
+| click **reply** on his message and type | yes — a reply to *any* message he sent |
+| reply to *someone else's* message | no |
+| just type in `#general` with no @ and no reply | no — ambient chatter is a later slice |
+
+**The role ping is the important one.** Discord creates a managed role with the bot's name, and that
+role is usually *not mentionable*, so `@TerrysTopGuy` can arrive as `<@&id>` with **both** `mentions`
+and `mention_roles` empty. The markup inside the message text is the only surviving evidence, which is
+why it is parsed by hand. That single omission is what made every message look unaddressed while the
+log showed nothing wrong.
+
+Diagnosis, when he does not answer something you think he should:
+
+```bash
+# every refused message says why
+grep -aE 'was mentioned|was replied to|did not answer' data/logs/bot.log | tail
+# friend-a did not answer noodle: #channel 123 is not in its allowed list
+
+# delivery, including other bots: proves the gateway is actually sending events
+echo 'TTRPG_LISTEN_TRACE=1' >> .env && ./start-bot.sh --stop && ./start-bot.sh -d
+# friend-a TRACE delivery from noodle (bot=no) in #general: hey
+# friend-a TRACE addressed=True me=1562… mentions=[1562…] reply_to=None sent_ids=[…]
+
+# end-to-end without a human: let him treat other bots as people, post a probe, watch the log
+echo 'TTRPG_TRUST_BOTS=1' >> .env && ./start-bot.sh --stop && ./start-bot.sh -d
+```
+
+`TRACE` lines are the difference between *"not addressed"* and *"never arrived"*; `TRUST_BOTS` is only
+for probing, never for production (a group of bots answering each other is the chorus the design
+avoids). Remove both lines and restart when you are done.
+
 ### 2.2 Re-inviting an app that is already in the server
 
 Open the same URL again and approve the new permissions (you need **Manage Server**). If you

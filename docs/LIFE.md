@@ -120,3 +120,18 @@ life cannot resurrect it.
 The rule the tests encode: **life renders the move; it never chooses it.** The classifier owns
 "what kind of thing is this", and the life layer owns "what is he doing today".
 
+
+## The `hook` field
+
+An activity carries four lengths of the same truth, and each is for a different question:
+
+| Field | Answers | Example |
+|---|---|---|
+| `hook` | "what are you up to" | "rebuilding the back fence" |
+| `short` | a second phrasing, for variety | "out back with the fence" |
+| `doing` | what he is actually doing | "rebuilding the back fence before the weather turns" |
+| `phase` | where it has got to | "half the posts are rotted at the base" |
+| `why` | "why?" -- the reason, which is the part a fact bank cannot supply | "the old one leaned for two years" |
+
+`hook` is deliberately three or four words. Measured: answering "what are you up to" with `doing`
+produced a fourteen-word description, which is the monologue the whole design is trying to avoid.

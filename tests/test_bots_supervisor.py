@@ -537,3 +537,120 @@ def test_the_greet_ladder_leaves_non_greetings_to_the_old_path() -> None:
         assert chat.calls == [("thanks", "friend-a", "Tav")]
     finally:
         os.environ.pop("TTRPG_CONVERSATION", None)
+
+
+def test_replying_to_his_message_counts_as_talking_to_him() -> None:
+    # Discord does not add a mention when you use the reply arrow, so requiring `mentions`
+    # silently ignored the most natural way to answer a bot. Reported live: "is he seeing these".
+    chat = _Chat()
+    friend = _MentionedFriend(_friend(reply="mention"), chat=chat)
+    message = _mention(friend, "what are you up to", mentioned=False)
+    message.reference = SimpleNamespace(resolved=SimpleNamespace(author=friend.user))
+
+    asyncio.run(friend.on_message(message))
+
+    assert chat.calls == [("what are you up to", "friend-a", "Tav")]
+
+
+def test_replying_to_someone_else_still_counts_as_unaddressed() -> None:
+    chat = _Chat()
+    friend = _MentionedFriend(_friend(reply="mention"), chat=chat)
+    message = _mention(friend, "agreed", mentioned=False)
+    message.reference = SimpleNamespace(resolved=SimpleNamespace(author=SimpleNamespace(id=99)))
+
+    asyncio.run(friend.on_message(message))
+
+    assert chat.calls == []
+
+
+def test_a_reply_is_recognised_even_when_the_referenced_message_is_not_resolved() -> None:
+    # Discord does not always include the referenced message, and `mentions` holds Member
+    # objects while `self.user` is a ClientUser -- so matching ids of what he actually sent is
+    # the reliable signal. This is the case that was silently dropping real messages.
+    chat = _Chat()
+    friend = _MentionedFriend(_friend(reply="mention"), chat=chat)
+    first = _mention(friend)
+
+    async def reply(content: str, mention_author: bool = True):
+        first.replies.append((content, mention_author))
+        return SimpleNamespace(id=4242)
+
+    first.reply = reply
+    asyncio.run(friend.on_message(first))
+
+    second = _mention(friend, "what are you up to", mentioned=False)
+    second.reference = SimpleNamespace(resolved=None, message_id=4242)
+
+    asyncio.run(friend.on_message(second))
+
+    assert [call[0] for call in chat.calls] == ["hey", "what are you up to"]
+
+
+def test_a_role_ping_is_a_summon() -> None:
+    # Typing @TerrysTopGuy autocompletes to the managed role Discord made for the application, so
+    # the message arrives as <@&id> with `mentions` empty and `mention_roles` set. That is how a
+    # person actually addresses a bot -- every message from the reader looked unaddressed without
+    # this, which is why he seemed to be ignoring the channel.
+    chat = _Chat()
+    friend = _MentionedFriend(_friend(reply="mention"), chat=chat)
+    role = SimpleNamespace(id=777, managed=True, name="friend-a")
+    friend._fake_user = SimpleNamespace(id=1, mention="<@1>", bot=True)
+    message = _mention(friend, "<@&777> hey", mentioned=False)
+    message.mention_roles = [role]
+    message.guild = SimpleNamespace(me=SimpleNamespace(roles=[role]), get_member=lambda _id: None)
+
+    asyncio.run(friend.on_message(message))
+
+    assert chat.calls == [("hey", "friend-a", "Tav")]
+
+
+def test_an_unrelated_role_ping_is_not_a_summon() -> None:
+    chat = _Chat()
+    friend = _MentionedFriend(_friend(reply="mention"), chat=chat)
+    other = SimpleNamespace(id=999, managed=True, name="players")
+    message = _mention(friend, "<@&999> hey gang", mentioned=False)
+    message.mention_roles = [other]
+    message.guild = SimpleNamespace(
+        me=SimpleNamespace(roles=[SimpleNamespace(id=777, managed=True, name="friend-a")]),
+        get_member=lambda _id: None,
+    )
+
+    asyncio.run(friend.on_message(message))
+
+    assert chat.calls == []
+
+
+def test_the_whole_ladder_takes_over_the_phases_it_owns(monkeypatch) -> None:
+    # TTRPG_CONVERSATION=ladder answers every phase a friend has a phrasebook for. The old
+    # classifier is not consulted for any of them.
+    monkeypatch.setenv("TTRPG_CONVERSATION", "ladder")
+    chat = _Chat()
+    friend = _MentionedFriend(_friend(reply="mention"), chat=chat)
+
+    for said in ("hey", "what are you up to", "rough day at work", "thanks", "good night"):
+        asyncio.run(friend.on_message(_mention(friend, f"<@1> {said}")))
+
+    assert chat.calls == [], "the ladder owned every one of those"
+    assert friend.replied == 5
+
+
+def test_a_knowledge_question_still_goes_to_the_old_path(monkeypatch) -> None:
+    # World knowledge is not wired into the ladder yet, so those questions keep the classifier that
+    # actually knows something. A downgrade here would be worse than the old behaviour.
+    monkeypatch.setenv("TTRPG_CONVERSATION", "ladder")
+    chat = _Chat()
+    friend = _MentionedFriend(_friend(reply="mention"), chat=chat)
+
+    asyncio.run(friend.on_message(_mention(friend, "<@1> what is the plot of dune")))
+
+    assert chat.calls == [("what is the plot of dune", "friend-a", "Tav")]
+
+
+def test_the_greet_only_switch_leaves_the_other_phases_alone(monkeypatch) -> None:
+    monkeypatch.setenv("TTRPG_CONVERSATION", "greet")
+    chat = _Chat()
+    friend = _MentionedFriend(_friend(reply="mention"), chat=chat)
+
+    asyncio.run(friend.on_message(_mention(friend, "<@1> what are you up to")))
+
+    assert chat.calls == [("what are you up to", "friend-a", "Tav")]

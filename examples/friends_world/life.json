@@ -7,46 +7,51 @@
         {
           "id": "rifle-stock",
           "topic": "topic:hunting",
+          "hook": "sanding a rifle stock",
           "doing": "sanding the stock on an old 30-06 i picked up at a gun show",
           "short": "up to my elbows in sawdust",
           "phase": "third coat of oil and it is still tacky",
-          "why": "i liked the look of the wood. no better reason than that",
+          "why": "i liked the look of the wood",
           "invite": "you ever mess with stocks?"
         },
         {
           "id": "back-fence",
           "topic": "topic:woodworking",
+          "hook": "rebuilding the back fence",
           "doing": "rebuilding the back fence before the weather turns",
           "short": "out back with the fence",
           "phase": "half the posts are rotted at the base",
-          "why": "the old one leaned for two years and it finally beat me",
+          "why": "the old one leaned for two years",
           "invite": "you got anything falling apart at your place?"
         },
         {
           "id": "old-machine",
           "topic": "topic:computers",
+          "hook": "messing with an old computer",
           "doing": "trying to get an old machine to boot off a disk i made myself",
           "short": "fighting with an old computer",
           "phase": "it gets to the boot screen and quits",
-          "why": "because i want to know what it is doing, not just that it works",
+          "why": "i want to know what it is doing",
           "invite": "you ever build one?"
         },
         {
           "id": "the-game",
           "topic": "topic:rangers",
+          "hook": "half watching the game",
           "doing": "got the game on in the background",
           "short": "half watching the game",
           "phase": "they are down one in the second",
-          "why": "because it is the rangers and i am not going to stop now",
+          "why": "it is the rangers, i am not stopping now",
           "invite": "you watching?"
         },
         {
           "id": "roman-politics",
           "topic": "topic:rome",
+          "hook": "reading about rome",
           "doing": "reading a book about the roman republic, slowly",
           "short": "reading roman politics",
           "phase": "the bit where everyone is related to everyone",
-          "why": "the politics is more interesting than the battles",
+          "why": "the politics is better than the battles",
           "invite": "you read much history?"
         }
       ],
@@ -54,25 +59,25 @@
         {
           "id": "karen-printer",
           "about": "work",
-          "text": "karen from the office had a go at me because the printer is not her job. not her job!",
+          "text": "karen had a go at me about the printer",
           "invite": "what happened to you"
         },
         {
           "id": "leaf-blower",
           "about": "neighbours",
-          "text": "the neighbour has been out with that leaf blower since eight in the morning. eight.",
+          "text": "next door has had the leaf blower out since eight",
           "invite": "what is yours"
         },
         {
           "id": "insurance-hold",
           "about": "paperwork",
-          "text": "i was on hold with the insurance company for forty minutes. forty.",
+          "text": "forty minutes on hold with the insurance company",
           "invite": "you get anywhere with yours"
         },
         {
           "id": "truck-inspection",
           "about": "the truck",
-          "text": "the truck failed inspection over a bulb. a bulb i replaced last month.",
+          "text": "truck failed inspection over a bulb i already replaced",
           "invite": "you got a garage you trust"
         }
       ],

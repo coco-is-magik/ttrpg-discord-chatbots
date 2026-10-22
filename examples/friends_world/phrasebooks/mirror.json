@@ -1,0 +1,8 @@
+{
+  "job": "mirror",
+  "note": "Somebody had a rough one. Depth 0 is a reaction and nothing else -- no story, no advice. Only once they have leaned in does his own grievance appear, and it is a short complaint, never a complaint with a punchline attached.",
+  "families": {
+    "reaction": { "when": {}, "variants": ["ha. same", "yeah, i hear that", "tell me about it", "rough one", "same here", "ugh. yeah"] },
+    "detail": { "when": {}, "variants": ["{grievance}", "{grievance} over here"] }
+  }
+}

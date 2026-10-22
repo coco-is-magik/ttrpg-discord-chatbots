@@ -1,0 +1,9 @@
+{
+  "job": "offer_hook",
+  "note": "What are you up to. One thing, named in a few words, with the invitation as an offer to compare rather than a request to continue. Nothing here is a finished thought: the point is to be asked something back.",
+  "families": {
+    "warm": { "when": { "relationship": ["friend"] }, "variants": ["{hook}", "{hook}, {invite}", "been {hook} most of the day", "{hook}. how about you"] },
+    "casual": { "when": {}, "variants": ["{hook}", "{hook}. you?", "{short}", "not much. {hook}"] },
+    "dry": { "when": { "relationship": ["new"] }, "variants": ["{hook}", "{short}"] }
+  }
+}
