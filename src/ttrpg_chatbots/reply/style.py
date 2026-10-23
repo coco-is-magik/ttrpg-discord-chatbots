@@ -108,6 +108,8 @@ class Style:
     strip_final_period: bool = False
     typo_rate: float = 0.0
     stutter_rate: float = 0.0
+    filler_rate: float = 0.0
+    fillers: tuple[str, ...] = ()
     emoji_rate: float = 0.0
     emojis: tuple[str, ...] = ()
 
@@ -118,10 +120,12 @@ class Style:
             raise ValueError("typo_rate must be a number")
         if not 0.0 <= float(self.typo_rate) <= 1.0:
             raise ValueError(f"typo_rate must be between 0 and 1, got {self.typo_rate}")
-        if isinstance(self.stutter_rate, bool) or not isinstance(self.stutter_rate, (int, float)):
-            raise ValueError("stutter_rate must be a number")
-        if not 0.0 <= float(self.stutter_rate) <= 1.0:
-            raise ValueError(f"stutter_rate must be between 0 and 1, got {self.stutter_rate}")
+        for name in ("stutter_rate", "filler_rate"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ValueError(f"{name} must be a number")
+            if not 0.0 <= float(value) <= 1.0:
+                raise ValueError(f"{name} must be between 0 and 1, got {value}")
         if isinstance(self.emoji_rate, bool) or not isinstance(self.emoji_rate, (int, float)):
             raise ValueError("emoji_rate must be a number")
         if not 0.0 <= float(self.emoji_rate) <= 1.0:
@@ -129,8 +133,12 @@ class Style:
         if self.emoji_rate and not self.emojis:
             # A rate with no pool would silently do nothing, which is worse than an error.
             raise ValueError("emoji_rate needs a non-empty emojis pool")
+        if self.filler_rate and not self.fillers:
+            raise ValueError("filler_rate needs a non-empty fillers pool")
         if any(not isinstance(item, str) or not item.strip() for item in self.emojis):
             raise ValueError("emojis must be non-blank strings")
+        if any(not isinstance(item, str) or not item.strip() for item in self.fillers):
+            raise ValueError("fillers must be non-blank strings")
 
     def describe(self) -> str:
         bits = [self.case]
@@ -142,6 +150,8 @@ class Style:
             bits.append(f"{self.typo_rate:.0%} typos")
         if self.stutter_rate:
             bits.append(f"{self.stutter_rate:.0%} stutter")
+        if self.filler_rate:
+            bits.append(f"{self.filler_rate:.0%} fillers ({len(self.fillers)} in the pool)")
         if self.emoji_rate:
             bits.append(f"{self.emoji_rate:.0%} emoticons ({len(self.emojis)} in the pool)")
         return ", ".join(bits)
@@ -163,7 +173,10 @@ class Style:
         emojis = record.get("emojis") or []
         if isinstance(emojis, str) or not isinstance(emojis, (list, tuple)):
             raise ValueError("style.emojis must be a list of strings")
-        for key in ("stutter_rate", "emoji_rate"):
+        fillers = record.get("fillers") or []
+        if isinstance(fillers, str) or not isinstance(fillers, (list, tuple)):
+            raise ValueError("style.fillers must be a list of strings")
+        for key in ("stutter_rate", "filler_rate", "emoji_rate"):
             value = record.get(key, 0.0)
             if isinstance(value, bool) or not isinstance(value, (int, float)):
                 raise ValueError(f"style.{key} must be a number")
@@ -173,6 +186,7 @@ class Style:
                 case=case,
                 typo_rate=record.get("typo_rate", 0.0),
                 emojis=tuple(str(item) for item in emojis),
+                fillers=tuple(str(item) for item in fillers),
                 **flags,  # type: ignore[arg-type]
             )
         except ValueError as error:
@@ -207,21 +221,31 @@ def _drop_apostrophes(text: str) -> str:
 
 
 def _introduce_stutter(text: str) -> str:
-    """Repeat the first word's opening letter: "hi" -> "h-hi".
+    """False-start the first word: "hi" -> "h- hi", "think" -> "th- think".
 
-    Only the opening word, and only when it starts with a letter: "i-i think so" is hesitation,
-    while "t-the" is broken. A one-letter word is left alone too, because "i-i" is the only one that
-    reads as a stutter and it is already in the pool of things people type.
+    Two letters and a **space** after the hyphen, because that is what is audible. Measured on
+    `en_US-ryan-medium`, the first version's "I-I think it is late again" was 1.29 s against a 1.20 s
+    baseline -- a 90 ms difference nobody hears -- while "th- this is the train" was 1.35 s against
+    0.79 s, a 560 ms false start. The space is what makes piper stop and restart the word.
+
+    A one-letter word keeps a one-letter fragment ("i- i think"), which is the classic typed stutter --
+    and it is the commonest opening word there is, so excluding it would leave most lines unstuttered.
     """
     first, _, rest = text.partition(" ")
-    if len(first) < 2 or not first[0].isalpha():
+    if not first or not first[0].isalpha():
         return text
-    stuttered = f"{first[0]}-{first}"
+    fragment = first[:2] if len(first) > 2 else first[0]
+    stuttered = f"{fragment}- {first}"
     return f"{stuttered} {rest}" if rest else stuttered
 
 
-def _choose_emoji(text: str, pool: tuple[str, ...]) -> str:
-    """A stable pick from the pool, keyed on the line so a replay is a replay."""
+def _introduce_filler(text: str, pool: tuple[str, ...]) -> str:
+    """Put a hesitation in front of the line: "um, i think so"."""
+    return f"{_pick_from(text, pool)}, {text}"
+
+
+def _pick_from(text: str, pool: tuple[str, ...]) -> str:
+    """A stable pick from a pool, keyed on the line so a replay is a replay."""
     return pool[_digest(text) % len(pool)]
 
 
@@ -249,15 +273,25 @@ def apply_style(text: str, style: Style | None = None) -> str:
         if _digest(result) % 10_000 < int(active.typo_rate * 10_000):
             result = _introduce_typo(result)
     if active.stutter_rate:
-        # Before casing, so sentence case gives "H-hello" rather than "H-Hello" -- measured on the
+        # Before casing, so sentence case gives "H- hello" rather than "H- Hello" -- measured on the
         # first attempt, which stuttered the capitalised word and read as shouting.
         if _digest(f"stutter:{result}") % 10_000 < int(active.stutter_rate * 10_000):
             result = _introduce_stutter(result)
+    if active.filler_rate and active.fillers:
+        # After the stutter, so the hesitation is not itself false-started ("um,-um,"), and before
+        # casing so the filler keeps its own lowercase shape.
+        if _digest(f"filler:{result}") % 10_000 < int(active.filler_rate * 10_000):
+            result = _introduce_filler(result, active.fillers)
     if active.case == "lower":
         result = _lower_first(result)
     elif active.case == "sentence":
         result = result[:1].upper() + result[1:]
     if active.emoji_rate and active.emojis:
-        if _digest(f"emoji:{result}") % 10_000 < int(active.emoji_rate * 10_000):
-            result = f"{result} {_choose_emoji(result, active.emojis)}"
+        # Not if the line already carries one. Measured: a phrasebook variant that ends in "^_" got
+        # a second emoticon appended by the style, so a shy friend said "what about you? ^^ (◕‿◕)".
+        # The pool is the phrasebook's own vocabulary, so this is the right thing to test against.
+        last = result.rsplit(None, 1)[-1] if result else ""
+        if last not in active.emojis:
+            if _digest(f"emoji:{result}") % 10_000 < int(active.emoji_rate * 10_000):
+                result = f"{result} {_pick_from(result, active.emojis)}"
     return result

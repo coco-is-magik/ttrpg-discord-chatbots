@@ -45,44 +45,96 @@ def _lock(directory: Path, payload: bytes = b"model-bytes", **overrides) -> lock
     record.update(overrides)
     path = directory / "voices.lock.json"
     path.write_text(json.dumps(record), encoding="utf-8")
-    return lock_module.load(path)
+    return lock_module.load(path).for_voice(record["voice"])
 
 
 class TestTheRealLock:
     def test_the_shipped_lock_loads(self) -> None:
         pinned = lock_module.load(WORLD)
-        assert pinned.voice == "en_US-joe-medium"
-        assert pinned.engine == "piper"
+        assert "en_US-joe-medium" in pinned.names()
+        assert pinned.for_voice("en_US-joe-medium").engine == "piper"
+
+    def test_every_speaking_friend_has_his_own_entry(self) -> None:
+        """A world has more than one voice, and the second one has to be pinned too.
+
+        Measured before this: Otto started with en_US-ryan-medium and the log said "voice
+        en_US-joe-medium verified against its lock" -- a reassurance about somebody else's model.
+        """
+        import json
+
+        from ttrpg_chatbots.bots.persona import Persona
+
+        roster = json.loads(Path("examples/bots.example.json").read_text(encoding="utf-8"))
+        speaking = [
+            Persona.from_record(bot["persona"], where=bot["id"])
+            for bot in roster
+            if bot.get("persona") and bot.get("reply") == "mention"
+        ]
+        pinned = lock_module.load(WORLD)
+
+        assert speaking, "the roster has somebody who talks"
+        for persona in speaking:
+            assert persona.voice is not None
+            assert pinned.for_voice(persona.voice.voice) is not None, (
+                f"{persona.name} speaks {persona.voice.voice}, which the lock does not pin"
+            )
+
+    def test_a_voice_nobody_pins_is_not_found_rather_than_guessed(self) -> None:
+        assert lock_module.load(WORLD).for_voice("en_US-nope-medium") is None
 
     def test_the_shipped_lock_names_more_than_one_source(self) -> None:
         """One mirror is not a plan: the point of the lock is surviving a host going away."""
-        assert len(lock_module.load(WORLD).sources) >= 2
+        for lock in lock_module.load(WORLD):
+            assert len(lock.sources) >= 2
 
     def test_the_shipped_lock_carries_provenance(self) -> None:
         pinned = lock_module.load(WORLD)
-        assert pinned.provenance["license"] == "CC0"
-        assert "lessac" in pinned.provenance["finetuned_from"]
+        joe = pinned.for_voice("en_US-joe-medium")
+        assert joe.provenance["license"] == "CC0"
+        assert "lessac" in joe.provenance["finetuned_from"]
+
+    def test_every_pinned_voice_records_its_licence(self) -> None:
+        """The licences differ between voices, and the difference has to be written down.
+
+        Terry's dataset is CC0 and Otto's is public domain, but an earlier candidate for Otto was CC
+        BY-NC-SA -- non-commercial. A private table is fine either way; a commercial thing is not, and
+        that is the kind of fact that has to be visible in the lock rather than remembered.
+        """
+        pinned = lock_module.load(WORLD)
+
+        assert len(pinned) >= 2
+        for lock in pinned:
+            assert lock.provenance.get("license"), f"{lock.voice} has no licence recorded"
+            assert lock.provenance.get("dataset"), f"{lock.voice} has no dataset recorded"
 
     def test_the_settings_match_the_casting_rule(self) -> None:
         """The lock records the speed that was tuned by ear, so a rebuild is not a re-guess."""
         from ttrpg_chatbots.bots.voice import data_directory
         from ttrpg_chatbots.tts.casting import load_voice_directory
 
-        pinned = lock_module.load(WORLD)
         rules = load_voice_directory(data_directory()).rules
-        rule = next(rule for rule in rules if rule.profile.voice == pinned.voice)
-        assert rule.profile.speed == pinned.settings["speed"]
-        assert rule.profile.pitch == pinned.settings["pitch"]
+        for pinned in lock_module.load(WORLD):
+            rule = next(rule for rule in rules if rule.profile.voice == pinned.voice)
+            assert rule.profile.speed == pinned.settings["speed"]
+            # Whatever the lock records about the delivery must match the rule: `pitch` is the crude
+            # resample ratio, `pitch_hz`/`formant` the formant-aware pair. A rule that drifted from
+            # its lock would be rebuilt as somebody else.
+            for key in ("pitch", "pitch_hz", "formant", "volume"):
+                if key in pinned.settings:
+                    assert getattr(rule.profile, key) == pinned.settings[key], key
 
     def test_the_locked_files_are_the_ones_cached(self) -> None:
         """If this fails, the voice on this box is not the voice the repository pins."""
         from ttrpg_chatbots.tts.engines.piper_engine import voice_dir
 
         pinned = lock_module.load(WORLD)
-        report = lock_module.verify(pinned, voice_dir())
-        if not any((voice_dir() / item.name).exists() for item in pinned.files):
-            pytest.skip("the voice is not cached on this box")
-        assert report.ok, report.summary()
+        cached = [item for lock in pinned for item in lock.files if (voice_dir() / item.name).exists()]
+        if not cached:
+            pytest.skip("no locked voice is cached on this box")
+        for lock in pinned:
+            if any((voice_dir() / item.name).exists() for item in lock.files):
+                report = lock_module.verify(lock, voice_dir())
+                assert report.ok, report.summary()
 
 
 class TestVerify:
@@ -144,7 +196,7 @@ class TestFetch:
         record = json.loads((tmp_path / "voices.lock.json").read_text())
         record["sources"] = [f"{broken.as_uri()}/{{file}}", record["sources"][0]]
         (tmp_path / "voices.lock.json").write_text(json.dumps(record))
-        pinned = lock_module.load(tmp_path / "voices.lock.json")
+        pinned = lock_module.load(tmp_path / "voices.lock.json").for_voice(record["voice"])
 
         report = lock_module.fetch(pinned, tmp_path / "cache")
 

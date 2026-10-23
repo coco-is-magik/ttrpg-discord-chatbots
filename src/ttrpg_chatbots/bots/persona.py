@@ -103,6 +103,10 @@ class Persona:
     signature: tuple[str, ...] = ()
     voice: VoiceSpec | None = None
     style: Style | None = None
+    #: How often he hands the turn back with a question rather than a bare acknowledgement, 0..1.
+    #: Otto 0.8, Terry 0.2: the same ladder, a different person -- and the one number behind "he
+    #: would rather listen and have you keep talking". Zero means he never does it.
+    question_rate: float = 0.2
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -116,6 +120,12 @@ class Persona:
         ):
             if any(not isinstance(item, str) or not item.strip() for item in items):
                 raise PersonaError(f"{label} must be non-blank strings")
+        if isinstance(self.question_rate, bool) or not isinstance(self.question_rate, (int, float)):
+            raise PersonaError("question_rate must be a number")
+        if not 0.0 <= float(self.question_rate) <= 1.0:
+            raise PersonaError(
+                f"question_rate must be between 0 and 1, got {self.question_rate}"
+            )
         for topic in self.topics:
             if not isinstance(topic, str) or ":" not in topic.strip():
                 raise PersonaError(
@@ -200,6 +210,7 @@ class Persona:
                 signature=strings("signature"),
                 voice=voice,
                 style=style,
+                question_rate=record.get("question_rate", 0.2),
             )
         except PersonaError as error:
             raise PersonaError(f"{where}: {error}") from error

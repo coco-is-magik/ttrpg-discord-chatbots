@@ -69,13 +69,55 @@ The second friend, written from a brief the same way. Account `Otokodelyoko#7113
 | **how he treats you** | he does things he thinks will make you smile, and he asks you about yourself because he would rather listen |
 | **how he types** | cutesy: lowercase, emoticons (western **and** kaomoji), some stuttering, and sometimes a line that is *only* an emoticon |
 | **voice** | male, androgynous, softer and more feminine in pitch; hesitant, and it shows |
+| **question_rate** | **0.8** — he hands the turn back with a question eight times in ten, where
+  Terry does it two in ten. This is the number behind "he prefers to listen and prompts you to
+  keep talking", and it is a persona field rather than a ladder constant: same ladder, two
+  people |
+
+### Choosing his voice: four rounds, and the lesson
+
+| round | what was tried | measured | verdict |
+|---|---|---|---|
+| 1 | the *least masculine male* model (`ryan-medium`) | 156 Hz | **too male** |
+| 2 | a *female* model (`kristin-medium`) lowered | 155 Hz | **"just a woman's voice"** |
+| 3 | the male model with the pitch raised by resampling | 168 Hz | closer, **"not quite high enough"** |
+| 4 | the male model with pitch raised **and formants kept male** | **204 Hz** | current |
+
+The brief said "too male", and round 2 answered "male" instead -- a category change where a degree
+change was asked for. The reason it failed is worth keeping: **formants are what the ear reads as male
+or female, and pitch is secondary.** Lowering a female voice does not make it male; it makes a deep
+woman.
+
+Round 3 raised the pitch the only way the code could then: by resampling, which raises the formants with
+it. Round 4 uses Praat (`audio/formants.py`) to move the two **independently** -- `pitch_hz` is the
+target median fundamental, `formant` scales the timbre on its own. Measured on the same sentence: a
+149 Hz source becomes 191.7 Hz at `pitch_hz=190`, with the **duration untouched** (2.86 s in, 2.86 s
+out). That last property is what removed the pace compensation: `speed` is simply the 1.15 the ear
+approved, with no `speed * pitch` arithmetic.
+
+**What measurement could not do:** with 904 speakers in `libritts_r-medium` and no gender metadata
+(piper's speaker map is opaque, LibriTTS's own metadata is a 60 GB download), candidates in the
+155-170 Hz band are either light males or low females. A spectral-centroid test was tried to tell
+them apart and **failed** -- it put male `sam`/`arctic` at ~900 Hz and male `joe`/`ryan` at
+1350-1500, overlapping the female voices at 1516-1552. So the ear decides, and the candidates are
+rendered in `data/samples/otto/light-male/` (certainly male) and `data/samples/otto/voices/`
+(natural speakers, sex unknown).
 | **what he avoids** | disagreeing outright, confrontations, being the centre of attention |
 
 Two things about him are structural rather than content:
 
-* **Hesitation lives in the text.** `stutter_rate` produces "h-hi", and the synthesiser reads the
-  stutter -- so a hesitant character does not need an engine that can act. It also means the
-  hesitation is visible in chat, which is where he is read.
+* **Hesitation lives in the text, and it took two levers to hear it.** `stutter_rate` false-starts the
+  opening word (`i- i think so`), and `filler_rate` puts a spoken hesitation in front of the line
+  (`um, i- i think so`). Both are read by the synthesiser, so a hesitant character needs no engine that
+  can act. Measured on `en_US-ryan-medium`: the original unspaced form (`I-I think`) came out 1.29 s
+  against a 1.20 s baseline -- a **90 ms** difference nobody hears -- while the spaced form
+  (`th- this is the train`) was 1.35 s against 0.79 s, and an `um` bought a full second. The **space
+  after the hyphen** is the audible part; without it the lever was in the text and absent from the
+  voice.
+* **"He would rather listen" is a number, not a note.** `question_rate` decides how often the
+  turn is spent asking about *you* instead of acknowledging what you said, and the rung that
+  makes that choice (`decide/reciprocate`) existed and was wired to nothing until it was. A
+  friend who does not do this at all sets it to `0` and simply never does.
 * **An emoticon-only line is a whole reply.** It is a phrasebook variant with no words ("^^", "(◕‿◕)"),
   which needs no special case: a line of text is a line of text.
 
@@ -340,7 +382,43 @@ it shifts tempo along with pitch and colours the timbre. Heard in the channel as
 sounds a bit off"*, which is the honest verdict on a phase-vocoder-less transposition. The lever stays
 for a voice that needs it; the fix for "not deep enough" was a deeper voice.
 
-### Three rounds of listening, and the measurement that ended it
+### Otto: the formant-aware pair
+
+Terry's levers do not cover Otto, whose brief needs the pitch *moved* without the timbre changing
+gender. Two fields, applied after the engine by `audio/formants.py` (Praat), and validated at load --
+a rule that asks for a shift the box cannot perform is refused with the fix named, rather than left
+unshifted:
+
+| Lever | Where | Direction | Otto |
+|---|---|---|---|
+| `pitch_hz` | Praat "Change gender" | the **target median F0** in hertz | `205` (reads 204 Hz) |
+| `formant` | the same call | 1.0 unchanged, above is lighter | `1.06` |
+
+| setting | measured F0 | duration |
+|---|---|---|
+| source (`en_US-ryan-medium`, speed 1.15) | 157.5 Hz | 3.10 s |
+| `pitch_hz=190, formant=1.0` | 193.4 Hz | 3.10 s |
+| `pitch_hz=200, formant=1.0` | 200.5 Hz | 3.10 s |
+| **`pitch_hz=205, formant=1.06`** | **200.5 Hz** | 3.10 s |
+| `pitch_hz=215, formant=1.06` | 206.1 Hz | 3.10 s |
+| `pitch_hz=230, formant=1.1` | 227.3 Hz | 3.10 s |
+
+**The level is the thing to watch, and it was got wrong first.** Praat works in the range -1..1, and
+parselmouth does **not** normalise for you: handed an array of int16 samples it keeps them at their raw
+scale (`+-16000`), and the first version multiplied Praat's output by 32768 on the way back. Every
+sample hit the rail -- measured on the live path, **98.6% clipped, RMS 32619 out of 32768** -- which is
+a square wave, and the report from the channel was "so loud it is completely unintelligible". The fix
+is to divide on the way in and to give headroom on the way out (scale the whole clip down rather than
+clamp it, because clamping a waveform is what turns speech into noise). Held by three tests:
+`test_nothing_sits_on_the_rail`, `test_the_level_is_in_the_same_place_as_the_input`, and
+`test_a_quiet_clip_is_not_boosted_to_the_ceiling`. The F0 figures above were re-measured *after* the
+fix -- the first set was measured on the railed output, which is a reminder that a measurement of
+broken audio is not a measurement.
+
+Changing one number is enough to re-tune him: edit `voices.jsonl` **and** `data/bots.json` (a test
+holds them together) and restart. `praat-parselmouth` is an optional extra (`pip install -e
+".[formants]"`); without it, a rule that sets either field is refused rather than quietly ignored.
+
 
 | Round | Setting | Verdict |
 |---|---|---|

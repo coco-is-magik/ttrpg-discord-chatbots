@@ -95,9 +95,13 @@ def choose(
     if _asks_about_the_past(said):
         story = _prefer(stories, counts, topic, said)
         return Telling(story=story, mode="asked") if story else None
-    if offered_hook and said.endswith("?"):
+    if offered_hook and said.endswith("?") and _is_about_the_offering(said, topic):
         # They asked something about the thing he just offered. The story is the honest answer to
         # "how did that go", and it is the story of *that* thing.
+        #
+        # `_is_about_the_offering` is the fix for a measured failure: "what is the plot of dune?"
+        # arrived after he had offered a hook, and answered with the freight train, because any
+        # question looked like a follow-up. A question that names something else is not a follow-up.
         story = _prefer(stories, counts, topic, said)
         return Telling(story=story, mode="follow_up") if story else None
     if depth >= LEANED_IN and not looks_like_question(said):
@@ -106,6 +110,34 @@ def choose(
         story = _prefer(stories, counts, topic, said)
         return Telling(story=story, mode="leaned_in") if story else None
     return None
+
+
+#: Words that point at what was just said, rather than naming something new.
+REFERRING = frozenset(
+    {"it", "its", "that", "this", "those", "these", "them", "they", "there", "then", "again"}
+)
+
+
+def _is_about_the_offering(said: str, topic: str) -> bool:
+    """Whether a question is about the thing he just offered.
+
+    Either it refers ("how did *that* go", "is *it* still doing that"), or it names the same topic he
+    offered. "what is the plot of dune" does neither, so it hedges instead of answering with a story.
+    """
+    words = {word.strip(".,!?;:'\"").lower() for word in said.split()}
+    if words & REFERRING:
+        return True
+    if not topic:
+        return False
+    named = topic.split(":")[-1].replace("-", " ")
+    # "computer" and "computers" are the same subject; the index matches whole words, so a prefix
+    # comparison is what keeps "how is the computer?" a follow-up about computers.
+    for part in named.split():
+        if len(part) <= 3:
+            continue
+        if any(word.startswith(part) or part.startswith(word) for word in words if len(word) > 3):
+            return True
+    return False
 
 
 def _asks_about_the_past(said: str) -> bool:

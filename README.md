@@ -194,7 +194,8 @@ ttrpg-chatbots-tts --verify-voice          # is the cached voice the one we chos
 ttrpg-chatbots-tts --fetch-voice           # get it back, source by source
 ```
 
-Details: `docs/SPEECH.md`.
+Details: `docs/SPEECH.md`. Testing a friend end to end: `tools/check_friend.sh <friend>` and
+`docs/TESTING.md`.
 
 ## More than one bot
 

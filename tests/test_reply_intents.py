@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from ttrpg_chatbots.reply.intents import SOCIAL_TAGS, match_intent
+from ttrpg_chatbots.reply.intents import SOCIAL_HOWAREYOU, SOCIAL_TAGS, match_intent
 
 
 @pytest.mark.parametrize(
@@ -78,3 +78,47 @@ def test_good_night_is_a_goodbye_not_a_greeting() -> None:
 
 def test_the_tag_list_has_no_duplicates() -> None:
     assert len(set(SOCIAL_TAGS)) == len(SOCIAL_TAGS)
+
+
+class TestAskingHowHeIs:
+    """The wellbeing question in the clothes people actually use for it.
+
+    Measured live: "anyway how is your day going" was answered with "oh, i do not know that one",
+    because every pattern for this move had the word "you" in it. These are the phrasings a person
+    uses without thinking about it, and all of them are the same move.
+    """
+
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "how are you?",
+            "how are you doing",
+            "how you doing",
+            "how have you been",
+            "how you been",
+            "how's it going",
+            "how are things",
+            "how is your day going",
+            "anyway how is your day going",
+            "how was your day?",
+            "how's your day been",
+            "how was your weekend",
+            "how has your week been",
+            "how are you holding up",
+        ],
+    )
+    def test_it_is_the_same_move(self, message: str) -> None:
+        assert match_intent(message) == SOCIAL_HOWAREYOU, message
+
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "how is the fence coming along",
+            "how was the game",
+            "how do you make bread",
+            "what is your day rate",
+        ],
+    )
+    def test_but_not_everything_with_how_in_it(self, message: str) -> None:
+        """A question about a *thing* is not a question about him: the fence, the game, the bread."""
+        assert match_intent(message) != SOCIAL_HOWAREYOU, message

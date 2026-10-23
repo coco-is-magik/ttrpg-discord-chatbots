@@ -66,7 +66,16 @@ _PATTERNS: tuple[tuple[str, str], ...] = (
         r"|\bhow'?s it going\b"
         r"|\bhow are things\b"
         r"|\bhow have you been\b"
-        r"|\byou (?:ok|okay)\b",
+        r"|\byou (?:ok|okay)\b"
+        # The same question in the clothes people actually use for it. Measured: "anyway how is your
+        # day going" was answered with a hedge ("oh, i do not know that one"), because the only
+        # wellbeing patterns were the ones with "you" in them.
+        r"|\bhow (?:is|was|has|s|are|were) (?:your|the) (?:day|week|weekend|evening|morning|night|time)\b"
+        r"|\bhow (?:is|are|s) (?:your|the) (?:day|week|weekend) going\b"
+        r"|\bhow'?s your day been\b"
+        r"|\bhow (?:you|u) (?:been|doing|getting on)\b"
+        r"|\bhow (?:have|ve) (?:you|u) been\b"
+        r"|\bhow are you holding up\b",
     ),
     (
         # Placed above thanks and agreement: "I'm nervous about tomorrow, thanks for asking"

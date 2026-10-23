@@ -55,10 +55,12 @@ class Ladder:
         friend: str,
         style: Style | None = None,
         jobs: tuple[str, ...] | None = None,
+        question_rate: float = 0.0,
     ) -> None:
         self._data = Path(data or os.environ.get(DATA_ENV, str(DEFAULT_DATA)))
         self.friend = friend
         self._style = style
+        self._question_rate = question_rate
         self.jobs = jobs
         self._shelf: Shelf | None = None
         self._recent = Recent()
@@ -122,7 +124,15 @@ class Ladder:
                 self._world = None
         return self._world
 
-    def subject_of(self, text: str):
+    #: Words that point at something already said. A follow-up refers; a new question does not.
+    REFERRING = frozenset(
+        {
+            "it", "its", "that", "this", "those", "these", "them", "they", "him", "her",
+            "again", "another", "one", "there", "then",
+        }
+    )
+
+    def subject_of(self, text: str, *, carried: str = ""):
         """Which subject they named, and what he has to say about it -- or nothing.
 
         The last thing that used to be the old classifier's job. It lives here rather than in the
@@ -138,12 +148,29 @@ class Ladder:
             character = world.character(self.friend)
         except Exception:  # noqa: BLE001 - a friend with no character knows nothing in particular
             character = None
+        from ttrpg_chatbots.perceive import sentiment as sentiment_rung
+
         return subject_rung.choose(
             text=text,
             index=self._index,
             knowledge=world.knowledge,
             character=character,
+            carried=carried,
+            polarity=sentiment_rung.read(text).polarity,
         )
+
+    def _follows_on(self, text: str) -> bool:
+        """Whether this reads as being about what was already being talked about.
+
+        Short and referential, or a bare follow-up question. "do you think i should try again" refers;
+        "what is the plot of dune" names something new and must not inherit the last subject.
+        """
+        words = [word.strip(".,!?;:'\"").lower() for word in (text or "").split()]
+        if not words:
+            return False
+        if len(words) <= 3:
+            return True
+        return any(word in self.REFERRING for word in words)
 
     def events(self, day: date | str | None = None, *, days: int = 7) -> tuple[Event, ...]:
         """What is happening in his world: today first, then what is coming.
@@ -217,13 +244,14 @@ class Ladder:
             name=_name(memory),
             day=day,
             facts=_facts(memory),
-            subject=self.subject_of(text),
+            subject=self.subject_of(text, carried=topic if self._follows_on(text) else ""),
             events=self.events(day),
             about=topic,
             just_told=just_told,
             told=_told(memory),
             offered_hook=_offered_a_hook(turns),
             gap_bucket=_gap(memory, now).bucket,
+            question_rate=self._question_rate,
         )
 
     def line(

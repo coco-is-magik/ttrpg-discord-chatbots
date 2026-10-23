@@ -69,7 +69,8 @@
         "the warrior",
         "the operator",
         "the one who holds the line while everybody else gets clear"
-      ]
+      ],
+      "question_rate": 0.2
     },
     "user_id": 1562461501888139297
   },
@@ -132,7 +133,7 @@
         "case": "lower",
         "drop_apostrophes": true,
         "strip_final_period": true,
-        "stutter_rate": 0.35,
+        "stutter_rate": 0.5,
         "emoji_rate": 0.45,
         "emojis": [
           "^^",
@@ -150,14 +151,24 @@
           "(╥﹏╥)",
           "owo",
           "(๑•̀ㅂ•́)و"
+        ],
+        "filler_rate": 0.35,
+        "fillers": [
+          "um",
+          "ah",
+          "uh",
+          "hmm"
         ]
       },
       "voice": {
         "engine": "piper",
         "voice": "en_US-ryan-medium",
         "speed": 1.15,
-        "description": "Soft, androgynous, hesitant: a male voice reading near the top of the male range. Auditioned 2026-10-22 over eight voices by measured median F0 -- ryan-medium 156 Hz against amy 197 (female) and arctic 143, sam 140, hfc_male 104. Speed 1.15 for hesitation; no pitch shift, because a resampled voice was heard as off on Terry."
-      }
+        "pitch_hz": 205,
+        "formant": 1.06,
+        "description": "Femboy/otokonoko: a *male* voice with the pitch raised, not a female one. Three rounds of listening: (1) ryan at 156 Hz was 'too male'; (2) a female model lowered to 155 Hz was 'just a woman's voice' -- formants are what the ear reads as male or female, so lowering a female voice does not make it male, and the operative word in the brief was 'too', not 'male'; (3) ryan with F0 raised to ~204 Hz while the formants stay male. Applied by audio.formants (Praat), which moves pitch and formants independently and leaves the duration alone -- so speed 1.15 is the pace the ear approved, with no compensation needed."
+      },
+      "question_rate": 0.8
     },
     "reply": "mention"
   },

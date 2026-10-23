@@ -52,6 +52,8 @@ def choose(
     index: EntityIndex,
     knowledge: Sequence[KnowledgeItem],
     character: Character | None = None,
+    carried: str = "",
+    polarity: str = "neutral",
 ) -> Subject | None:
     """The subject this message names, with the fact that fits it -- or nothing.
 
@@ -60,19 +62,32 @@ def choose(
     hedge.
     """
     named = index.tags_for(text)
-    if not named:
-        return None
     allowed = _allowed(character)
     who = character.id if character is not None else None
-    candidates = [
-        item
-        for item in knowledge
-        if item.tags & named
-        and (allowed is None or item.tags & allowed)
-        and item.owned_by(who)
-    ]
+    if not named:
+        # Nothing was named. A *carried* subject is what the conversation was already about, and it is
+        # only offered by the caller for a follow-up -- measured live, "do you think i should try
+        # again" three turns into a conversation about a plant hedged, because a subject has to be
+        # named in the same sentence or the ladder forgets it.
+        if not carried:
+            return None
+        named = frozenset({carried})
+    candidates = _candidates(named, knowledge, allowed, who)
+    if not candidates and carried and carried not in named:
+        # A name he cannot answer is not a reason to forget the conversation. Measured: "my last one
+        # died" named topic:terry-davis (the word "died" was in one of his slot values), which Otto
+        # does not know, so the plant he had been asked about two turns earlier was dropped and the
+        # answer was "oh".
+        named = frozenset({carried})
+        candidates = _candidates(named, knowledge, allowed, who)
     if not candidates:
         return None
+    # Polarity picks between the items of one subject, and it matters: "i was thinking of getting a
+    # plant" is good news, and the closest item by distance was his *sympathy* line ("oh no, i am
+    # sorry") because both mention a plant and "my". Sentiment is what tells the two apart.
+    preferred = _by_polarity(candidates, polarity)
+    if preferred:
+        candidates = preferred
     ranked = rank(text, candidates, compressor(DEFAULT_COMPRESSOR))
     if not ranked:
         return None
@@ -86,6 +101,55 @@ def choose(
         text=_spoken(item),
         distance=best.distance,
     )
+
+
+def _candidates(
+    named: frozenset[str],
+    knowledge: Sequence[KnowledgeItem],
+    allowed: frozenset[str] | None,
+    who: str | None,
+) -> list[KnowledgeItem]:
+    """The items that answer one of these tags, for somebody who may know them."""
+    return [
+        item
+        for item in knowledge
+        if item.tags & named and (allowed is None or item.tags & allowed) and item.owned_by(who)
+    ]
+
+
+def _anchor_polarity(item: KnowledgeItem) -> str:
+    from ttrpg_chatbots.perceive import sentiment as sentiment_rung
+
+    return sentiment_rung.read(item.text).polarity
+
+
+def _by_polarity(
+    candidates: list[KnowledgeItem], polarity: str
+) -> list[KnowledgeItem]:
+    """The items that do not contradict the mood, or nothing to change.
+
+    Excluding the *opposite* rather than demanding a *match*, because a subject's anchors are mostly
+    neutral: requiring a positive anchor found none, so no filtering happened and the sympathy line
+    still won on distance. Measured on "i was thinking of getting a plant".
+
+    Deliberately a preference, not a filter: if everything would be excluded, nothing is.
+    """
+    tiers = {
+        "positive": ("positive", "neutral"),
+        "negative": ("negative", "neutral"),
+        # A neutral message must not reach for an extreme stance: "i was thinking of getting a plant"
+        # is neither good news nor bad, and answering it with "oh no, i am sorry" was the measured
+        # failure. So the neutral tier is neutral only, and the extremes are left for a mood that
+        # matches them.
+        "neutral": ("neutral",),
+    }.get(polarity)
+    if tiers is None:
+        return []
+    for tier in tiers:
+        keep = [item for item in candidates if _anchor_polarity(item) == tier]
+        if keep:
+            return keep if len(keep) < len(candidates) else []
+    return []
 
 
 def _allowed(character: Character | None) -> frozenset[str] | None:

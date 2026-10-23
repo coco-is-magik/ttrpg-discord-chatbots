@@ -26,13 +26,31 @@ QUESTION_OPENERS = frozenset(
 )
 
 
+#: What somebody says *before* the question. Measured: "also do you like trains" was heard as a
+#: statement, so a direct question about his own subject got "ah" instead of an answer.
+LEAD_INS = frozenset(
+    {
+        "also", "so", "and", "but", "ok", "okay", "well", "oh", "um", "uh", "hmm", "then",
+        "now", "alright", "right", "just", "anyway",
+    }
+)
+
+
 def looks_like_question(text: str) -> bool:
-    """Whether this is a question, with or without a question mark."""
+    """Whether this is a question, with or without a question mark.
+
+    Only the *first* meaningful word is consulted, not any of the first few: "i was thinking about
+    getting a plant" contains "was" and is a statement, while "also do you like trains" opens with a
+    filler and is a question.
+    """
     stripped = (text or "").strip()
     if stripped.endswith("?"):
         return True
-    first = stripped.split(" ", 1)[0].lower().strip(",.")
-    return first in QUESTION_OPENERS
+    for word in stripped.lower().replace(",", " ").split():
+        if word in LEAD_INS:
+            continue
+        return word in QUESTION_OPENERS
+    return False
 
 
 def strip_mentions(text: str) -> str:

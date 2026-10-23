@@ -475,11 +475,11 @@ async def forget(interaction: discord.Interaction, key: str) -> None:
 
 @command(
     name="voicetest",
-    description="Testing surface: make a friend join your voice channel, speak in it, or leave",
+    description="Hear a friend: join your voice channel, speak in his own voice, or leave",
 )
 @app_commands.describe(
     action="what to do with the friend's voice",
-    friend="which friend (default friend-a)",
+    friend="who: `Otto`, `Terry`, or a friend id like `friend-b` (default Terry)",
     text="what he should say, if action is speak",
 )
 @app_commands.choices(
@@ -501,12 +501,17 @@ async def voicetest(
     that joined, so the channel has to be looked up in the friend's own guild cache.
     """
     await interaction.response.defer(thinking=True)
-    client = getattr(interaction.client, "friends", {}).get(friend)
-    if client is None:
+    connected = getattr(interaction.client, "friends", {}) or {}
+    resolved = _resolve_friend(interaction.client, friend)
+    if resolved is None:
+        here = ", ".join(sorted(connected)) or "nobody"
         await interaction.followup.send(
-            f"`{friend}` is not connected. `/friendcheck` shows which friends are online."
+            f"no friend called `{friend}`. Connected: {here} -- try `Otto` or `Terry`, or the id "
+            "(`friend-b`). `/friendcheck` shows them all."
         )
         return
+    friend = resolved
+    client = connected[friend]
 
     room = _voice_room(client, friend)
     chosen = (getattr(action, "value", action) or "").strip().lower()
@@ -526,7 +531,7 @@ async def voicetest(
                 return
             await interaction.followup.send(f"{friend}: {await room.join(channel)}")
         elif chosen == "speak":
-            line = text or "there he is. hockey is the best game ever invented"
+            line = text or _default_line(friend)
             await interaction.followup.send(f"{friend}: {await room.say(line)}")
         elif chosen == "leave":
             await interaction.followup.send(f"{friend}: {await room.leave()}")
@@ -540,14 +545,99 @@ async def voicetest(
 
 
 def _voice_room(client, friend: str):
-    """One voice room per friend, created on first use and kept for the process."""
-    room = getattr(client, "voice_room", None)
-    if room is None:
+    """One voice room per friend, created on first use and kept for the process.
+
+    Keyed by friend, not by client: a single cached room meant whoever asked first owned the casting,
+    so `/voicetest friend:friend-b` after a Terry test would have joined with *Terry's* voice and
+    reported it as Otto's.
+    """
+    rooms = getattr(client, "voice_rooms", None)
+    if rooms is None:
+        rooms = {}
+        client.voice_rooms = rooms
+    if friend not in rooms:
         from ttrpg_chatbots.bots.voice import FriendVoice
 
-        room = FriendVoice(friend=friend)
-        client.voice_room = room
-    return room
+        rooms[friend] = FriendVoice(friend=friend)
+    return rooms[friend]
+
+
+def _resolve_friend(client, wanted: str) -> str | None:
+    """Which friend they meant: the id, or the name he goes by.
+
+    `/voicetest friend:Otto` is what a person types. Discord's option is free text, so the id has to
+    be guessable from the name -- and the error has to list who is actually here.
+    """
+    connected = getattr(client, "friends", {}) or {}
+    wanted = (wanted or "").strip()
+    if wanted in connected:
+        return wanted
+    lowered = wanted.lower()
+    try:
+        from ttrpg_chatbots.bots.roster import load_roster
+
+        for spec in load_roster().friends:
+            persona = spec.persona
+            names = {spec.id.lower()}
+            if persona is not None:
+                names.add(persona.name.lower())
+            if lowered in names and spec.id in connected:
+                return spec.id
+    except Exception:  # noqa: BLE001 - a broken roster only means the name cannot be resolved
+        pass
+    return None
+
+
+def _default_line(friend: str) -> str:
+    """A line in *his* voice, typed the way he types, for a voice test with no text given.
+
+    Two measured failures behind this. The first version spoke a fixed hockey line at whoever asked, so
+    testing Otto read out Terry's material. Then the line came from his dataset but bypassed his
+    *style* -- and his style is where the stutter lives, so the one thing that makes him sound like
+    himself was missing from the one command meant to demonstrate it.
+    """
+    fallback = "hello, can you hear me?"
+    line = fallback
+    style = None
+    try:
+        from ttrpg_chatbots.bots.roster import load_roster
+        from ttrpg_chatbots.bots.voice import data_directory
+        from ttrpg_chatbots.reply.datasets import load_world
+
+        for spec in load_roster().friends:
+            if spec.id == friend and spec.persona is not None:
+                style = spec.persona.style
+        candidates = [
+            item.reply
+            for item in load_world(data_directory()).knowledge
+            if item.owned_by(friend) and item.reply and 8 <= len(item.reply.split()) <= 26
+        ]
+        if candidates:
+            line = candidates[0]
+    except Exception:  # noqa: BLE001 - a test command must still work with no dataset
+        style = None
+        candidates = []
+    if style is None:
+        return line
+    from ttrpg_chatbots.reply.style import apply_style
+
+    # A line whose styled form is identical to the raw one demonstrates nothing: the stutter and the
+    # emoticon are both chance, so the first candidate happened to draw neither and Otto's voice test
+    # came out with no hesitation in it at all. Prefer a stutter, then any change at all.
+    #
+    # The pattern is the *spaced* false start ("h- hello", "th- think"). It was written for the
+    # unspaced form and silently stopped matching when the stutter gained its space -- the command kept
+    # working, so nothing failed, but the "prefer a stutter" branch became dead code.
+    import re
+
+    changed: str | None = None
+    for candidate in [line, *candidates]:
+        typed = apply_style(candidate, style)
+        if re.match(r"^[a-z]{1,2}- ", typed):
+            return typed
+        if typed != candidate and changed is None:
+            changed = typed
+    return changed or apply_style(line, style)
 
 
 @command(

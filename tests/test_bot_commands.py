@@ -1658,3 +1658,75 @@ def test_budget_needs_a_build(seated) -> None:
     interaction.user.id = 4242
     _invoke(budget, interaction, "attributes", "Mental", "Physical", "Social")
     assert "no creation budgets" in interaction.followup.messages[-1]
+
+
+class TestHearingAFriend:
+    """The three things that made `/voicetest` awkward when it was time to hear Otto.
+
+    Each was found by trying to use it: the option wanted a friend *id*, the default line was
+    Terry's, and the voice room was cached per client so the second friend tested got the first
+    friend's casting.
+    """
+
+    def test_the_default_line_is_his_own(self) -> None:
+        from ttrpg_chatbots.bot import _default_line
+        from ttrpg_chatbots.bots.roster import load_roster
+        from ttrpg_chatbots.bots.voice import data_directory
+        from ttrpg_chatbots.reply.datasets import load_world
+        from ttrpg_chatbots.reply.style import apply_style
+
+        terry = _default_line("friend-a")
+        otto = _default_line("friend-b")
+
+        assert terry != otto, "one fixed line tested the engine and told you nothing about the friend"
+        assert "hockey" in terry, "Terry's own material"
+        # Otto's is a line from his own material *that the style changed*: his stutter and his
+        # emoticons are where the hesitation lives, and a line the style leaves alone demonstrates
+        # nothing about how he sounds.
+        #
+        # The check used to name words ("lyoko", "train"), which made it a test of the dataset's
+        # *vocabulary* rather than of the command -- and it failed the moment the candidate that
+        # happened to stutter was a line about something else. The assertion is now the property
+        # that matters: the spoken line is one of his own replies, typed the way he types.
+        world = load_world(data_directory())
+        style = next(
+            spec.persona.style
+            for spec in load_roster().friends
+            if spec.id == "friend-b" and spec.persona is not None
+        )
+        owned = [item.reply for item in world.knowledge if item.owned_by("friend-b") and item.reply]
+        assert any(apply_style(reply, style) == otto for reply in owned), otto
+        assert otto not in owned, "the style must have changed it, or it demonstrates nothing"
+
+    def test_a_friend_with_no_material_still_gets_a_line(self) -> None:
+        from ttrpg_chatbots.bot import _default_line
+
+        assert _default_line("friend-c") == "hello, can you hear me?"
+
+    def test_the_friend_can_be_named_rather_than_numbered(self) -> None:
+        from ttrpg_chatbots.bot import _resolve_friend
+
+        class Client:
+            friends = {"friend-a": object(), "friend-b": object()}
+
+        client = Client()
+        assert _resolve_friend(client, "friend-b") == "friend-b"
+        assert _resolve_friend(client, "Otto") == "friend-b"
+        assert _resolve_friend(client, "otto") == "friend-b"
+        assert _resolve_friend(client, "Terry") == "friend-a"
+        assert _resolve_friend(client, "Crusty") is None, "c is not connected here"
+        assert _resolve_friend(client, "nobody") is None
+
+    def test_one_voice_room_per_friend(self) -> None:
+        from ttrpg_chatbots.bot import _voice_room
+
+        class Client:
+            friends: dict = {}
+
+        client = Client()
+        terry = _voice_room(client, "friend-a")
+        otto = _voice_room(client, "friend-b")
+
+        assert terry is not otto, "one cached room gave the second friend the first friend's casting"
+        assert terry.friend == "friend-a" and otto.friend == "friend-b"
+        assert _voice_room(client, "friend-a") is terry, "and it is still kept, not rebuilt"

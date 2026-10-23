@@ -91,6 +91,7 @@ def run(
     moments: tuple[Moment, ...] = (),
     repeats: int = 3,
     style: Style | None = None,
+    question_rate: float = 1.0,
 ) -> Report:
     """Push the matrix through the ladder and count what came out."""
     people = relationships or (
@@ -120,6 +121,10 @@ def run(
                             relationship=person,
                             life=life,
                             name="tav",
+                            # The harness measures what a phase *can* say, so it asks as often as it
+                            # can: `ask_back` is unreachable at question_rate 0, and a phase the
+                            # harness cannot reach is a phase nothing proves.
+                            question_rate=question_rate,
                         ),
                         book=book,
                         books=books,
@@ -150,6 +155,13 @@ PHASE_MESSAGES: dict[str, tuple[str, ...]] = {
     "hedge": ("what is the plot of dune", "tell me about the guild", "who is agrippa"),
     "tell_story": ("how did the fence go?", "what happened with the truck?", "how was the weekend"),
     "noted": ("i have been rebuilding a fence myself", "the truck is in the shop", "my dog is called otis"),
+    # Statements with nothing to add to: the job with the least to say, and therefore the one worth
+    # spending on a question when the persona asks often enough.
+    "ask_back": (
+        "i have been rebuilding a fence myself this month",
+        "i finally finished the thing i was working on",
+        "i spent the weekend sorting the garage out",
+    ),
 }
 
 

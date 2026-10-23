@@ -16,13 +16,23 @@
 # 1.05, not 1.2: joe already reads slower than ryan did at neutral (6.9 s vs 6.0 s for the test
 # sentence), and 1.2 on top of that was reported "a hair too slow".
 #
-# Otto, provisional pending the ear: auditioned 2026-10-22 over eight voices, ranked by measured
-# median F0 -- amy 197, kristin 165, ryan-medium 156, arctic 143, sam 140, bryce 131, mike 127,
-# hfc_male 104. The brief is male but androgynous with a feminine pitch, so ryan-medium is the
-# highest male voice and sits just under the female ones. Speed 1.15 for hesitation; no pitch
-# shift, because a resampled voice was heard as off on Terry.
+# Otto, tuned by ear over three rounds, and the third is the one that matters.
+#   1. ryan-medium at 156 Hz: rejected -- too male.
+#   2. kristin-medium (a female model) lowered to 155 Hz: rejected -- "just a woman's voice".
+#      The lesson: formants are what the ear reads as male or female, so lowering a female voice
+#      does not make it male, and the *operative* word in the brief was "too", not "male".
+#   3. a *male* model with the pitch raised -- F0 up, formants male. 168 Hz against the 151 Hz
+#      that was rejected, which is a light male rather than a low female.
+#
+#   4. ryan with F0 raised to ~204 Hz by `pitch_hz`, formants left male by `formant` 1.06.
+#      The resampling shifter cannot do this: it raises the formants with the pitch, which is what
+#      makes a raised voice sound like a woman. audio.formants (Praat) moves them independently
+#      and leaves the duration alone, so `speed` 1.15 is the approved pace with no compensation.
+# The stutter and the fillers stay in the text (style.stutter_rate, style.filler_rate) so the
+# engine never has to act. Measured: "th- this is the train" is 560 ms longer than the plain
+# line, while the earlier "th-this" was only 90 ms -- the space after the hyphen is the audible part.
 #
 # VERIFIED 2026-10-22: the model is downloaded (in the tts model cache, not the repo), 22 kHz mono,
 # a twenty-word line renders in about 5.5 s at roughly 0.4x realtime on this CPU.
 {"id": "cast-terry", "characters": ["friend-a", "Terry"], "engine": "piper", "voice": "en_US-joe-medium", "speed": 1.05, "volume": 1.0}
-{"id": "cast-otto", "characters": ["friend-b", "Otto"], "engine": "piper", "voice": "en_US-ryan-medium", "speed": 1.15, "volume": 1.0}
+{"id": "cast-otto", "characters": ["friend-b", "Otto"], "engine": "piper", "voice": "en_US-ryan-medium", "speed": 1.15, "volume": 1.0, "pitch_hz": 205, "formant": 1.06}

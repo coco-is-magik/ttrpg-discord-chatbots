@@ -101,6 +101,7 @@ class PiperSynthesizer:
         length_scale: float | None = None,
         volume: float | None = None,
         deterministic: bool | None = None,
+        speaker_id: int | None = None,
     ) -> None:
         self._voice_name = (voice or voice_name()).strip()
         self._length_scale = speed_from_environment() if length_scale is None else length_scale
@@ -108,6 +109,10 @@ class PiperSynthesizer:
         self._deterministic = (
             deterministic_from_environment() if deterministic is None else deterministic
         )
+        # A multi-speaker model (libritts has 904) needs one. The id is the *model's* internal number,
+        # which is what piper's `speaker_id_map` maps its own numbering onto -- passing the map's key
+        # instead of its value raised "indices element out of data bounds" from onnxruntime.
+        self._speaker_id = speaker_id
         self._voice = None
 
     def load(self) -> None:
@@ -147,6 +152,7 @@ class PiperSynthesizer:
         # the natural level peaks around 22500 (-3.2 dBFS).
         noise = 0.0 if self._deterministic else None
         config = SynthesisConfig(
+            speaker_id=self._speaker_id,
             length_scale=self._length_scale,
             normalize_audio=False,
             volume=self._volume,

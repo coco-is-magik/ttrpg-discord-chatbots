@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 from ttrpg_chatbots import jsonl
+from ttrpg_chatbots.audio import formants
 from ttrpg_chatbots.audio.pcm import PcmAudio, shift_pitch
 from ttrpg_chatbots.tts import engines
 from ttrpg_chatbots.tts.engines import espeak_engine, piper_engine
@@ -35,6 +36,13 @@ ESPEAK_WPM = 165
 MAX_SPEED = 3.0
 MIN_PITCH = 0.5
 MAX_PITCH = 2.0
+
+#: The formant-aware shifter's bounds. A wider formant range stops being a voice and starts being a
+#: different person, which is not something a casting rule should be able to do by accident.
+MIN_PITCH_HZ = 60
+MAX_PITCH_HZ = 400
+MIN_FORMANT = 0.7
+MAX_FORMANT = 1.3
 MAX_VOLUME = 2.0
 
 
@@ -61,6 +69,13 @@ class VoiceProfile:
     ``pitch`` is applied *after* the engine, by resampling, so it works for every engine and needs no
     extra dependency: 1.0 is unchanged and lower is deeper. See
     :func:`ttrpg_chatbots.audio.pcm.shift_pitch` for the trade it makes.
+
+    ``pitch_hz`` and ``formant`` are the better pair, and need Praat (``praat-parselmouth``).
+    ``pitch_hz`` is the target median fundamental as an absolute number, and ``formant`` scales the
+    timbre independently: 1.0 leaves it, above 1.0 is lighter and more feminine, below is darker. Use
+    these when a voice must be *higher but still male* -- resampling raises the formants too, which is
+    what turns a raised man's voice into a woman's. Measured on `en_US-ryan-medium`: a source of
+    149 Hz becomes 191.7 Hz with the duration untouched at 2.86 s.
     """
 
     engine: str | None = None
@@ -68,6 +83,9 @@ class VoiceProfile:
     speed: float = 1.0
     volume: float = 1.0
     pitch: float = 1.0
+    pitch_hz: int | None = None
+    formant: float = 1.0
+    speaker_id: int | None = None
 
     def __post_init__(self) -> None:
         if self.engine is not None and not self.engine.strip():
@@ -83,6 +101,29 @@ class VoiceProfile:
             raise ValueError(f"speed must be in (0, {MAX_SPEED}], got {self.speed}")
         if not 0.0 < self.volume <= MAX_VOLUME:
             raise ValueError(f"volume must be in (0, {MAX_VOLUME}], got {self.volume}")
+        if self.speaker_id is not None:
+            if isinstance(self.speaker_id, bool) or not isinstance(self.speaker_id, int):
+                raise ValueError("speaker_id must be a whole number")
+            if self.speaker_id < 0:
+                raise ValueError(f"speaker_id must not be negative, got {self.speaker_id}")
+        if self.pitch_hz is not None:
+            if isinstance(self.pitch_hz, bool) or not isinstance(self.pitch_hz, int):
+                raise ValueError(f"pitch_hz must be a whole number of hertz, got {self.pitch_hz!r}")
+            if not MIN_PITCH_HZ <= self.pitch_hz <= MAX_PITCH_HZ:
+                raise ValueError(
+                    f"pitch_hz must be between {MIN_PITCH_HZ} and {MAX_PITCH_HZ} (a median "
+                    f"fundamental in hertz), got {self.pitch_hz}"
+                )
+            if not formants.available():
+                raise ValueError(
+                    "pitch_hz needs the formant-aware shifter: install praat-parselmouth "
+                    "(pip install praat-parselmouth), or use the cruder 'pitch' ratio"
+                )
+        if not MIN_FORMANT <= self.formant <= MAX_FORMANT:
+            raise ValueError(
+                f"formant must be between {MIN_FORMANT} and {MAX_FORMANT} (1.0 is unchanged, "
+                f"above is lighter), got {self.formant}"
+            )
         if not MIN_PITCH <= self.pitch <= MAX_PITCH:
             raise ValueError(
                 f"pitch must be between {MIN_PITCH} and {MAX_PITCH} (1.0 is unchanged, "
@@ -93,6 +134,12 @@ class VoiceProfile:
         engine = self.engine or "auto"
         voice = self.voice or "engine default"
         pitch = "" if self.pitch == 1.0 else f" pitch={self.pitch:g}"
+        if self.pitch_hz is not None:
+            pitch += f" pitch_hz={self.pitch_hz}"
+        if self.formant != 1.0:
+            pitch += f" formant={self.formant:g}"
+        if self.speaker_id is not None:
+            pitch += f" speaker={self.speaker_id}"
         return f"{engine}:{voice} speed={self.speed:g} volume={self.volume:g}{pitch}"
 
 
@@ -233,6 +280,9 @@ def _rule(record: Mapping[str, Any], identifier: str, where: str) -> VoiceRule:
                 speed=_number(record, "speed", where, 1.0),
                 volume=_number(record, "volume", where, 1.0),
                 pitch=_number(record, "pitch", where, 1.0),
+                pitch_hz=_optional_int(record, "pitch_hz", where),
+                formant=_number(record, "formant", where, 1.0),
+                speaker_id=_optional_int(record, "speaker_id", where),
             ),
             characters=frozenset(_texts(record, "characters", where)),
             tags=frozenset(_texts(record, "tags", where)),
@@ -355,7 +405,10 @@ def _engine_for(profile: VoiceProfile) -> SpeechSynthesizer:
     engine_name = profile.engine or _first_available_engine()
     if engine_name == piper_engine.NAME:
         return piper_engine.PiperSynthesizer(
-            voice=profile.voice, length_scale=profile.speed, volume=profile.volume
+            voice=profile.voice,
+            length_scale=profile.speed,
+            volume=profile.volume,
+            speaker_id=profile.speaker_id,
         )
     if engine_name == espeak_engine.NAME:
         return espeak_engine.EspeakSynthesizer(
@@ -375,6 +428,16 @@ def _first_available_engine() -> str:
     raise SynthesizerUnavailable(
         "no TTS engine is available for an unpinned voice profile"
     )
+
+
+def _optional_int(record: Mapping[str, Any], key: str, where: str) -> int | None:
+    """A whole number, or nothing. Used for a multi-speaker model's speaker id."""
+    value = record.get(key)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise CastingError(f"{where}: {key!r} must be a whole number")
+    return value
 
 
 def _words_per_minute(speed: float) -> int:
@@ -408,10 +471,12 @@ class VoiceCast:
     def synthesize(self, text: str, speaker: Speaker) -> PcmAudio:
         profile = self.profile_for(speaker)
         clip = self._engine(profile).synthesize(text)
+        if profile.pitch_hz is not None or profile.formant != 1.0:
+            # Applied here rather than in the engines: a voice is defined by the casting rule, so every
+            # consumer (a command, a reply, a rendered sample) hears the same person.
+            return formants.change_voice(clip, pitch_hz=profile.pitch_hz, formant=profile.formant)
         if profile.pitch == 1.0:
             return clip
-        # Applied here rather than in the engines: a voice is defined by the casting rule, so every
-        # consumer (a command, a reply, a rendered sample) hears the same person.
         return shift_pitch(clip, profile.pitch)
 
     def loaded_profiles(self) -> tuple[VoiceProfile, ...]:

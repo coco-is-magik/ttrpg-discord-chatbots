@@ -1,0 +1,16 @@
+{
+  "job": "ask_back",
+  "note": "Handing the turn back with a question. This is the shared register -- short, plain, and interested. A friend who asks more often overrides this file with their own (Otto does); the job itself is chosen by decide/job and gated by the persona's question_rate, so the file only supplies the wording. Every line is a question, which is why the family is its own: the warm register holds statements too.",
+  "families": {
+    "ask_back": {
+      "when": {},
+      "variants": [
+        "what about you?",
+        "how about you?",
+        "what have you been up to?",
+        "and you?",
+        "what about yourself?"
+      ]
+    }
+  }
+}

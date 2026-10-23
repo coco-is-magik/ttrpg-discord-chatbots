@@ -474,6 +474,27 @@ def measure(
         )
     )
 
+    # 11. His life has to survive his own gate. Added because a reason ending on a beat was refused by
+    # `persona_fit` and the whole answer vanished -- and then the rescue path hid it behind a hedge, so
+    # nothing failed while his material was quietly unusable.
+    refused: list[str] = []
+    for activity in life.activities:
+        for field in ("doing", "short", "why", "phase"):
+            line = getattr(activity, field, "")
+            if line and not persona_fit.read(line).ok:
+                refused.append(f"{activity.id}.{field}: {line!r}")
+    for grievance in life.grievances:
+        if grievance.text and not persona_fit.read(grievance.text).ok:
+            refused.append(f"grievance {grievance.id}: {grievance.text!r}")
+    report.findings.append(
+        Finding(
+            "life_fits_the_gate",
+            "every line of his life would pass his own persona gate",
+            ok=not refused,
+            evidence=tuple(refused),
+        )
+    )
+
     report.stats = {
         "subjects": float(len(subjects)),
         "lines": float(len(variants)),

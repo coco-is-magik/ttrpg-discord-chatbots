@@ -4,7 +4,7 @@ Dated snapshot, not a wish list. `DESIGN.md` says where the project is *going*; 
 is true *today*, so a later session can pick up without re-deriving it. Update it when a slice
 lands; it should never be more than one slice out of date.
 
-**Last updated:** 2026-10-22 (memory, subjects, events, stories, plans).
+**Last updated:** 2026-10-23 (handing the turn back, and being asked how he is).
 
 ---
 
@@ -12,16 +12,17 @@ lands; it should never be more than one slice out of date.
 
 | | |
 |---|---|
-| Tests | **1877 passing**, ~39 s, no network, no GPU |
+| Tests | **1953 passing**, ~41 s, no network, no GPU |
 | Bots live | 4 applications: `ttrpg-bot` (helper) + `friend-a/b/c` |
 | Permissions | **8/8 each** in `#general` |
 | Slash commands | **54/54** synced to guild 1364544268609523762 |
 | Who speaks | `friend-a` (Terry) and `friend-b` (Otto), both `reply: mention`; `friend-c` is `reply: off` |
-| Conversation | **ten phases on the module ladder**, live behind `TTRPG_CONVERSATION=ladder`; subject questions answered by the ladder too (`decide/subject`) |
+| Conversation | **eleven phases on the module ladder** (greet, close, acknowledge, noted, reassure, mirror, offer_hook, explain, tell_story, hedge, **ask_back**), live behind `TTRPG_CONVERSATION=ladder`; subject questions answered by the ladder too (`decide/subject`) |
 | Modules | **57/57 built**, manifest clean |
-| Voice | friend-a speaks: `piper` **`en_US-joe-medium`** at length scale **1.05**, no pitch shift — chosen by measuring 13 candidates (98 Hz vs ryan-high's 144 Hz); `/voicetest join\|speak\|leave` |
+| Voice | friend-a speaks: `piper` **`en_US-joe-medium`** at length scale **1.05**, no pitch shift — chosen by measuring 13 candidates (98 Hz vs ryan-high's 144 Hz). friend-b: **`en_US-ryan-medium`** at 1.15 with `pitch_hz` 205 / `formant` 1.06 — a *male* model raised to 204 Hz with its formants kept male, applied by `audio/formants.py` (Praat), which leaves the duration alone. `/voicetest friend:<name> join\|speak\|leave` |
 | Voice lock | `examples/friends_world/voices.lock.json`: sha256 + md5 per file, two sources, CC0 provenance, rebuild steps; `ttrpg-chatbots-tts --verify-voice\|--fetch-voice` |
 | Speech text | `tts/spoken/` — five modules + a fixed order, wrapped around every engine at build time; `--spoken TEXT` prints the spoken form |
+| Procedure | `tools/check_friend.sh <friend>` (offline) + `docs/TESTING.md` (Discord, with what to blame) |
 | Persona | `ttrpg-chatbots-persona` — twelve checks per friend over his whole material. Terry: 39 subjects, median 5 words. Otto: 18 subjects, median 4 words, stutter and emoticons. Both PASS |
 | Phrasebooks | resolved per friend, per job: `phrasebooks/<friend>/` over the shared `phrasebooks/`. Otto overrides eight jobs; `friend-c` speaks the shared register |
 | Knowledge ownership | subject lines carry `character`, so two friends can hold the same tag (`topic:computers`) without sharing a mouth |

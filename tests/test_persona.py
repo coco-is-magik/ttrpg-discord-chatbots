@@ -414,3 +414,33 @@ def test_the_two_friends_do_not_share_a_voice() -> None:
     assert otto is not None and otto.voice is not None
     assert terry.voice.voice != otto.voice.voice
     assert otto.voice.speed >= terry.voice.speed, "hesitation reads as a slower line"
+
+
+class TestQuestionRate:
+    """How often he hands the turn back. The number behind "he would rather listen".
+
+    It is a persona field rather than a ladder constant because it is a property of the person: Otto
+    asks, Terry mostly does not, and the same ladder produces both.
+    """
+
+    def test_the_default_is_reserved(self) -> None:
+        persona = Persona.from_record({"name": "Someone"})
+        assert persona.question_rate == 0.2
+
+    def test_a_record_can_raise_it(self) -> None:
+        persona = Persona.from_record({"name": "Otto", "question_rate": 0.8})
+        assert persona.question_rate == pytest.approx(0.8)
+
+    def test_it_must_be_a_number_between_zero_and_one(self) -> None:
+        with pytest.raises(PersonaError, match="question_rate must be between"):
+            Persona.from_record({"name": "Otto", "question_rate": 1.4})
+        with pytest.raises(PersonaError, match="question_rate must be a number"):
+            Persona.from_record({"name": "Otto", "question_rate": "lots"})
+
+    def test_the_two_written_friends_are_wired_to_differ(self) -> None:
+        """The whole point: two people, one ladder, different amounts of asking."""
+        from ttrpg_chatbots.bots.roster import load_roster
+
+        friends = {spec.id: spec.persona for spec in load_roster().friends}
+        assert friends["friend-b"].question_rate > friends["friend-a"].question_rate
+        assert friends["friend-b"].question_rate >= 0.5

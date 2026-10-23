@@ -322,3 +322,95 @@ The rule that survived is about **whose thing it is**: a statement that names a 
 **and** uses a possessive (*my*, *our*, *mine*) is about *their* thing, so he answers about it;
 anything else is acknowledged. `govern/loop` passes `theirs`, `decide/job` decides, and the two
 cases are tested.
+
+---
+
+## 10. Handing the turn back
+
+A conversation where only one side asks is an interview. This is the slice that made the other
+person's half of it real, and it started from a measurement: **`decide/reciprocate` -- the rung that
+answers "does he hand the turn back?" -- was referenced by nothing but its own test.** The job that
+would carry it, `ask_back`, was in the vocabulary and never chosen, and no phrasebook existed for it.
+Three links missing in a chain that looked finished.
+
+### The rule
+
+One turn, one job -- so handing the turn back is not an extra message, it is a *choice of job*:
+
+| | |
+|---|---|
+| which turn is worth spending | `noted` -- the job with the least to say ("yeah" to a statement he has nothing to add to) |
+| who decides | `decide/reciprocate.ask_about_them()`, gated on the persona's `question_rate` |
+| the wording | `phrasebooks/ask_back.json`, overridable per friend (`friend-b` has his own) |
+| the register | a family of its own, `ask_back`, because every line is a question and the warm register holds statements too |
+
+Three refusals, each for a reason: a rate of `0` means never; a **terse or flat** reply ("k", "fine") is
+not an invitation, so asking "what about you?" into it is the interview problem in miniature; and
+**never twice in a row**, read from whether his last turn ended in a question.
+
+The roll is keyed on the message, so the same message always gets the same treatment and a replay is a
+replay.
+
+### What it looks like
+
+Same five messages, both friends, their real rates:
+
+| you say | Terry (0.2) | Otto (0.8) |
+|---|---|---|
+| i have been rebuilding a fence myself this month | `yeah` | `hmm, wh- what about you? ^^` |
+| i finally finished the thing i was working on | `what about you?` | `wh- what have you been up to?` |
+| i spent the weekend sorting the garage out | `nice` | `wh- what are you working on these days?` |
+
+### The wellbeing question
+
+The other half of "he listens": being asked how *he* is. `anyway how is your day going` was answered
+with a hedge -- "oh, i do not know that one" -- because every pattern for that move had the word *you*
+in it. The lexicon now covers the phrasings people actually use (`how was your weekend`, `how's your day
+been`, `how you been`, `how are you holding up`), and fourteen of them are pinned by a test -- alongside
+the four that must **not** match, because a question about a *thing* ("how is the fence coming along") is
+not a question about him.
+
+### Two bugs the live channel found
+
+Both from one exchange on 2026-10-23, and both were invisible to 1,953 tests:
+
+```
+noodle: i have been rebuilding a fence myself this month
+Otto:   what about you? ^^                     (ask_back)  correct
+noodle: playing video games                    <- he ANSWERED the question
+Otto:   wh- what have you been up to?          (ask_back)  asked again, and ignored the answer
+```
+
+**1. A question with an emoticon after it is not a question.** The "never twice in a row" rule read
+`turn.text.endswith("?")`, and the style layer appends emoticons *after* the punctuation -- so
+`what about you? ^^` looked like a statement and the rule never fired. Since Otto decorates about half
+his lines, roughly half his questions were invisible to the rule that exists to stop him interrogating
+people. The check now asks whether the **last sentence** contains a question mark, which is independent
+of how a friend decorates a line.
+
+**2. An `ask_back` turn recorded a subject of his own.** The turn's act is `ladder|job|topic|story`,
+and this one carried `topic:trains` -- the subject left over from earlier -- so the next message
+inherited it as a follow-up and "playing video games" was matched to *his trains* at 0.96. He had
+asked about **them**, so nothing of his was under discussion; the act now carries no topic.
+
+Held by six ladder tests (including four ways of decorating a question) and two supervisor tests that
+walk the exact exchange.
+
+### What is still not right in that exchange
+
+The answer he gives to "playing video games" is `ah, oh` -- correct by the rules (one question, no
+repeat) and weak as a reply, because nothing in the ladder picks up what *they* just said. A person
+says "oh nice, what are you playing?". That is the next capability, not a bug: it needs a job that
+follows up on their answer, which is the same shape as the "relating one thing to another" item on the
+roadmap.
+
+### A bug the work found
+
+
+A phrasebook variant that already ended in an emoticon got a second one appended by the style layer, so
+a shy friend said `what about you? ^^ (◕‿◕)`. The pool *is* the vocabulary of those marks, so membership
+in it is what the check tests -- not a hand-written list.
+
+**Measured, both friends:** `ask_back` answers 108 of 108 attempts at median 3 words, 0% ending on a
+beat, 5% distinct (repetition is the register). Held by five ladder tests, four persona tests and a
+fourteen-case lexicon table.

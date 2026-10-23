@@ -1,48 +1,102 @@
 {
-  "voice": "en_US-joe-medium",
-  "engine": "piper",
-  "quality": "medium",
-  "sample_rate_hz": 22050,
-  "speakers": 1,
-  "chosen": "2026-10-22",
-  "chosen_because": "Deepest American male voice that still sounds confident. Measured median F0 over a fixed sentence: joe 98.2 Hz, against ryan-high's 144.1 Hz, which was heard in the channel as \"too fast and not deep enough\". 13 candidates measured; see docs/PERSONA.md 3d.",
-  "settings": {
-    "speed": 1.05,
-    "volume": 1.0,
-    "pitch": 1.0
-  },
-  "files": [
+  "schema_version": 1,
+  "voices": [
     {
-      "name": "en_US-joe-medium.onnx",
-      "bytes": 63201294,
-      "sha256": "58afce0321b8d9c46d7cdf9c16500cc55a793b4220212dba6b70fb788b3baf06",
-      "md5": "74fd6a4dc39e0aa9dce145d7f5acd4f6"
+      "voice": "en_US-joe-medium",
+      "engine": "piper",
+      "quality": "medium",
+      "sample_rate_hz": 22050,
+      "speakers": 1,
+      "chosen": "2026-10-22",
+      "chosen_because": "Deepest American male voice that still sounds confident. Measured median F0 over a fixed sentence: joe 98.2 Hz, against ryan-high's 144.1 Hz, which was heard in the channel as \"too fast and not deep enough\". 13 candidates measured; see docs/PERSONA.md 3d.",
+      "settings": {
+        "speed": 1.05,
+        "volume": 1.0,
+        "pitch": 1.0
+      },
+      "files": [
+        {
+          "name": "en_US-joe-medium.onnx",
+          "bytes": 63201294,
+          "sha256": "58afce0321b8d9c46d7cdf9c16500cc55a793b4220212dba6b70fb788b3baf06",
+          "md5": "74fd6a4dc39e0aa9dce145d7f5acd4f6"
+        },
+        {
+          "name": "en_US-joe-medium.onnx.json",
+          "bytes": 4794,
+          "sha256": "3d6d5410b3795cb1950595247ef8f06190719e6fdbfa3a2356d8ec368e1aad33",
+          "md5": "811036b9c1451545f9495fdc1baa0754"
+        }
+      ],
+      "sources": [
+        "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/joe/medium/{file}?download=true",
+        "https://hf-mirror.com/rhasspy/piper-voices/resolve/main/en/en_US/joe/medium/{file}?download=true"
+      ],
+      "also_via": "piper.download_voices.download_voice('en_US-joe-medium', dir) -- the same origin",
+      "provenance": {
+        "upstream_manifest": "https://huggingface.co/rhasspy/piper-voices/resolve/main/voices.json",
+        "model_card": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/joe/medium/MODEL_CARD",
+        "dataset": "https://github.com/OHF-Voice/voice-datasets",
+        "license": "CC0",
+        "finetuned_from": "en_US-lessac-medium (U.S. English, medium quality)",
+        "md5_source": "voices.json lists an md5 per file; it matches the files here, which is how the download was confirmed to be the intended model rather than a same-named other one."
+      },
+      "rebuild_from_scratch": [
+        "1. fetch the two files above from any source that serves them",
+        "2. verify: sha256 must match `files`, and md5 must match `provenance.upstream_manifest`",
+        "3. place them in $(TTRPG_TTS_MODEL_DIR or ~/.cache/ttrpg-chatbots/models)/piper/",
+        "4. the casting rule in examples/friends_world/voices.jsonl names the voice and its speed",
+        "5. if the model is gone from every mirror, the fallback is lessac-medium (which joe is finetuned from) with pitch ~0.85 -- close in timbre, and the reason that lineage is recorded"
+      ]
     },
     {
-      "name": "en_US-joe-medium.onnx.json",
-      "bytes": 4794,
-      "sha256": "3d6d5410b3795cb1950595247ef8f06190719e6fdbfa3a2356d8ec368e1aad33",
-      "md5": "811036b9c1451545f9495fdc1baa0754"
+      "voice": "en_US-ryan-medium",
+      "engine": "piper",
+      "quality": "medium",
+      "sample_rate_hz": 22050,
+      "speakers": 1,
+      "chosen": "2026-10-22",
+      "chosen_because": "Femboy/otokonoko: a male voice with the pitch raised to 168 Hz, which keeps male formants. Three rounds by ear -- 156 Hz male rejected as too male, a lowered female voice rejected as 'just a woman', and this one. See docs/PERSONA.md 1b.",
+      "settings": {
+        "speed": 1.15,
+        "volume": 1.0,
+        "pitch_hz": 205,
+        "formant": 1.06
+      },
+      "files": [
+        {
+          "name": "en_US-ryan-medium.onnx",
+          "bytes": 63201294,
+          "sha256": "abf4c274862564ed647ba0d2c47f8ee7c9b717d27bdad9219100eb310db4047a",
+          "md5": "8f06d3aff8ded5a7f13f907e6bec32ac"
+        },
+        {
+          "name": "en_US-ryan-medium.onnx.json",
+          "bytes": 4883,
+          "sha256": "44034c056cb15681b2ad494307c7f3f2e4499d1253c700c711fa0a4607ffe78d",
+          "md5": "f173a2b5202b3e4128ccc3ed8195306c"
+        }
+      ],
+      "sources": [
+        "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ryan/medium/{file}?download=true",
+        "https://hf-mirror.com/rhasspy/piper-voices/resolve/main/en/en_US/ryan/medium/{file}?download=true"
+      ],
+      "also_via": "piper.download_voices.download_voice('en_US-ryan-medium', dir) -- the same origin",
+      "provenance": {
+        "upstream_manifest": "https://huggingface.co/rhasspy/piper-voices/resolve/main/voices.json",
+        "model_card": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ryan/medium/MODEL_CARD",
+        "dataset": "https://www.kaggle.com/datasets/roholazandie/ryanspeech",
+        "license": "CC BY-NC-SA 4.0",
+        "license_note": "Non-commercial. Fine for a private table; this is the voice to swap if the bot ever becomes a commercial thing.",
+        "finetuned_from": "en_US-lessac-medium (U.S. English, medium quality)",
+        "md5_source": "voices.json lists an md5 per file; both files here match it."
+      },
+      "rebuild_from_scratch": [
+        "1. fetch the two files above from any source that serves them",
+        "2. verify: sha256 must match `files`, and md5 must match provenance.upstream_manifest",
+        "3. place them in $(TTRPG_TTS_MODEL_DIR or ~/.cache/ttrpg-chatbots/models)/piper/",
+        "4. the casting rule names the voice, its length scale and its pitch"
+      ]
     }
-  ],
-  "sources": [
-    "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/joe/medium/{file}?download=true",
-    "https://hf-mirror.com/rhasspy/piper-voices/resolve/main/en/en_US/joe/medium/{file}?download=true"
-  ],
-  "also_via": "piper.download_voices.download_voice('en_US-joe-medium', dir) -- the same origin",
-  "provenance": {
-    "upstream_manifest": "https://huggingface.co/rhasspy/piper-voices/resolve/main/voices.json",
-    "model_card": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/joe/medium/MODEL_CARD",
-    "dataset": "https://github.com/OHF-Voice/voice-datasets",
-    "license": "CC0",
-    "finetuned_from": "en_US-lessac-medium (U.S. English, medium quality)",
-    "md5_source": "voices.json lists an md5 per file; it matches the files here, which is how the download was confirmed to be the intended model rather than a same-named other one."
-  },
-  "rebuild_from_scratch": [
-    "1. fetch the two files above from any source that serves them",
-    "2. verify: sha256 must match `files`, and md5 must match `provenance.upstream_manifest`",
-    "3. place them in $(TTRPG_TTS_MODEL_DIR or ~/.cache/ttrpg-chatbots/models)/piper/",
-    "4. the casting rule in examples/friends_world/voices.jsonl names the voice and its speed",
-    "5. if the model is gone from every mirror, the fallback is lessac-medium (which joe is finetuned from) with pitch ~0.85 -- close in timbre, and the reason that lineage is recorded"
   ]
 }

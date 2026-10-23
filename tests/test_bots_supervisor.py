@@ -56,6 +56,19 @@ def _friend(name: str = "friend-a", *, listen: bool = True, reply: str = "off") 
     return BotSpec(id=name, role="friend", listen=listen, reply=reply)
 
 
+def _asking_friend(name: str = "friend-b") -> BotSpec:
+    """A friend who hands the turn back every time, so the ask_back path is reachable in a test."""
+    from ttrpg_chatbots.bots.persona import Persona
+
+    return BotSpec(
+        id=name,
+        role="friend",
+        listen=True,
+        reply="mention",
+        persona=Persona(name="Ask", question_rate=1.0),
+    )
+
+
 def _roster(*bots: BotSpec) -> Roster:
     return Roster(tuple(bots))
 
@@ -781,14 +794,18 @@ def _voiced_friend() -> BotSpec:
     )
 
 
-def _pinned():
-    from ttrpg_chatbots.tts.lock import LockedFile, VoiceLock
+def _pinned(voice: str = "en_US-fake"):
+    from ttrpg_chatbots.tts.lock import LockedFile, VoiceLock, VoiceLocks
 
-    return VoiceLock(
-        voice="en_US-fake",
-        engine="piper",
-        files=(LockedFile(name="en_US-fake.onnx", bytes=1, sha256="a" * 64),),
-        sources=("https://example.invalid/{file}",),
+    return VoiceLocks(
+        locks=(
+            VoiceLock(
+                voice=voice,
+                engine="piper",
+                files=(LockedFile(name=f"{voice}.onnx", bytes=1, sha256="a" * 64),),
+                sources=("https://example.invalid/{file}",),
+            ),
+        )
     )
 
 
@@ -796,3 +813,88 @@ def _report(*, ok: bool, problems: list[str]):
     from ttrpg_chatbots.tts.lock import LockReport
 
     return LockReport(voice="en_US-fake", ok=ok, problems=problems)
+
+
+def test_a_friend_whose_voice_is_not_pinned_is_told_so(monkeypatch, caplog) -> None:
+    """The lock has to cover *his* voice.
+
+    Measured before this: Otto started with en_US-ryan-medium and the log reported
+    "voice en_US-joe-medium verified against its lock" -- the check was looking at the file rather
+    than at him, so a missing entry read as a pass.
+    """
+    import logging
+
+    from ttrpg_chatbots.bots.supervisor import FriendBot
+
+    monkeypatch.setattr("ttrpg_chatbots.tts.lock.load", lambda path: _pinned("en_US-somebody-else"))
+    monkeypatch.setattr(
+        "ttrpg_chatbots.tts.lock.verify",
+        lambda pinned, directory: _report(ok=True, problems=[]),
+    )
+
+    with caplog.at_level(logging.WARNING):
+        FriendBot(_voiced_friend())._check_voice_lock()
+
+    assert "no lock entry for en_US-fake" in caplog.text, caplog.text
+    assert "cannot be rebuilt" in caplog.text
+
+
+def test_the_check_never_raises_on_a_broken_lock(monkeypatch, caplog) -> None:
+    """A friend with a broken lock still has to start: the sheet portal is not his hostage."""
+    import logging
+
+    from ttrpg_chatbots.bots.supervisor import FriendBot
+    from ttrpg_chatbots.tts.lock import LockError
+
+    def explode(path):
+        raise LockError("not valid JSON")
+
+    monkeypatch.setattr("ttrpg_chatbots.tts.lock.load", explode)
+
+    with caplog.at_level(logging.WARNING):
+        FriendBot(_voiced_friend())._check_voice_lock()
+
+    assert "no usable voice lock" in caplog.text
+
+
+def test_an_ask_back_turn_carries_no_subject_of_his_own(monkeypatch) -> None:
+    """Measured in the channel, and the second half of the double-question bug.
+
+    The `ask_back` turn recorded the subject carried from earlier (\"topic:trains\"), the next message
+    inherited it as a follow-up, and \"playing video games\" was matched to his trains at 0.96. He had
+    asked about *them*, so nothing of his was under discussion.
+    """
+    monkeypatch.setenv("TTRPG_CONVERSATION", "ladder")
+    chat = _Chat()
+    friend = _MentionedFriend(_asking_friend(), chat=chat)
+
+    asyncio.run(
+        friend.on_message(
+            _mention(friend, "<@1> i have been rebuilding a fence myself this month")
+        )
+    )
+
+    acts = [turn.act for turn in tuple(friend.history) if turn.is_bot]
+    assert acts, "he answered"
+    assert acts[-1].startswith("ladder|ask_back|"), acts[-1]
+    assert acts[-1] == "ladder|ask_back||", "no topic of his is carried into their answer"
+
+
+def test_he_does_not_ask_the_same_person_twice_running(monkeypatch) -> None:
+    """The exchange that was wrong: he asked \"what about you? ^^\", they answered, he asked again.
+
+    The rule existed and could not fire, because `_asked_last` tested `endswith(\"?\")` and his line
+    ended in an emoticon.
+    """
+    monkeypatch.setenv("TTRPG_CONVERSATION", "ladder")
+    friend = _MentionedFriend(_asking_friend(), chat=_Chat())
+
+    first = _mention(friend, "<@1> i have been rebuilding a fence myself this month")
+    asyncio.run(friend.on_message(first))
+    assert first.replies and "?" in first.replies[0][0], first.replies
+
+    second = _mention(friend, "<@1> playing video games")
+    asyncio.run(friend.on_message(second))
+
+    assert second.replies, "he answered the answer"
+    assert "?" not in second.replies[0][0], second.replies

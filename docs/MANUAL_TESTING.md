@@ -273,6 +273,10 @@ Any of the four is a reason to re-open the decomposition rather than tune the ph
 
 ### 2.8d Otto (friend-b, `Otokodelyoko#7113`)
 
+**The full procedure lives in `docs/TESTING.md`** -- `tools/check_friend.sh friend-b` for the
+offline half, then the table below for the Discord half. This section is the short version.
+
+
 He speaks when mentioned, like Terry. What to listen for, and what each failure means:
 
 | Say | Expect | If it is wrong |

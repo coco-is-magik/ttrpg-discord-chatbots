@@ -30,6 +30,7 @@ EVENING = read_clock(datetime(2026, 10, 21, 20, 15))
 DAY = EVENING.now.date()
 PHASES = (
     "acknowledge",
+    "ask_back",
     "close",
     "explain",
     "greet",
@@ -307,3 +308,46 @@ def test_a_friend_can_override_one_phase_and_keep_the_rest(tmp_path) -> None:
     assert overridden.for_job("hedge").variants("unsure") == shared.for_job("hedge").variants(
         "unsure"
     ), "and the shared books are untouched"
+
+
+def test_a_question_can_start_with_a_lead_in() -> None:
+    """Measured: "also do you like trains" was heard as a statement, so a direct question about his own
+    subject got "ah" instead of an answer."""
+    from ttrpg_chatbots.perceive.inbound import looks_like_question
+
+    assert looks_like_question("also do you like trains")
+    assert looks_like_question("so what are you up to")
+    assert looks_like_question("and how are you doing")
+    # and a statement with a question word inside it is still a statement
+    assert not looks_like_question("i was thinking about getting a plant")
+    assert not looks_like_question("i had one before but i killed it")
+    assert not looks_like_question("it was a fern")
+
+
+def test_he_says_the_same_thing_differently_before_repeating_it() -> None:
+    """A four-word answer is allowed to repeat, so the identical line came back twice in a minute."""
+    from ttrpg_chatbots.bots.ladder import Ladder
+    from ttrpg_chatbots.bots.memory import FriendMemory
+
+    ladder = Ladder(friend="friend-b")
+    memory = FriendMemory.load("friend-b")
+
+    said = [
+        ladder.line(text="what are you up to", memory=memory, speaker="tav")
+        for _ in range(3)
+    ]
+    lines = [line.text for line in said if hasattr(line, "text")]
+
+    assert len(lines) >= 2
+    assert len(set(lines)) == len(lines), f"he repeated himself verbatim: {lines}"
+
+
+def test_a_follow_up_question_is_about_what_he_offered() -> None:
+    """Measured: "what is the plot of dune?" arrived after a hook and was answered with the freight
+    train, because *any* question counted as a follow-up."""
+    from ttrpg_chatbots.decide.story import _is_about_the_offering
+
+    assert _is_about_the_offering("how did that go?", "topic:computers")
+    assert _is_about_the_offering("is it still doing that?", "topic:computers")
+    assert _is_about_the_offering("how is the computer?", "topic:computers")
+    assert not _is_about_the_offering("what is the plot of dune?", "topic:computers")

@@ -29,6 +29,7 @@ from ttrpg_chatbots.decide import (
 from ttrpg_chatbots.decide.variant import PhrasebookError, load
 from ttrpg_chatbots.govern.loop import Scene, intent_of, reply
 from ttrpg_chatbots.govern.repeat import Recent
+from ttrpg_chatbots.reply.context import Turn
 from ttrpg_chatbots.perceive import addressee, attachments, inbound, modality, situation, tone
 from ttrpg_chatbots.perceive.clock import read_clock
 from ttrpg_chatbots.render import audition, fill, line, trim, typing
@@ -286,3 +287,185 @@ def test_intent_mapping_covers_the_lexicon() -> None:
     assert intent_of("why?") == "explain_me"
     # A statement is somebody talking, not a question he failed to understand.
     assert intent_of("i have been rebuilding a fence myself") == "remark"
+
+
+class TestARefusedCandidateIsNotSilence:
+    """The failure path: when the *material* is what fails the gate, he still says something.
+
+    `render/audition`'s docstring has always promised that "on a reject the ladder asks
+    decide.variant for another candidate". It did not -- a rejected line became an `Abstain`, and
+    because the refusal is about the material rather than the wording, every variant failed the same
+    way. Measured on "why?": one activity's reason ended on a beat, and the whole answer vanished.
+    """
+
+    def _life(self, why: str):
+        from ttrpg_chatbots.life.state import Life, Activity
+
+        return Life(
+            friend="friend-b",
+            activities=(
+                Activity(
+                    id="trains",
+                    doing="watching the trains",
+                    short="watching the trains",
+                    phase="waiting on a platform",
+                    why=why,
+                    hook="watching the trains",
+                    topic="topic:trains",
+                ),
+            ),
+        )
+
+    def _shelf(self):
+        from ttrpg_chatbots.decide.shelf import load_shelf
+
+        return load_shelf(DATA / "phrasebooks", fallback=DATA / "phrasebooks")
+
+    def test_a_reason_that_ends_on_a_beat_is_rescued(self) -> None:
+        # "i like that" is a beat: the persona gate refuses it, and rightly -- but refusing it must
+        # not mean silence.
+        scene = _scene("why?", life=self._life("they always turn up. i like that"))
+        out = reply(scene=scene, books=self._shelf())
+
+        assert isinstance(out, Line), out
+        assert out.text.strip(), "a hedge is a better answer than nothing"
+        assert any(step == "rescue" for step, _ in out.trail.steps)
+
+    def test_a_reason_that_passes_is_said_as_itself(self) -> None:
+        scene = _scene("why?", life=self._life("i like that they turn up when they are meant to"))
+        out = reply(scene=scene, books=self._shelf())
+
+        assert isinstance(out, Line), out
+        assert not any(step == "rescue" for step, _ in out.trail.steps), out.trail.describe()
+
+    def test_the_rescue_never_borrows_from_another_job_for_content(self) -> None:
+        """The hedge is the only cross-book fallback, and it is allowed because it says nothing
+        about the subject -- so it cannot be wrong about it."""
+        from ttrpg_chatbots.decide.shelf import load_shelf
+
+        shelf = load_shelf(DATA / "phrasebooks", fallback=DATA / "phrasebooks")
+        hedge = shelf.for_job("hedge")
+        assert hedge is not None
+        hedge_lines = {
+            template for family in hedge.families for template in hedge.variants(family)
+        }
+        scene = _scene("why?", life=self._life("they always turn up. i like that"))
+        out = reply(scene=scene, books=shelf)
+        assert isinstance(out, Line)
+        assert out.text in hedge_lines, out.text
+
+
+class TestHandingTheTurnBack:
+    """The rung that decides to hand the turn back, wired to the job that carries it.
+
+    Measured before this: `decide/reciprocate` was referenced by nothing but its own test, `ask_back`
+    was in the job vocabulary and never chosen, and no phrasebook existed for it. Otto's brief says he
+    "prompts others to continue talking", and none of it could happen.
+
+    `question_rate` is the persona's number, so the same ladder gives an inquisitive friend and a
+    reserved one -- and the roll is keyed on the message, so it is stable and testable.
+    """
+
+    def _shelf(self):
+        from ttrpg_chatbots.decide.shelf import load_shelf
+
+        return load_shelf(DATA / "phrasebooks")
+
+    def test_a_high_rate_spends_the_turn_asking(self) -> None:
+        scene = _scene(
+            "i have been rebuilding a fence myself this month", question_rate=1.0
+        )
+        out = reply(scene=scene, books=self._shelf())
+
+        assert isinstance(out, Line), out
+        assert dict(out.trail.steps).get("job") == "ask_back", out.trail.describe()
+        assert out.text.rstrip().endswith("?"), out.text
+
+    def test_a_zero_rate_never_asks(self) -> None:
+        scene = _scene(
+            "i have been rebuilding a fence myself this month", question_rate=0.0
+        )
+        out = reply(scene=scene, books=self._shelf())
+
+        assert isinstance(out, Line), out
+        assert dict(out.trail.steps).get("job") == "noted", out.trail.describe()
+
+    def test_never_twice_in_a_row(self) -> None:
+        """Two questions back to back is an interrogation, not interest."""
+        asked = (
+            Turn(speaker="friend-a", text="what about you?", act="ladder|ask_back||", is_bot=True),
+        )
+        scene = _scene(
+            "i have been rebuilding a fence myself this month",
+            question_rate=1.0,
+            turns=asked,
+        )
+        out = reply(scene=scene, books=self._shelf())
+
+        assert isinstance(out, Line), out
+        assert dict(out.trail.steps).get("job") == "noted", out.trail.describe()
+
+    def test_a_terse_reply_is_not_an_invitation(self) -> None:
+        scene = _scene("k", question_rate=1.0)
+        out = reply(scene=scene, books=self._shelf())
+
+        assert isinstance(out, Line), out
+        assert dict(out.trail.steps).get("job") != "ask_back", out.trail.describe()
+
+    def test_a_question_about_them_is_not_answered_with_a_question(self) -> None:
+        """A greeting keeps its own job: the swap is only for the job with the least to say."""
+        scene = _scene("hey", question_rate=1.0)
+        out = reply(scene=scene, books=self._shelf())
+
+        assert isinstance(out, Line), out
+        assert dict(out.trail.steps).get("job") == "greet", out.trail.describe()
+
+
+class TestAQuestionWithAnEmoticonIsStillAQuestion:
+    """The bug that made the rule never fire for Otto.
+
+    `_asked_last` tested `endswith("?")`, and the style layer appends emoticons *after* the
+    punctuation -- so "what about you? ^^" read as a statement. Measured in the channel: he asked
+    "what about you? ^^", the person answered "playing video games", and he asked again.
+    """
+
+    def _shelf(self):
+        from ttrpg_chatbots.decide.shelf import load_shelf
+
+        return load_shelf(DATA / "phrasebooks")
+
+    @pytest.mark.parametrize(
+        "said",
+        [
+            "what about you?",
+            "what about you? ^^",
+            "hmm, wh- what about you? ^^",
+            "what about you? (๑•̀ㅂ•́)و",
+        ],
+    )
+    def test_he_does_not_ask_twice(self, said: str) -> None:
+        turns = (
+            Turn(speaker="friend-b", text=said, act="ladder|ask_back||", is_bot=True),
+        )
+        scene = _scene(
+            "i have been rebuilding a fence myself this month",
+            question_rate=1.0,
+            turns=turns,
+        )
+        out = reply(scene=scene, books=self._shelf())
+
+        assert isinstance(out, Line), out
+        assert dict(out.trail.steps).get("job") != "ask_back", out.trail.describe()
+
+    @pytest.mark.parametrize("said", ["opener this week", "night night", "messing with an old pc"])
+    def test_a_statement_does_not_block_the_question(self, said: str) -> None:
+        turns = (Turn(speaker="friend-b", text=said, act="ladder|offer_hook||", is_bot=True),)
+        scene = _scene(
+            "i have been rebuilding a fence myself this month",
+            question_rate=1.0,
+            turns=turns,
+        )
+        out = reply(scene=scene, books=self._shelf())
+
+        assert isinstance(out, Line), out
+        assert dict(out.trail.steps).get("job") == "ask_back", out.trail.describe()

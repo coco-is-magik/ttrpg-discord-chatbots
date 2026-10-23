@@ -37,7 +37,7 @@ from ttrpg_chatbots.decide import (
     variant,
     who,
 )
-from ttrpg_chatbots.decide import persona_fit
+from ttrpg_chatbots.decide import persona_fit, reciprocate
 from ttrpg_chatbots.decide.shelf import Shelf
 from ttrpg_chatbots.decide.subject import Subject
 from ttrpg_chatbots.decide.variant import Phrasebook
@@ -45,6 +45,7 @@ from ttrpg_chatbots.govern.repeat import Recent
 from ttrpg_chatbots.govern.trace import Recorder
 from ttrpg_chatbots.life.state import Life
 from ttrpg_chatbots.memory.long import Fact
+from ttrpg_chatbots.perceive import tone as tone_rung
 from ttrpg_chatbots.perceive.clock import Moment, read_clock
 from ttrpg_chatbots.perceive.inbound import looks_like_question
 from ttrpg_chatbots.render import audition, fill, line as line_rung, trim, typing
@@ -102,6 +103,9 @@ class Scene:
     just_told: str = ""
     gap_bucket: str = "fresh"
     named: tuple[str, ...] = ()
+    #: How often he would rather hand the turn back than answer with a bare acknowledgement. The
+    #: persona's number, not the ladder's: it is a property of the person, not of the turn.
+    question_rate: float = 0.0
 
 
 def _has_plan(scene: Scene) -> bool:
@@ -246,6 +250,19 @@ def plan(
         point=telling is not None and telling.mode == "point",
     )
 
+    # Handing the turn back. `noted` is the job with the least to say ("yeah" to a statement he has
+    # nothing to add to), so it is the one worth spending on a question instead -- and whether he does
+    # is the persona's `question_rate`, not the ladder's decision. Measured: Otto's brief says he
+    # prompts people to keep talking, and before this the rung that decides to hand the turn back was
+    # referenced by nothing but its own test.
+    if chosen == "noted" and reciprocate.ask_about_them(
+        question_rate=scene.question_rate,
+        text=scene.utterance.text,
+        tone=tone_rung.read(scene.utterance.text),
+        already_asked=_asked_last(scene.turns),
+    ):
+        chosen = "ask_back"
+
     chosen_book = book if book is not None else (books.for_job(chosen) if books else None)
     if chosen_book is None:
         return Abstain(f"no phrasebook for {chosen}")
@@ -264,9 +281,144 @@ def plan(
     )
 
 
+def _asked_last(turns: tuple[Turn, ...]) -> bool:
+    """Whether his last turn was already a question. Two in a row is an interrogation.
+
+    **The question mark is not the last character.** The first version tested `endswith("?")`, and the
+    style layer appends emoticons after the punctuation -- so "what about you? ^^" read as a statement,
+    the rule never fired, and Otto asked the same person twice in a row. Measured in the channel:
+    "playing video games" (an answer to his question) was met with "what have you been up to?".
+
+    Asking the *last sentence* instead is what makes this independent of how a friend decorates a line.
+    """
+    for turn in reversed(turns):
+        if not turn.is_bot:
+            continue
+        text = (turn.text or "").strip()
+        return "?" in text.rsplit(".", 1)[-1]
+    return False
+
+
 def would_answer(*, scene: Scene, books: Shelf | None = None) -> bool:
     """Whether the ladder has a job for this message. The bot asks before it picks a path."""
     return isinstance(plan(scene=scene, books=books), Plan)
+
+
+def _resay(book, register, chosen, scene, budget, style, ledger) -> str | None:
+    """A different way of saying the same thing, or nothing if every variant repeats."""
+    slots = values.build(
+        job=chosen,
+        life=scene.life,
+        day=scene.day,
+        name=scene.name,
+        subject=scene.named[0] if scene.named else "",
+        facts=scene.facts,
+        remembered=None,
+        subject_text=scene.subject.text if scene.subject else "",
+        events=scene.events,
+        story=None,
+        point=False,
+        plan=scene.life.plan(scene.day) if scene.life else None,
+    )
+    # The chosen family first, then the rest of the book. A register with two variants runs out on the
+    # third ask -- measured with a new relationship, whose `dry` family has "{hook}" and "{short}"
+    # and nothing else -- and a different register is a better answer than the identical line.
+    order = list(book.variants(register))
+    for family in book.families:
+        if family != register:
+            order.extend(book.variants(family))
+    for template in order:
+        candidate = fill.render(template, slots)
+        if candidate is None:
+            continue
+        trimmed = trim.enforce(candidate, budget)
+        if trimmed is None:
+            continue
+        typed = typing.apply(trimmed, style)
+        if not ledger.seen_last(typed):
+            return typed
+    return None
+
+
+def _second_chance(
+    *,
+    books: Shelf | None,
+    book: Phrasebook,
+    register: str,
+    chosen: str,
+    scene: Scene,
+    budget: Budget,
+    style: Style | None,
+    ledger: Recent,
+    telling: Any,
+    refused: str,
+) -> tuple[str, str] | None:
+    """Another way of saying it, or a hedge -- because silence is the worst outcome of the three.
+
+    Two steps, in order of preference:
+
+    1. **Another phrasing of the same thing.** Every family in the book, not just the chosen one: a
+       reason that ends on a beat in one wording often does not in another.
+    2. **A hedge.** If the material itself is the problem -- the activity's reason, the story, the
+       fact -- no wording will save it, and `?` or "say more?" is a better answer than nothing. The
+       hedge is a different job's book on purpose, and it is the *only* cross-book fallback allowed:
+       it says nothing about the subject, so it cannot be wrong about it.
+
+    Returns the line and a label for the trace, or ``None`` to abstain.
+    """
+    slots = values.build(
+        job=chosen,
+        life=scene.life,
+        day=scene.day,
+        name=scene.name,
+        subject=scene.named[0] if scene.named else "",
+        facts=scene.facts,
+        remembered=None,
+        subject_text=scene.subject.text if scene.subject else "",
+        events=scene.events,
+        story=telling.story if telling else None,
+        point=telling is not None and telling.mode == "point",
+        plan=scene.life.plan(scene.day) if scene.life else None,
+    )
+    order = list(book.variants(register))
+    for family in book.families:
+        if family != register:
+            order.extend(book.variants(family))
+    for template in order:
+        text = fill.render(template, slots)
+        if text is None:
+            continue
+        trimmed = trim.enforce(text, budget)
+        if trimmed is None:
+            continue
+        typed = typing.apply(trimmed, style)
+        if ledger.seen_last(typed):
+            continue
+        if not audition.judge(
+            text=typed,
+            budget=budget,
+            repeated=False,
+            story=telling is not None,
+            fit=persona_fit.read(typed, story=telling is not None),
+        ).ok:
+            continue
+        return typed, f"another phrasing of {chosen}"
+
+    if books is None or chosen == "hedge":
+        return None
+    hedge = books.for_job("hedge")
+    if hedge is None:
+        return None
+    for family in hedge.families:
+        for template in hedge.variants(family):
+            text = fill.render(template, slots)
+            if text is None or ledger.seen_last(typing.apply(text, style)):
+                continue
+            trimmed = trim.enforce(text, budget)
+            if trimmed is None:
+                continue
+            return typing.apply(trimmed, style), f"hedged ({refused})"
+    return None
 
 
 def reply(
@@ -384,6 +536,14 @@ def reply(
         return Abstain("over budget")
 
     typed = typing.apply(trimmed, style)
+    if ledger.seen_last(typed):
+        # Say the same *thing* differently before giving up on saying it. Measured: "what are you up
+        # to" twice in a minute produced the identical line, because a four-word answer is allowed to
+        # repeat and the hook value does not change with the wording.
+        alternative = _resay(chosen_book, register, chosen, scene, budget, style, ledger)
+        if alternative is not None:
+            typed = alternative
+            trace.add("resay", typed)
     verdict = audition.judge(
         text=typed,
         budget=budget,
@@ -393,7 +553,26 @@ def reply(
     )
     trace.add("audition", verdict.reason or "ok")
     if not verdict.ok:
-        return Abstain(verdict.reason)
+        # A refused candidate is not the end of the turn. `render/audition`'s own docstring promises
+        # that "on a reject the ladder asks decide.variant for another candidate" -- it did not, and
+        # the gap produced silence whenever the *material* was the problem: measured on "why?",
+        # where one activity's reason ended on a beat and the whole answer vanished.
+        rescued = _second_chance(
+            books=books,
+            book=chosen_book,
+            register=register,
+            chosen=chosen,
+            scene=scene,
+            budget=budget,
+            style=style,
+            ledger=ledger,
+            telling=telling,
+            refused=verdict.reason,
+        )
+        if rescued is None:
+            return Abstain(verdict.reason)
+        typed, trace_label = rescued
+        trace.add("rescue", trace_label)
 
     ledger.remember(typed)
     return line_rung.assemble(text=typed, trail=trace.trail)

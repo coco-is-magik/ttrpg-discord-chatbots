@@ -1,0 +1,17 @@
+{
+  "job": "ask_back",
+  "note": "Otto's own: he asks more than the others and it is the one move his brief names outright (\"will prompt others to continue talking to him\"). Softer and more curious than the shared register, and the emoticon is on the variants that would otherwise read as a flat demand. Every line has to survive the persona gate as a question, and none may end on a beat.",
+  "families": {
+    "ask_back": {
+      "when": {},
+      "variants": [
+        "what about you? ^^",
+        "what have you been up to?",
+        "what are you working on these days?",
+        "oh, what about you?",
+        "tell me about your day?",
+        "and how has your week been?"
+      ]
+    }
+  }
+}

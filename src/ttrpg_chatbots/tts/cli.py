@@ -39,13 +39,17 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--verify-voice",
-        action="store_true",
-        help="check the cached voice against its lock file",
+        nargs="?",
+        const="",
+        metavar="NAME",
+        help="check every locked voice, or one by name",
     )
     parser.add_argument(
         "--fetch-voice",
-        action="store_true",
-        help="download the locked voice, trying each source until one verifies",
+        nargs="?",
+        const="",
+        metavar="NAME",
+        help="download every locked voice (or one), trying each source until it verifies",
     )
     parser.add_argument(
         "--lock",
@@ -86,7 +90,9 @@ def _lock_path(explicit: Path | None) -> Path:
 
 def _run_lock(args) -> int | None:
     """Handle the two voice-lock commands, or return None to carry on."""
-    if not (args.verify_voice or args.fetch_voice):
+    # `nargs="?"` means "" when the flag is given without a name, which is falsy -- so the test is for
+    # None, not for truth. Measured: `--verify-voice` on its own fell through to "give --say TEXT".
+    if args.verify_voice is None and args.fetch_voice is None:
         return None
     from ttrpg_chatbots.tts import lock as lock_module
     from ttrpg_chatbots.tts.engines.piper_engine import voice_dir
@@ -98,26 +104,44 @@ def _run_lock(args) -> int | None:
         print(f"error: {error}", file=sys.stderr)
         return 2
     directory = voice_dir()
-    report = (
-        lock_module.fetch(pinned, directory) if args.fetch_voice else lock_module.verify(pinned, directory)
-    )
+    wanted = args.fetch_voice if args.fetch_voice is not None else args.verify_voice
+    chosen = list(pinned)
+    if wanted:
+        entry = pinned.for_voice(wanted)
+        if entry is None:
+            print(
+                f"error: {path} pins {', '.join(pinned.names())}, not {wanted!r}", file=sys.stderr
+            )
+            return 2
+        chosen = [entry]
+    reports = [
+        lock_module.fetch(lock, directory) if args.fetch_voice is not None else lock_module.verify(lock, directory)
+        for lock in chosen
+    ]
     if args.json:
         print(
             json.dumps(
                 {
-                    "voice": report.voice,
-                    "ok": report.ok,
-                    "fetched": report.fetched,
-                    "problems": report.problems,
+                    "ok": all(report.ok for report in reports),
                     "directory": str(directory),
                     "lock": str(path),
+                    "voices": [
+                        {
+                            "voice": report.voice,
+                            "ok": report.ok,
+                            "fetched": report.fetched,
+                            "problems": report.problems,
+                        }
+                        for report in reports
+                    ],
                 },
                 indent=2,
             )
         )
     else:
-        print(report.summary())
-    return 0 if report.ok else 1
+        for report in reports:
+            print(report.summary())
+    return 0 if all(report.ok for report in reports) else 1
 
 
 def _report_speech(synthesizer, clip, *, elapsed_s: float, as_json: bool, out: Path | None) -> int:

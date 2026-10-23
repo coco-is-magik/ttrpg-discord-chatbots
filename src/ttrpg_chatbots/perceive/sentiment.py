@@ -12,8 +12,16 @@ import re
 from ttrpg_chatbots.conv.types import Sentiment
 from ttrpg_chatbots.reply.text import normalise_typing
 
-_POSITIVE = re.compile(r"\b(?:good|great|nice|love|loved|brilliant|happy|glad|fun|excellent|best)\b")
-_NEGATIVE = re.compile(r"\b(?:bad|awful|terrible|hate|hated|sick|tired|wrecked|rough|worst|annoying)\b")
+_POSITIVE = re.compile(
+    r"\b(?:good|great|nice|love|loved|brilliant|happy|glad|fun|excellent|best|bought|getting|new|"
+    r"started|found|fixed)\b"
+)
+#: Words that make a message bad news. Measured: "my plant is dying" read as *neutral*, so nothing
+#: could tell it apart from "i am getting a plant" and the sympathy line was picked for both.
+_NEGATIVE = re.compile(
+    r"\b(?:bad|awful|terrible|hate|hated|sick|tired|wrecked|rough|worst|annoying|dying|died|dead|"
+    r"broke|broken|killed|ruined|failed|lost|stuck|missed|late)\b"
+)
 _SELF = re.compile(r"\b(?:i|i'm|my|me|myself)\b")
 _YOU = re.compile(r"\b(?:you|your|you're|yours)\b")
 

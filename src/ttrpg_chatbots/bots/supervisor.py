@@ -131,7 +131,13 @@ class FriendBot(discord.Client):
             return None
         if self._ladder is None:
             jobs = ("greet",) if self.conversation == "greet" else None
-            self._ladder = Ladder(friend=self.spec.id, style=self.style, jobs=jobs)
+            persona = self.spec.persona
+            self._ladder = Ladder(
+                friend=self.spec.id,
+                style=self.style,
+                jobs=jobs,
+                question_rate=persona.question_rate if persona is not None else 0.0,
+            )
         return self._ladder
 
     def _ladder_answers(self, text: str) -> bool:
@@ -214,14 +220,29 @@ class FriendBot(discord.Client):
         except lock_module.LockError as error:
             LOGGER.warning("%s: no usable voice lock (%s)", self.spec.id, error)
             return
-        report = lock_module.verify(pinned, voice_dir())
+        # *His* voice, not whatever happens to be in the file. Measured before this: Otto started with
+        # `en_US-ryan-medium` and the log said `voice en_US-joe-medium verified against its lock` -- a
+        # reassurance about somebody else's model, which is worse than no check at all.
+        lock = pinned.for_voice(voice.voice or "")
+        if lock is None:
+            LOGGER.warning(
+                "%s: no lock entry for %s, so this voice cannot be rebuilt -- add one to %s "
+                "(pinned: %s)",
+                self.spec.id,
+                voice.voice or "(none)",
+                path.name,
+                ", ".join(pinned.names()) or "nothing",
+            )
+            return
+        report = lock_module.verify(lock, voice_dir())
         if report.ok:
-            LOGGER.info("%s: voice %s verified against its lock", self.spec.id, pinned.voice)
+            LOGGER.info("%s: voice %s verified against its lock", self.spec.id, lock.voice)
             return
         LOGGER.warning(
-            "%s: %s -- run `ttrpg-chatbots-tts --fetch-voice` to restore it",
+            "%s: %s -- run `ttrpg-chatbots-tts --fetch-voice %s` to restore it",
             self.spec.id,
             report.summary(),
+            lock.voice,
         )
 
     async def on_message(self, message: discord.Message) -> None:
@@ -510,6 +531,11 @@ class FriendBot(discord.Client):
         steps = dict(out.trail.steps)
         job = steps.get("job", "?")
         about = steps.get("about", "|")
+        if job == "ask_back":
+            # He asked about *them*, so nothing of his is under discussion. Measured: the ask_back turn
+            # recorded the subject carried from earlier ("topic:trains"), the next message inherited it,
+            # and "playing video games" was matched to his trains at 0.96.
+            about = "|"
         # `ladder|job|topic|story_id`: what he said, and what it was about. The next turn reads
         # this, which is how a follow-up reaches the point of a story.
         self._remember_reply(out.text, f"ladder|{job}|{about}")

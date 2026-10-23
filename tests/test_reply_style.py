@@ -126,17 +126,28 @@ class TestOttoStyle:
     """Stutter and emoticons: two levers that exist because of one character's brief.
 
     They are levers rather than hardcoded behaviour because the *next* friend may want neither, and
-    because hesitation has to survive into the voice -- a synthesiser reads "h-hi" as a stutter, so a
-    hesitant character does not need an engine that can act.
+    because hesitation has to survive into the voice -- a synthesiser reads "h- hello" as a false
+    start, so a hesitant character does not need an engine that can act.
+
+    The **space** after the hyphen is the audible part. Measured on `en_US-ryan-medium`: the first
+    version's "I-I think it is late again" came out 1.29 s against a 1.20 s baseline, a 90 ms
+    difference nobody hears, while "th- this is the train" was 1.35 s against 0.79 s.
     """
 
-    def test_a_stutter_repeats_the_opening_letter(self) -> None:
+    def test_a_stutter_false_starts_the_opening_word(self) -> None:
         style = Style(stutter_rate=1.0)
-        assert apply_style("hello there", style) == "H-hello there"
+        assert apply_style("hello there", style) == "He- hello there"
+        assert apply_style("i think so", style) == "I- i think so", "a one-letter word keeps one letter"
+        assert apply_style("thinking about it", style) == "Th- thinking about it"
 
-    def test_a_one_letter_word_is_not_stuttered(self) -> None:
+    def test_a_one_letter_word_is_stuttered_too(self) -> None:
+        """"i" is the commonest opening word there is, and "i- i think" is a real false start.
+
+        The first version skipped one-letter words because "i-i" (no space) just looked like a typo;
+        with the space it reads as hesitation, and excluding it left most of his lines unstuttered.
+        """
         style = Style(stutter_rate=1.0)
-        assert apply_style("i think so", style) == "I think so"
+        assert apply_style("i think so", style) == "I- i think so"
 
     def test_stutter_is_deterministic(self) -> None:
         style = Style(stutter_rate=0.5)
@@ -169,3 +180,69 @@ class TestOttoStyle:
         assert style.emojis == ("^^", ":3")
         assert style.emoji_rate == 0.4
         assert "stutter" in style.describe()
+
+
+class TestHesitationFillers:
+    """A spoken hesitation: "um, i think so".
+
+    Added because the false start alone was not audible. Measured on `en_US-ryan-medium`, "I-I think"
+    bought 90 ms while "I, um, think" bought a full second -- so a character who is meant to *sound*
+    hesitant needs both levers, and the filler is the one the ear actually notices.
+    """
+
+    def test_a_filler_rate_needs_a_pool(self) -> None:
+        with pytest.raises(ValueError, match="fillers pool"):
+            Style(filler_rate=0.5)
+
+    def test_a_filler_hesitates_before_the_line(self) -> None:
+        style = Style(filler_rate=1.0, fillers=("um",))
+        assert apply_style("i think so", style) == "Um, i think so"
+
+    def test_the_filler_is_deterministic(self) -> None:
+        style = Style(filler_rate=1.0, fillers=("um", "ah"))
+        assert apply_style("hello there", style) == apply_style("hello there", style)
+
+    def test_the_filler_is_not_itself_stuttered(self) -> None:
+        """The false start lands on the line's own first word, not on the hesitation in front of it."""
+        style = Style(stutter_rate=1.0, filler_rate=1.0, fillers=("um",))
+        result = apply_style("thinking about it", style)
+        assert result == "Um, th- thinking about it"
+
+    def test_a_filler_outside_its_range_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="filler_rate must be between"):
+            Style(filler_rate=1.5, fillers=("um",))
+
+    def test_blank_fillers_are_refused(self) -> None:
+        with pytest.raises(ValueError, match="fillers must be non-blank"):
+            Style(filler_rate=0.5, fillers=("um", "  "))
+
+    def test_a_record_can_carry_the_pool(self) -> None:
+        style = Style.from_record({"filler_rate": 0.4, "fillers": ["um", "ah"]})
+        assert style.fillers == ("um", "ah")
+        assert "40% fillers" in style.describe()
+
+    def test_a_record_with_a_bad_pool_names_the_field(self) -> None:
+        with pytest.raises(ValueError, match="style.fillers"):
+            Style.from_record({"fillers": "um"})
+
+
+class TestOneEmoticonPerLine:
+    """A line that already ends in an emoticon does not get a second one.
+
+    Measured: a phrasebook variant ending in "^^" came out as "what about you? ^^ (◕‿◕)" once the
+    style layer appended its own. The pool *is* the vocabulary of these marks, so membership in it is
+    what the check tests -- not a hand-written list of emoticons.
+    """
+
+    def test_a_line_that_already_has_one_is_left_alone(self) -> None:
+        style = Style(emoji_rate=1.0, emojis=("^^", ":3"))
+        assert apply_style("what about you? ^^", style) == "What about you? ^^"
+        assert apply_style("hello :3", style) == "Hello :3"
+
+    def test_a_line_without_one_still_gets_one(self) -> None:
+        style = Style(emoji_rate=1.0, emojis=("^^",))
+        assert apply_style("hello there", style) == "Hello there ^^"
+
+    def test_an_emoticon_in_the_middle_is_not_the_end(self) -> None:
+        style = Style(emoji_rate=1.0, emojis=("^^",))
+        assert apply_style("^^ hello", style) == "^^ hello ^^"

@@ -207,7 +207,7 @@
           "doing": "sitting at the station with a coffee, watching the trains",
           "short": "at the station",
           "phase": "there is a freight one that comes through about now",
-          "why": "they always turn up. i like that",
+          "why": "i like that they always turn up when they are meant to",
           "invite": "is there a line near you?"
         },
         {
@@ -231,7 +231,7 @@
         {
           "id": "rude-about-code",
           "about": "my program",
-          "text": "someone said my little program was pointless. i know it is",
+          "text": "someone said my little program was pointless, and i have been thinking about it all week",
           "invite": "do people do that to you"
         },
         {

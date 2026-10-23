@@ -429,3 +429,80 @@ class TestDefaultFactory:
 def test_pitch_outside_its_range_is_refused() -> None:
     with pytest.raises(ValueError, match="pitch must be between"):
         VoiceProfile(engine="piper", voice="en_US-ryan-high", pitch=0.2)
+
+
+class TestFormantAwareDelivery:
+    """`pitch_hz` and `formant`: a voice raised *without* being turned into another gender.
+
+    The resampling `pitch` ratio moves pitch and formants together, so raising a man's voice with it
+    gives a woman's. These are the pair that moves them separately, and they are validated loudly --
+    a rule that asks for a shift it cannot perform is a configuration error, not a quiet no-op.
+    """
+
+    def test_a_pitch_target_outside_its_range_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="pitch_hz must be between"):
+            VoiceProfile(engine="piper", voice="en_US-ryan-medium", pitch_hz=900)
+
+    def test_a_pitch_target_must_be_a_whole_number(self) -> None:
+        with pytest.raises(ValueError, match="whole number of hertz"):
+            VoiceProfile(engine="piper", voice="en_US-ryan-medium", pitch_hz=200.5)  # type: ignore[arg-type]
+
+    def test_a_formant_scale_outside_its_range_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="formant must be between"):
+            VoiceProfile(engine="piper", voice="en_US-ryan-medium", formant=2.0)
+
+    def test_a_pitch_target_without_the_shifter_is_refused(self, monkeypatch) -> None:
+        from ttrpg_chatbots.audio import formants
+
+        monkeypatch.setattr(formants, "available", lambda: False)
+        with pytest.raises(ValueError, match="praat-parselmouth"):
+            VoiceProfile(engine="piper", voice="en_US-ryan-medium", pitch_hz=200)
+
+    def test_the_rule_loader_reads_the_pair(self) -> None:
+        directory = from_records(
+            [
+                {
+                    "id": "otto",
+                    "characters": ["friend-b"],
+                    "engine": "piper",
+                    "voice": "en_US-ryan-medium",
+                    "speed": 1.15,
+                    "pitch_hz": 205,
+                    "formant": 1.06,
+                }
+            ],
+            source="test",
+        )
+        profile = directory.rules[0].profile
+        assert profile.pitch_hz == 205
+        assert profile.formant == pytest.approx(1.06)
+        assert "pitch_hz=205" in profile.describe()
+        assert "formant=1.06" in profile.describe()
+
+    def test_synthesis_uses_the_formant_shifter(self, monkeypatch) -> None:
+        calls = []
+        from ttrpg_chatbots.audio import formants
+
+        def fake(clip, *, pitch_hz=None, formant=1.0):
+            calls.append((pitch_hz, formant))
+            return clip
+
+        monkeypatch.setattr(formants, "change_voice", fake)
+        profile = VoiceProfile(
+            engine="piper", voice="en_US-ryan-medium", speed=1.15, pitch_hz=205, formant=1.06
+        )
+        directory = _directory(VoiceRule(id="o", profile=profile, characters=frozenset({"friend-b"})))
+        VoiceCast(directory).synthesize("hello", Someone("friend-b", "Otto"))
+        assert calls == [(205, 1.06)]
+
+    def test_the_real_rules_are_pinned_to_their_locks(self) -> None:
+        """The values the ear approved, so a rebuild is not a re-guess."""
+        from ttrpg_chatbots.bots.voice import data_directory
+
+        rules = load_voice_directory(data_directory()).rules
+        otto = next(rule for rule in rules if "Otto" in rule.characters)
+        assert otto.profile.voice == "en_US-ryan-medium"
+        assert otto.profile.speed == pytest.approx(1.15)
+        assert otto.profile.pitch_hz == 205
+        assert otto.profile.formant == pytest.approx(1.06)
+        assert otto.profile.pitch == 1.0, "the crude resampler is not used for this voice"

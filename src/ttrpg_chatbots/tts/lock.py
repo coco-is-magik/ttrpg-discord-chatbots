@@ -86,6 +86,38 @@ class VoiceLock:
         return source.replace("{file}", name)
 
 
+@dataclass(frozen=True)
+class VoiceLocks:
+    """Every voice a world pins, keyed by voice name.
+
+    Plural because a world has more than one friend: the first version held a single voice, so the
+    second friend's startup check verified the *first* friend's model and reported it as his own.
+    Measured in the log: `friend-b is Otto (... en_US-ryan-medium ...)` followed by
+    `friend-b: voice en_US-joe-medium verified against its lock`.
+    """
+
+    locks: tuple[VoiceLock, ...] = ()
+
+    def for_voice(self, name: str) -> VoiceLock | None:
+        """The entry for this voice, or nothing. A missing entry is not an error here."""
+        for lock in self.locks:
+            if lock.voice == name:
+                return lock
+        return None
+
+    def names(self) -> tuple[str, ...]:
+        return tuple(lock.voice for lock in self.locks)
+
+    def __bool__(self) -> bool:
+        return bool(self.locks)
+
+    def __len__(self) -> int:
+        return len(self.locks)
+
+    def __iter__(self):
+        return iter(self.locks)
+
+
 @dataclass
 class LockReport:
     """The result of a verify or a fetch, in words a person can act on."""
@@ -111,8 +143,13 @@ def digest(path: Path, *, algorithm: str = "sha256", chunk: int = 1 << 20) -> st
     return hasher.hexdigest()
 
 
-def load(path: Path | str) -> VoiceLock:
-    """Read a lock file, refusing anything that would not be reproducible."""
+def load(path: Path | str) -> VoiceLocks:
+    """Read a lock file, refusing anything that would not be reproducible.
+
+    Two shapes are accepted: ``{"voices": [ ... ]}`` for a world with several friends, and a bare
+    single-voice object, which is what the first lock file looked like. The old shape is kept
+    working because a lock that stops loading is worse than one that loads oddly.
+    """
     where = Path(path)
     if not where.is_file():
         raise LockError(f"no voice lock at {where}")
@@ -122,6 +159,26 @@ def load(path: Path | str) -> VoiceLock:
         raise LockError(f"{where}: not valid JSON: {error}") from error
     if not isinstance(record, dict):
         raise LockError(f"{where}: the lock must be an object")
+
+    entries = record.get("voices")
+    if entries is not None:
+        if not isinstance(entries, list) or not entries:
+            raise LockError(f"{where}: 'voices' must be a non-empty list")
+        locks = []
+        for index, entry in enumerate(entries, start=1):
+            if not isinstance(entry, dict):
+                raise LockError(f"{where}: voices[{index}] must be an object")
+            locks.append(_one(entry, f"{where}: voices[{index}]"))
+        seen = [lock.voice for lock in locks]
+        duplicates = {name for name in seen if seen.count(name) > 1}
+        if duplicates:
+            raise LockError(f"{where}: two entries for {', '.join(sorted(duplicates))}")
+        return VoiceLocks(locks=tuple(locks))
+    return VoiceLocks(locks=(_one(record, str(where)),))
+
+
+def _one(record: dict[str, Any], where: str) -> VoiceLock:
+    """Read one voice entry."""
 
     files = []
     raw_files = record.get("files")
