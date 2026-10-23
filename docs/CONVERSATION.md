@@ -507,3 +507,53 @@ goodbye to him on tuesday"), and the honest fix for that is the model, not more 
   the roll knows nothing about how big the news is.
 * **English only**, by construction: past-tense detection, pronoun lists and the closings are all
   English shapes.
+
+---
+
+## 12. The last borrowed voice, and the job nobody could reach
+
+Two loose ends closed before friend-c, both of which c would otherwise have inherited as debt.
+
+### Otto's own `explain` and `tell_story`
+
+The shared files were voice-neutral in *content* -- `{why}`, `{story_body}` -- but Terry's in framing:
+`"honestly, {why}"`, `"{story_body}. still have it"`. So the last two jobs he could perform were being
+framed by somebody else. Both now have his own file, and every job he can do is in his own voice.
+
+| | before | after |
+|---|---|---|
+| `explain` | `honestly, {why}` | `{why}`, `oh, {why}` |
+| `tell_story` | `{story_body}. still have it` | `{story_body}`, `oh, {story_body}` |
+
+### `decline` was dead vocabulary
+
+Thirteen jobs in the vocabulary, twelve reachable. `decide/job` sent the intent called `decline` to
+`close` -- because that intent is `social:goodbye`, a *goodbye* -- and **no phrasebook existed for the
+`decline` job anywhere**. So the one job that carries a refusal had nothing behind it, and a refusal was
+answered as a note: `"i do not want to talk about it"` got `Mm`.
+
+There is now a refusal move. `social:refusal` sits **above thanks** in the lexicon, because `no thanks`
+matched the thanks pattern and was answered as politeness (`no worries` -- the opposite of what was
+said), and it maps to the intent `refuse`, which reaches the job that was waiting for it.
+
+```
+Terry                                     Otto
+no thanks              -> fair enough      -> that is alright, we do not have to (*^▽^*)
+i would rather not     -> no problem, some other time  -> um, that is alright (＾▽＾)
+i do not want to talk about it -> that is alright -> oh, that is ok ^^
+```
+
+Two people, one job: **Terry grants permission, Otto takes it on himself** -- which is what the brief
+asks for and what the shared register could not express. A bare `no` is deliberately *not* a refusal: it
+answers a question and could mean several things, and the reply to a refusal ("fair enough") is not the
+reply to a bare no.
+
+### The gate caught the new material, as designed
+
+The first draft of the shared file had `"no problem. another time"`, and the persona harness refused it:
+*"ends on a beat"* -- `another time` is a two-word final sentence after a longer one, which is exactly the
+cadence this project spent a week removing. One comma fixed it (`no problem, some other time`), and the
+check is the reason it never reached the channel.
+
+**Measured:** `decline` answers 144 of 144 attempts at a median of 2.5 words, 0% ending on a beat, 0%
+trimmed. Held by twelve lexicon cases and three ladder tests.

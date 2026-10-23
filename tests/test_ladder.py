@@ -520,3 +520,40 @@ class TestAQuestionWithAnEmoticonIsStillAQuestion:
 
         assert isinstance(out, Line), out
         assert dict(out.trail.steps).get("job") == "ask_back", out.trail.describe()
+
+
+class TestSayingNoToSomething:
+    """The `decline` job: reachable at last, and in each friend's own voice.
+
+    It was in the vocabulary and never chosen -- the *intent* called `decline` is a goodbye, which goes
+    to `close` -- and no phrasebook existed for it anywhere. For a character whose brief says he avoids
+    disagreeing and never pushes, the one job that needs a gentle version had nothing behind it.
+    """
+
+    def _line(self, friend: str, text: str = "no thanks"):
+        from ttrpg_chatbots.bots.ladder import Ladder
+
+        return Ladder(friend=friend).line(text=text, speaker="tav")
+
+    def test_a_refusal_reaches_the_job(self) -> None:
+        out = self._line("friend-a")
+
+        assert isinstance(out, Line), out
+        steps = dict(out.trail.steps)
+        assert steps.get("job") == "decline", out.trail.describe()
+        assert steps.get("family") == "decline"
+
+    def test_and_it_is_the_friends_own_wording(self) -> None:
+        """Two people, one job: Terry grants permission, Otto takes it on himself."""
+        terry = self._line("friend-a")
+        otto = self._line("friend-b")
+
+        assert isinstance(terry, Line) and isinstance(otto, Line)
+        assert terry.text != otto.text
+        assert "alright" in otto.text or "ok" in otto.text, otto.text
+
+    def test_a_hello_is_not_a_refusal(self) -> None:
+        out = self._line("friend-a", "hey")
+
+        assert isinstance(out, Line), out
+        assert dict(out.trail.steps).get("job") != "decline"

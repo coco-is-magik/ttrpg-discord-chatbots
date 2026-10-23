@@ -1,0 +1,25 @@
+{
+  "job": "explain",
+  "note": "Otto's own. The shared file is voice-neutral in content but Terry's in framing ('honestly, {why}'), and this is the one place he says why he is doing something -- so it should sound like him hesitating, not like somebody making a case. The subject and point families carry a single variant on purpose: there is one honest way to state a stance and one way to state a point.",
+  "families": {
+    "detail": {
+      "when": {},
+      "variants": [
+        "{why}",
+        "oh, {why}"
+      ]
+    },
+    "subject": {
+      "when": {},
+      "variants": [
+        "{fact}"
+      ]
+    },
+    "point": {
+      "when": {},
+      "variants": [
+        "{story_point}"
+      ]
+    }
+  }
+}

@@ -76,6 +76,8 @@ answering.
 | `yeah it is pretty good` | `nice` / `oh nice ^^` — an agreement is not a thank-you, so never `no worries` | `decide/job.py` (agree → noted) |
 | `@Otokodelyoko how was your weekend` | something from his own week, not a hedge | `reply/intents.py` (the wellbeing patterns) |
 | `@TerrysTopGuy anyway how is your day going` | his own day (`opener this week`), never `i do not know that one` | same |
+| `@Otokodelyoko no thanks` | `that is alright, we do not have to` — he takes the refusal on himself. The same line to Terry is `fair enough` | `phrasebooks/friend-b/decline.json` |
+| `@Otokodelyoko i do not want to talk about it` | `oh, that is ok ^^`, and he does not ask again | `reply/intents.py` (`social:refusal`), `decide/job.py` (refuse → decline) |
 | `@Otokodelyoko what is the plot of dune?` | an apology, **never a guess** | `phrasebooks/friend-b/hedge.json` |
 | `@Otokodelyoko hey` (three times) | he **repeats** himself sometimes; repetition is the pass condition | `decide/variant.py` |
 | a nine-word answer, then the same question again | **silence**, and the log says `he just said that` | `render/audition.py` -- short lines are allowed to repeat, long ones are not |

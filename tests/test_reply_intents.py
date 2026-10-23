@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from ttrpg_chatbots.reply.intents import SOCIAL_HOWAREYOU, SOCIAL_TAGS, match_intent
+from ttrpg_chatbots.reply.intents import (
+    SOCIAL_HOWAREYOU,
+    SOCIAL_REFUSAL,
+    SOCIAL_TAGS,
+    SOCIAL_THANKS,
+    match_intent,
+)
 
 
 @pytest.mark.parametrize(
@@ -122,3 +128,42 @@ class TestAskingHowHeIs:
     def test_but_not_everything_with_how_in_it(self, message: str) -> None:
         """A question about a *thing* is not a question about him: the fence, the game, the bread."""
         assert match_intent(message) != SOCIAL_HOWAREYOU, message
+
+
+class TestSayingNo:
+    """A refusal is its own move, and it sits above thanks.
+
+    Measured: "no thanks" matched the thanks pattern, so it was answered as politeness ("no worries")
+    -- the opposite of what was said. And the job that carries a refusal, `decline`, was in the
+    vocabulary with no book behind it and no way to be chosen.
+    """
+
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "no thanks",
+            "no thank you",
+            "nah thanks",
+            "no ta",
+            "i would rather not",
+            "rather not",
+            "not today",
+            "not right now",
+            "i am not up for that",
+            "i do not want to talk about it",
+            "i don't want to get into it",
+            "not really my thing",
+        ],
+    )
+    def test_it_is_a_refusal(self, message: str) -> None:
+        assert match_intent(message) == SOCIAL_REFUSAL, message
+
+    def test_it_is_not_thanks(self) -> None:
+        assert match_intent("no thanks") != SOCIAL_THANKS
+        assert match_intent("thanks") == SOCIAL_THANKS
+
+    @pytest.mark.parametrize("message", ["no", "no way", "not much", "nothing much"])
+    def test_but_a_bare_no_is_not(self, message: str) -> None:
+        """A bare \"no\" answers a question and could mean several things; only an explicit refusal is
+        one, because the reply to a refusal is \"fair enough\" and the reply to a bare no is not."""
+        assert match_intent(message) != SOCIAL_REFUSAL, message

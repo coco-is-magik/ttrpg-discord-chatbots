@@ -172,6 +172,9 @@ PHASE_MESSAGES: dict[str, tuple[str, ...]] = {
         "i sorted the garage out",
         "reading a book about trains",
     ),
+    # Somebody saying no to something. The one job in the vocabulary with no book behind it until the
+    # refusal move was wired, so this phase had never been measured.
+    "decline": ("no thanks", "i would rather not", "not today", "i do not want to talk about it"),
 }
 
 

@@ -48,6 +48,7 @@ Family = Literal[
     "point",
     "closing",
     "noted",
+    "decline",
     "ask_back",
     "follow_up",
     "recall",
@@ -66,6 +67,7 @@ Intent = Literal[
     "joke",
     "remark",
     "meta",
+    "refuse",
 ]
 Tone = Literal["neutral", "warm", "terse", "teasing", "flat"]
 Who = Literal["friend", "character"]

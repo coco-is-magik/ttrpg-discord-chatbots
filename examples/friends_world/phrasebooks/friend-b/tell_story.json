@@ -1,0 +1,13 @@
+{
+  "job": "tell_story",
+  "note": "Otto's own. The shared version ends on 'still have it', which is a man who keeps things and says so; he keeps things too but would not announce it. The body is what happened and the point deliberately lives in explain, so it can only arrive if it is asked for.",
+  "families": {
+    "story": {
+      "when": {},
+      "variants": [
+        "{story_body}",
+        "oh, {story_body}"
+      ]
+    }
+  }
+}

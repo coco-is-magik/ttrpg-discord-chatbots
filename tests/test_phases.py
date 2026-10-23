@@ -32,6 +32,7 @@ PHASES = (
     "acknowledge",
     "ask_back",
     "close",
+    "decline",
     "explain",
     "follow_up",
     "greet",

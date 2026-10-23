@@ -1,0 +1,15 @@
+{
+  "job": "decline",
+  "note": "Otto's own, and the one his brief demands outright: he avoids disagreeing and never pushes. So the refusal is his, not theirs -- he takes it back on himself ('we do not have to') rather than granting permission ('fair enough'), and he offers the way out instead of leaving a silence. Every line has to survive the persona gate, and none may end on a beat.",
+  "families": {
+    "decline": {
+      "when": {},
+      "variants": [
+        "that is alright, we do not have to",
+        "oh, that is ok ^^",
+        "that is fine, we can talk about something else",
+        "ok, i will not ask again ^^"
+      ]
+    }
+  }
+}

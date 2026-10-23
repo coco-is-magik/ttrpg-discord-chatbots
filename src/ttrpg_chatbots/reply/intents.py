@@ -41,6 +41,9 @@ SOCIAL_WHY = "social:why"
 # recognise it can only answer "I don't know about that", which is the worst possible reply to
 # a person who has just admitted they are struggling.
 SOCIAL_COMFORT = "social:comfort"
+#: A refusal. Distinct from a goodbye (which is what the `decline` *intent* used to mean) and from
+#: thanks, which "no thanks" would otherwise match.
+SOCIAL_REFUSAL = "social:refusal"
 
 SOCIAL_TAGS = (
     SOCIAL_GREETING,
@@ -55,6 +58,7 @@ SOCIAL_TAGS = (
     SOCIAL_PLANS,
     SOCIAL_ROUGH,
     SOCIAL_WHY,
+    SOCIAL_REFUSAL,
 )
 
 # (tag, pattern) in priority order. `^` anchors are deliberate for the short moves, which are
@@ -109,6 +113,20 @@ _PATTERNS: tuple[tuple[str, str], ...] = (
         r"|\bdoing anything\b"
         r"|\bgot plans\b"
         r"|\bup to anything\b",
+    ),
+    (
+        # Above thanks, because "no thanks" is a refusal and would otherwise be read as politeness.
+        # Measured: it produced "no worries" -- an answer to thanks -- which is the opposite of what
+        # was said.
+        SOCIAL_REFUSAL,
+        r"^(?:no|nah|nope)[, ]+(?:thanks|thank you|ta|cheers)\b"
+        r"|\bno ta\b"
+        r"|\bi(?:'d| would) rather not\b"
+        r"|\brather not\b"
+        r"|\bnot (?:today|now|right now|for me|this time)\b"
+        r"|\bi(?:'m| am) not (?:up for|in the mood)\b"
+        r"|\bdo(?:n'?t| not) want to (?:talk|get into|go into|say)\b"
+        r"|\bnot really my thing\b",
     ),
     (
         SOCIAL_THANKS,

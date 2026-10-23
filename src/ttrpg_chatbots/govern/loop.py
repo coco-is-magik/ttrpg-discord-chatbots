@@ -69,6 +69,9 @@ _INTENT: dict[str, Intent] = {
     social.SOCIAL_ROUGH: "complain",
     social.SOCIAL_COMFORT: "comfort",
     social.SOCIAL_THANKS: "meta",
+    # A refusal, which finally makes the `decline` job reachable: it was in the vocabulary and never
+    # chosen, because the *intent* named `decline` is a goodbye (social:goodbye) and goes to `close`.
+    social.SOCIAL_REFUSAL: "refuse",
     social.SOCIAL_APOLOGY: "meta",
     social.SOCIAL_AGREEMENT: "agree",
     social.SOCIAL_GOODBYE: "decline",

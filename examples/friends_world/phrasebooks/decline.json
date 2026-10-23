@@ -1,0 +1,14 @@
+{
+  "job": "decline",
+  "note": "Somebody said no to something. Short, unbothered, and it leaves the door open -- a refusal is not a rejection of the person. The shared register is the blunt one; a friend who would never push can override this file, and Otto does.",
+  "families": {
+    "decline": {
+      "when": {},
+      "variants": [
+        "fair enough",
+        "no problem, some other time",
+        "that is alright"
+      ]
+    }
+  }
+}

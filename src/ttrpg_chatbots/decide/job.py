@@ -55,7 +55,14 @@ def choose(
         return "mirror"
     if intent == "comfort":
         return "reassure"
+    if intent == "refuse":
+        # Somebody saying no to something. The one job a non-confrontational character needs most, and
+        # the only job in the vocabulary with no book behind it -- measured: "i do not want to talk about
+        # it" was acknowledged with "Mm".
+        return "decline"
     if intent == "decline":
+        # The intent named `decline` is a *goodbye* (social:goodbye), which is why it closes rather than
+        # refuses. Confusing names, kept for compatibility with the lexicon's tags.
         return "close"
     if intent == "remark":
         # A statement about *their own* thing that he knows about gets his answer about it: measured
