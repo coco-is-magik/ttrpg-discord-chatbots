@@ -1,0 +1,83 @@
+{
+  "job": "greet",
+  "note": "Otto greets quietly. He is pleased you spoke to him and it shows, but he does not fill the space: two or three words, an emoticon where a word would be too much.",
+  "families": {
+    "time_morning": {
+      "when": {
+        "part_of_day": [
+          "morning"
+        ],
+        "relationship": [
+          "acquainted",
+          "friend"
+        ]
+      },
+      "variants": [
+        "morning",
+        "oh, morning"
+      ]
+    },
+    "time_evening": {
+      "when": {
+        "part_of_day": [
+          "evening"
+        ],
+        "relationship": [
+          "acquainted",
+          "friend"
+        ]
+      },
+      "variants": [
+        "hello",
+        "oh, hello"
+      ]
+    },
+    "warm": {
+      "when": {
+        "relationship": [
+          "friend"
+        ]
+      },
+      "variants": [
+        "oh! hello",
+        "hi, i was hoping you would say something",
+        "hello you",
+        "oh, hi ^_^"
+      ]
+    },
+    "casual": {
+      "when": {},
+      "variants": [
+        "hi",
+        "hello",
+        "oh, hi",
+        "h-hi"
+      ]
+    },
+    "dry": {
+      "when": {
+        "relationship": [
+          "new"
+        ]
+      },
+      "variants": [
+        "hello",
+        "hi there",
+        "oh, hello"
+      ]
+    },
+    "recall": {
+      "when": {
+        "relationship": [
+          "acquainted",
+          "friend"
+        ]
+      },
+      "variants": [
+        "hi! how is {fact_value}?",
+        "oh, hello. is {fact_value} alright?",
+        "hi. how is {fact_value} doing?"
+      ]
+    }
+  }
+}

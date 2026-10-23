@@ -12,19 +12,21 @@ lands; it should never be more than one slice out of date.
 
 | | |
 |---|---|
-| Tests | **1860 passing**, ~38 s, no network, no GPU |
+| Tests | **1877 passing**, ~39 s, no network, no GPU |
 | Bots live | 4 applications: `ttrpg-bot` (helper) + `friend-a/b/c` |
 | Permissions | **8/8 each** in `#general` |
 | Slash commands | **54/54** synced to guild 1364544268609523762 |
-| Who speaks | `friend-a` only, `reply: mention`; `friend-b`/`friend-c` are `reply: off` |
+| Who speaks | `friend-a` (Terry) and `friend-b` (Otto), both `reply: mention`; `friend-c` is `reply: off` |
 | Conversation | **ten phases on the module ladder**, live behind `TTRPG_CONVERSATION=ladder`; subject questions answered by the ladder too (`decide/subject`) |
 | Modules | **57/57 built**, manifest clean |
 | Voice | friend-a speaks: `piper` **`en_US-joe-medium`** at length scale **1.05**, no pitch shift — chosen by measuring 13 candidates (98 Hz vs ryan-high's 144 Hz); `/voicetest join\|speak\|leave` |
 | Voice lock | `examples/friends_world/voices.lock.json`: sha256 + md5 per file, two sources, CC0 provenance, rebuild steps; `ttrpg-chatbots-tts --verify-voice\|--fetch-voice` |
 | Speech text | `tts/spoken/` — five modules + a fixed order, wrapped around every engine at build time; `--spoken TEXT` prints the spoken form |
-| Persona | `ttrpg-chatbots-persona` — twelve checks over his whole material; 39 subjects, 91 lines, median 5 words, 7.6% two-sentence, no beats |
+| Persona | `ttrpg-chatbots-persona` — twelve checks per friend over his whole material. Terry: 39 subjects, median 5 words. Otto: 18 subjects, median 4 words, stutter and emoticons. Both PASS |
+| Phrasebooks | resolved per friend, per job: `phrasebooks/<friend>/` over the shared `phrasebooks/`. Otto overrides eight jobs; `friend-c` speaks the shared register |
+| Knowledge ownership | subject lines carry `character`, so two friends can hold the same tag (`topic:computers`) without sharing a mouth |
 | Memory | **SQLite** `data/memory.db` -- facts, topics, tellings, journal -- written only by `memory/db`; `/memory` and `/forget` on the helper. See `docs/STORAGE.md` |
-| Personality | **friend-a is TopGuy** (`docs/PERSONA.md`); b and c deliberately neutral |
+| Personality | **friend-a is Terry** (`docs/PERSONA.md`); b and c deliberately neutral |
 | Typing | friend-a types lower-case with dropped apostrophes and the odd slip; b and c stay tidy |
 | Memory | short-term: last 8 turns in RAM. long-term: `data/friends/friend-a.json` |
 | Life | `examples/friends_world/life.json`: 5 activities, 4 grievances, day-stable |
@@ -45,7 +47,7 @@ lands; it should never be more than one slice out of date.
   `docs/CLASSIFIER.md` is the full account.
 - **Context** — the last 8 turns; a transition table vetoes a reading that cannot follow the
   previous turn, and an unaddressed repeat is met with silence.
-- **One personality, fully written** — `friend-a` is TopGuy: ten subjects, his own pool for every
+- **One personality, fully written** — `friend-a` is Terry: ten subjects, his own pool for every
   social move, his own way of refusing, and a voice pinned in the casting table. The brief lives in
   `bots.json`; the lines live in `examples/friends_world/`; `tests/test_persona.py` refuses to let
   the two disagree. `docs/PERSONA.md` is the whole story, including how to write the next one.
@@ -57,7 +59,7 @@ lands; it should never be more than one slice out of date.
 | All four bots connect, audit 8/8, sync 51 commands | `data/logs/bot.log`, 2026-10-21 12:30 |
 | A mention gets a classifier reply | live, plus `tests/test_bots_supervisor.py` |
 | A lore question deflects instead of inventing | live, plus `tests/test_friends_chat.py` |
-| Every one of TopGuy's ten subjects gets an answer in his own voice | `tests/test_persona.py`, distances 0.18–0.55 |
+| Every one of Terry's ten subjects gets an answer in his own voice | `tests/test_persona.py`, distances 0.18–0.55 |
 | He refuses what he does not know, warmly | `test_a_question_outside_his_subjects_is_refused_honestly` |
 | He answers somebody who is struggling | `test_he_can_be_moved_by_somebody_having_a_bad_day` |
 | No line is contemptuous of the human | `test_no_template_is_ever_cold_to_the_person_being_answered` |

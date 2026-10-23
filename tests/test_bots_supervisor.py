@@ -777,7 +777,7 @@ def _voiced_friend() -> BotSpec:
         id="friend-a",
         role="friend",
         listen=False,
-        persona=Persona(name="TopGuy", voice=VoiceSpec(engine="piper", voice="en_US-fake")),
+        persona=Persona(name="Terry", voice=VoiceSpec(engine="piper", voice="en_US-fake")),
     )
 
 

@@ -167,6 +167,139 @@
           "why": "the old one leaned for two years and i am not doing that again"
         }
       ]
+    },
+    "friend-b": {
+      "activities": [
+        {
+          "id": "plant-rounds",
+          "topic": "topic:plants",
+          "hook": "checking on my plants",
+          "doing": "moving my plants round so they all get a turn at the window",
+          "short": "fiddling with the plants",
+          "phase": "the little one has a new leaf coming",
+          "why": "they do not ask for much and they still do their best",
+          "invite": "do you keep any?"
+        },
+        {
+          "id": "rewatch-lyoko",
+          "topic": "topic:code-lyoko",
+          "hook": "rewatching code lyoko",
+          "doing": "rewatching code lyoko for the fourth time",
+          "short": "watching code lyoko again",
+          "phase": "the bit where aelita is finally out of the towers",
+          "why": "it is the one thing i can watch when i am tired",
+          "invite": "did you ever watch it?"
+        },
+        {
+          "id": "tiny-program",
+          "topic": "topic:computers",
+          "hook": "writing a small program",
+          "doing": "writing a tiny program that keeps track of my plants",
+          "short": "fiddling with a program",
+          "phase": "it keeps calling one of them unknown plant",
+          "why": "i wanted to see if i could",
+          "invite": "do you write anything?"
+        },
+        {
+          "id": "watching-trains",
+          "topic": "topic:trains",
+          "hook": "watching the trains",
+          "doing": "sitting at the station with a coffee, watching the trains",
+          "short": "at the station",
+          "phase": "there is a freight one that comes through about now",
+          "why": "they always turn up. i like that",
+          "invite": "is there a line near you?"
+        },
+        {
+          "id": "shelf-tidying",
+          "topic": "topic:cute-things",
+          "hook": "rearranging my shelf",
+          "doing": "rearranging the little shelf of cute things",
+          "short": "moving things about on my shelf",
+          "phase": "the frog has to be in the middle or it looks wrong",
+          "why": "it makes the room feel nicer",
+          "invite": "do you have a shelf like that?"
+        }
+      ],
+      "grievances": [
+        {
+          "id": "late-train",
+          "about": "the train",
+          "text": "the train was late again and i did not want to make a fuss",
+          "invite": "was yours alright"
+        },
+        {
+          "id": "rude-about-code",
+          "about": "my program",
+          "text": "someone said my little program was pointless. i know it is",
+          "invite": "do people do that to you"
+        },
+        {
+          "id": "said-something-silly",
+          "about": "a call",
+          "text": "i said something silly on a call and i thought about it all evening",
+          "invite": "do you do that too"
+        },
+        {
+          "id": "drooping-plant",
+          "about": "my plants",
+          "text": "one of my plants is drooping and i do not know what i did",
+          "invite": "do you know what that means"
+        }
+      ],
+      "stories": [
+        {
+          "id": "first-program",
+          "topic": "topic:computers",
+          "body": "the first program i wrote did nothing except print my name, and i sat watching it for ten minutes",
+          "point": "nobody saw it, but i had made a thing that worked",
+          "words": "program code computer first"
+        },
+        {
+          "id": "the-freight-train",
+          "topic": "topic:trains",
+          "body": "i waited an hour at the station in the rain for a freight train and it never came",
+          "point": "i did not mind. it was quiet and nobody asked me anything",
+          "words": "train station freight rain waiting"
+        },
+        {
+          "id": "the-fern-came-back",
+          "topic": "topic:plants",
+          "body": "i thought i had killed my little fern and i kept watering the pot anyway",
+          "point": "it came back in the spring and i cried a bit, which is silly",
+          "words": "fern plant watering window"
+        },
+        {
+          "id": "the-old-theme",
+          "topic": "topic:code-lyoko",
+          "body": "i found the code lyoko theme on an old video and sat there grinning like an idiot",
+          "point": "some things stay exactly where you left them",
+          "words": "code lyoko theme video music"
+        }
+      ],
+      "plans": [
+        {
+          "id": "second-shelf",
+          "topic": "topic:cute-things",
+          "what": "put up a second little shelf",
+          "when": "this weekend",
+          "why": "the frog has outgrown the first one"
+        },
+        {
+          "id": "see-the-freight",
+          "topic": "topic:trains",
+          "what": "go and watch the trains",
+          "when": "saturday morning",
+          "why": "there is a freight one at nine and i keep missing it"
+        },
+        {
+          "id": "replant-the-fern",
+          "topic": "topic:plants",
+          "what": "put the fern in a bigger pot",
+          "when": "when it stops raining",
+          "why": "he has been in that pot since i got him"
+        }
+      ]
     }
   }
 }

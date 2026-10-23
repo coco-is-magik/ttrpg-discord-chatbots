@@ -1,0 +1,16 @@
+{
+  "job": "close",
+  "note": "Goodbyes. He says goodnight properly and hopes you sleep well, because he means it.",
+  "families": {
+    "closing": {
+      "when": {},
+      "variants": [
+        "night night",
+        "bye bye",
+        "see you",
+        "sleep well",
+        "night, take care"
+      ]
+    }
+  }
+}

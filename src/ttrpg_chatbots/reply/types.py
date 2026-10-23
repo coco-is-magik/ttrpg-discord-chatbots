@@ -51,6 +51,7 @@ class KnowledgeItem:
     slots: Mapping[str, str] = field(default_factory=dict)
     meta: Mapping[str, Any] = field(default_factory=dict)
     reply: str | None = None
+    character: str = "*"
 
     def __post_init__(self) -> None:
         if not self.id.strip():
@@ -61,6 +62,15 @@ class KnowledgeItem:
             raise ValueError(f"knowledge {self.id!r} must have non-blank tags")
         if self.reply is not None and not self.reply.strip():
             raise ValueError(f"knowledge {self.id!r} has an empty reply")
+
+    def owned_by(self, who: str | None) -> bool:
+        """May this character say it? Shared lines belong to everybody.
+
+        Two friends can hold the same subject without sharing a mouth: `topic:computers` is one tag,
+        but Terry's line about machines is not Otto's, and a shared tag alone used to mean whichever
+        line happened to score closest got spoken -- by either of them.
+        """
+        return who is None or self.character == "*" or self.character == who
 
     @property
     def search_text(self) -> str:

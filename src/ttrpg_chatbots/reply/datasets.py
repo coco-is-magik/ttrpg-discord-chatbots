@@ -29,7 +29,7 @@ RESPONSES_FILE = "responses.jsonl"
 CHARACTERS_FILE = "characters.jsonl"
 MANIFEST_FILE = "world.json"
 
-_KNOWLEDGE_FIELDS = frozenset({"id", "text", "tags", "slots", "reply"})
+_KNOWLEDGE_FIELDS = frozenset({"id", "text", "tags", "slots", "reply", "character"})
 _RESPONSE_FIELDS = frozenset({"id", "character", "tags", "template"})
 _CHARACTER_FIELDS = frozenset({"id", "name", "known_tags", "tags", "fallback_tag"})
 
@@ -106,6 +106,11 @@ def knowledge_from_records(
         if reply is not None and (not isinstance(reply, str) or not reply.strip()):
             raise DatasetError(f"{where}: 'reply' must be a non-empty string when given")
 
+        # Optional: who owns this line. Absent means anybody who knows the tag.
+        character = record.get("character", "*")
+        if not isinstance(character, str) or not character.strip():
+            raise DatasetError(f"{where}: 'character' must be a non-empty string when given")
+
         items.append(
             _build(
                 where,
@@ -116,6 +121,7 @@ def knowledge_from_records(
                     slots=_slots(record, where),
                     meta=_meta(record, _KNOWLEDGE_FIELDS),
                     reply=reply.strip() if isinstance(reply, str) else None,
+                    character=character.strip(),
                 ),
             )
         )

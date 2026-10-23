@@ -1,0 +1,22 @@
+{
+  "job": "hedge",
+  "note": "He does not know. Apologetic rather than terse: the shared hedge (\"you lost me\") is Terry's voice.",
+  "families": {
+    "hedge": {
+      "when": {},
+      "variants": [
+        "oh, i do not know that one",
+        "sorry, i am not sure",
+        "i do not know, sorry",
+        "hmm, i am not sure about that"
+      ]
+    },
+    "recall": {
+      "when": {},
+      "variants": [
+        "how is {fact_value} doing?",
+        "is {fact_value} alright?"
+      ]
+    }
+  }
+}

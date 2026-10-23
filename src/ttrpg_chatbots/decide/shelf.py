@@ -35,19 +35,33 @@ class Shelf:
         return bool(self.books)
 
 
-def load_shelf(directory: Path | str) -> Shelf:
-    """Read every ``*.json`` in a phrasebook directory.
+def load_shelf(directory: Path | str, *, fallback: Path | str | None = None) -> Shelf:
+    """Read every ``*.json`` in a phrasebook directory, over a shared set.
 
     A missing directory is an empty shelf, not an error: a friend with no phrasebooks simply has
     nothing to say, which is a valid state for a half-written character.
+
+    ``fallback`` is the world's shared books, and the override is *per job*: a friend who writes his
+    own ``greet.json`` keeps the shared ``hedge.json``. That is the shape the content actually takes --
+    a character diverges one phase at a time, and a friend who has to copy every file before he can
+    change one would either copy them all or never start.
     """
-    base = Path(directory)
     books: dict[str, Phrasebook] = {}
+    base = Path(directory)
+    shared = Path(fallback) if fallback is not None else None
+    # An override only makes sense when there *is* a shared set to override.
+    overriding = shared is not None and shared != base
+    if overriding:
+        books.update(load_shelf(shared).books)
     if not base.is_dir():
-        return Shelf(books={})
+        return Shelf(books=books)
     for path in sorted(base.glob("*.json")):
         book = load(path)
         if book.job in books:
-            raise PhrasebookError(f"{path}: two books claim the job {book.job!r}")
+            if not overriding:
+                # Two books in one directory claiming a job is a data error, not an override.
+                raise PhrasebookError(f"{path}: two books claim the job {book.job!r}")
+            books[book.job] = book
+            continue
         books[book.job] = book
     return Shelf(books=books)

@@ -271,3 +271,39 @@ def test_an_event_is_never_added_by_appending_a_second_sentence() -> None:
 
     assert isinstance(out, Line)
     assert out.text.count(".") <= 1
+
+
+def test_a_friend_can_override_one_phase_and_keep_the_rest(tmp_path) -> None:
+    """Phrasebooks resolve per friend, per job, over the shared set.
+
+    A character diverges one phase at a time. Without a per-job fallback, changing his greeting would
+    mean copying ten files -- so nobody would ever start.
+    """
+    import json
+    import shutil
+
+    from ttrpg_chatbots.decide.shelf import load_shelf
+
+    world = tmp_path / "world"
+    (world / "phrasebooks").mkdir(parents=True)
+    shutil.copytree(WORLD / "phrasebooks", world / "phrasebooks", dirs_exist_ok=True)
+
+    # nothing of his own yet: the shared register, unchanged
+    shared = load_shelf(world / "phrasebooks")
+    alone = load_shelf(world / "phrasebooks" / "friend-b", fallback=world / "phrasebooks")
+    assert alone.jobs() == shared.jobs(), "a friend with no books of his own speaks the shared set"
+
+    # one phase of his own, and only that one changes
+    mine = world / "phrasebooks" / "friend-b"
+    mine.mkdir(parents=True, exist_ok=True)
+    (mine / "greet.json").write_text(
+        json.dumps({"job": "greet", "families": {"casual": {"when": {}, "variants": ["oh hey"]}}}),
+        encoding="utf-8",
+    )
+
+    overridden = load_shelf(mine, fallback=world / "phrasebooks")
+    assert overridden.jobs() == shared.jobs(), "the other jobs still come from the shared set"
+    assert overridden.for_job("greet").variants("casual") == ("oh hey",)
+    assert overridden.for_job("hedge").variants("unsure") == shared.for_job("hedge").variants(
+        "unsure"
+    ), "and the shared books are untouched"

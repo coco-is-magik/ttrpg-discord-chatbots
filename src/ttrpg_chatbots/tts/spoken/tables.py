@@ -1,7 +1,7 @@
 """The data behind the spoken form: language facts, not persona facts.
 
 Everything here is editable in one place on purpose. A character may want their own pronunciations
-(``"TopGuy"`` should not be read as two words), and that belongs in a persona-level override; this
+(``"Terry"`` should not be read as two words), and that belongs in a persona-level override; this
 file is only what is true of the language.
 """
 

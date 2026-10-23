@@ -637,7 +637,7 @@ The walkthrough, including the per-application Message Content toggle, is in
 A friend is a bot with a persona *block*. The block started empty of character on purpose: the
 slots existed so the wiring could be finished before anybody wrote a personality.
 
-**As of `docs/PERSONA.md`, friend-a (TopGuy) is written.** The brief lives in
+**As of `docs/PERSONA.md`, friend-a (Terry) is written.** The brief lives in
 `data/bots.json` → `persona`, the behaviour lives in the reply dataset, and
 `tests/test_persona.py` refuses to let them drift: every subject must be a tag the character
 knows, every catchphrase must appear in one of their templates, every voice must match the casting
@@ -648,7 +648,7 @@ The shape, as implemented (`bots/persona.py`):
 
 ```json
 "persona": {
-  "name": "TopGuy",
+  "name": "Terry",
   "summary": "one or two lines for humans and logs",
   "traits": ["bombastic", "paternal"],       // prose; the brief, not enforced
   "values": ["honour", "honesty", "integrity"],
@@ -943,3 +943,21 @@ Not a feature list — three observations, in the order they become possible:
    contradicts it, because it was written down.
 
 Everything in this document exists to make those three ordinary.
+
+---
+
+## Appendix: where a friend's material lives
+
+| File | Holds | Per friend? |
+|---|---|---|
+| `bots.json` / `bots.example.json` | the persona: name, traits, topics, signature, voice, style | yes, one entry per bot |
+| `characters.jsonl` | `known_tags`, which gates what he may answer | yes, one record per friend |
+| `knowledge.jsonl` | anchor + reply per subject, tagged by topic | shared file, per-friend by tag |
+| `life.json` | activities, grievances, stories, plans | yes, keyed by friend id |
+| `phrasebooks/<friend>/*.json` | his own version of a phase | yes, per job, over the shared set |
+| `voices.jsonl` + `voices.lock.json` | casting rules and the pinned model | shared file, per-friend by name |
+| `schedule.json`, `calendar.json` | his day and his year | yes, keyed by friend id |
+
+The rule of thumb: **anything that is about him is keyed by his id**, and the two big shared
+files (`knowledge.jsonl`, `voices.jsonl`) are separated by tag and by name rather than by file.
+`docs/PERSONA.md` §4 is the order to write them in.

@@ -76,7 +76,12 @@ class Ladder:
     def shelf(self) -> Shelf:
         """Every phrasebook this friend owns, loaded once."""
         if self._shelf is None:
-            shelf = load_shelf(self._data / "phrasebooks")
+            # His own books over the world's shared ones, per job: a friend diverges one phase at a
+            # time, and a missing directory means he simply speaks the shared register.
+            shelf = load_shelf(
+                self._data / "phrasebooks" / self.friend,
+                fallback=self._data / "phrasebooks",
+            )
             if self.jobs is not None:
                 shelf = Shelf(
                     books={job: book for job, book in shelf.books.items() if job in self.jobs}

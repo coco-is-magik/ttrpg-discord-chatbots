@@ -67,7 +67,7 @@ ttrpg-chatbots-tts --spoken 'Dr. Smith paid $1,200 in 1984 for the 3:30 pm slot'
 
 ### What is deliberately not done
 
-* **No pronunciation overrides.** `TopGuy` is read as two words. Piper supports phoneme overrides per
+* **No pronunciation overrides.** `Terry` is read as two words. Piper supports phoneme overrides per
   voice, which is the right home for it, and it is a persona-level concern rather than a language one.
 * **No URL handling.** A URL is read as words (`slash`, `dot`), which is wrong in a specific way and
   rare in a conversation.

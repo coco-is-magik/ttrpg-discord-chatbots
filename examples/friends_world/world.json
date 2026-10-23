@@ -1,5 +1,5 @@
 {
   "schema_version": 1,
   "name": "The Group",
-  "note": "Social intents and conversation, not lore. Each knowledge entry is an *anchor*: either a typical way someone makes a social move, or -- for friend-a's subjects -- a stance he would actually say, which is what {fact} renders. friend-a (TopGuy) has a personality and ten subjects; friend-b and friend-c are still neutral and know only the social moves. See docs/PERSONA.md."
+  "note": "Social intents and conversation, not lore. Each knowledge entry is an *anchor*: either a typical way someone makes a social move, or -- for friend-a's subjects -- a stance he would actually say, which is what {fact} renders. friend-a (Terry) has a personality and ten subjects; friend-b and friend-c are still neutral and know only the social moves. See docs/PERSONA.md."
 }

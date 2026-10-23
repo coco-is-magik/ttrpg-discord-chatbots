@@ -1,0 +1,40 @@
+{
+  "job": "acknowledge",
+  "note": "Thanks, apologies, agreements, comfort. Soft, and never a speech.",
+  "families": {
+    "warm": {
+      "when": {
+        "relationship": [
+          "friend"
+        ]
+      },
+      "variants": [
+        "any time",
+        "oh, it is nothing",
+        "you do not have to thank me",
+        "^^"
+      ]
+    },
+    "casual": {
+      "when": {},
+      "variants": [
+        "no worries",
+        "it is alright",
+        "sure",
+        ":3"
+      ]
+    },
+    "dry": {
+      "when": {
+        "relationship": [
+          "new"
+        ]
+      },
+      "variants": [
+        "no worries",
+        "of course",
+        "it is alright"
+      ]
+    }
+  }
+}

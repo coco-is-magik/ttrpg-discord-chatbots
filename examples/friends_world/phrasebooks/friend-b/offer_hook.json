@@ -1,0 +1,65 @@
+{
+  "job": "offer_hook",
+  "note": "What are you up to. He names his own small thing and then asks about yours, which is the move he makes most often: he would rather hear about yours.",
+  "families": {
+    "warm": {
+      "when": {
+        "relationship": [
+          "friend"
+        ]
+      },
+      "variants": [
+        "{hook}",
+        "{short}",
+        "{hook}. what about you?",
+        "i have been {hook}. how are you doing?"
+      ]
+    },
+    "casual": {
+      "when": {},
+      "variants": [
+        "{hook}",
+        "{short}",
+        "{hook}. you?",
+        "not much, just {short}"
+      ]
+    },
+    "dry": {
+      "when": {
+        "relationship": [
+          "new"
+        ]
+      },
+      "variants": [
+        "{hook}",
+        "{short}"
+      ]
+    },
+    "recall": {
+      "when": {
+        "relationship": [
+          "friend"
+        ]
+      },
+      "variants": [
+        "{hook}. how is {fact_value}?",
+        "{hook}. is {fact_value} alright?"
+      ]
+    },
+    "event": {
+      "when": {},
+      "variants": [
+        "{event_phrase}",
+        "{hook}, {event_phrase}"
+      ]
+    },
+    "plan": {
+      "when": {},
+      "variants": [
+        "{plan_what} {plan_when}",
+        "i was going to {plan_what} {plan_when}",
+        "{hook}. i was going to {plan_what}"
+      ]
+    }
+  }
+}

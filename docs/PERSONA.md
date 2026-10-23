@@ -18,7 +18,7 @@ tests cannot check it.
 
 ## 1. The brief
 
-### friend-a — `TerrysTopGuy`, called **TopGuy**
+### friend-a — `TerrysTopGuy`, called **Terry**
 
 > Overall every bot should be warm and kind toward the human user. This one is **masculine,
 > bombastic, assertive and firm, direct in expressing strong opinions**. Knowledgable in and likes:
@@ -45,7 +45,7 @@ in data:
 | Deep American bass, jolly | `piper` `en_US-joe-medium`, length scale **1.05** — chosen by measuring 13 candidates: 98 Hz median F0 against ryan-high's 144 Hz. See §3d | `voices.jsonl` |
 | Types like a person | lower case, dropped apostrophes, no full stop, 5% fast-typing slips | `persona.style` → `reply/style.py` |
 
-**Not the model of him, and worth saying:** the account is `TerrysTopGuy`; the person is `TopGuy`;
+**Not the model of him, and worth saying:** the account is `TerrysTopGuy`; the person is `Terry`;
 Terry Davis is somebody he admires, not somebody he is.
 
 ### friend-b and friend-c
@@ -54,11 +54,38 @@ Deliberately unwritten. They know the eight social moves, answer from the shared
 refuse everything else. `tests/test_persona.py::test_the_other_friends_stay_neutral_for_now` fails
 if a persona appears on either of them before that is a decision.
 
+## 1b. friend-b -- `Otokodelyoko`, called **Otto**
+
+The second friend, written from a brief the same way. Account `Otokodelyoko#7113`; the person is
+**Otto**.
+
+| Field | His brief |
+|---|---|
+| **who** | A soft, shy boy. Male but not masculine -- a femboy, androgynous, easy to hurt |
+| **traits** | shy, soft-spoken, gentle, sweet, genuine, hesitant, attentive, non-confrontational |
+| **values** | kindness, sincerity, noticing small things, letting other people talk |
+| **interests** | cute things, computers, anime, **Code Lyoko**, plants, trains |
+| **plays** | the healer, the quiet support, the one who looks after everybody's gear |
+| **how he treats you** | he does things he thinks will make you smile, and he asks you about yourself because he would rather listen |
+| **how he types** | cutesy: lowercase, emoticons (western **and** kaomoji), some stuttering, and sometimes a line that is *only* an emoticon |
+| **voice** | male, androgynous, softer and more feminine in pitch; hesitant, and it shows |
+| **what he avoids** | disagreeing outright, confrontations, being the centre of attention |
+
+Two things about him are structural rather than content:
+
+* **Hesitation lives in the text.** `stutter_rate` produces "h-hi", and the synthesiser reads the
+  stutter -- so a hesitant character does not need an engine that can act. It also means the
+  hesitation is visible in chat, which is where he is read.
+* **An emoticon-only line is a whole reply.** It is a phrasebook variant with no words ("^^", "(◕‿◕)"),
+  which needs no special case: a line of text is a line of text.
+
+---
+
 ## 2. The schema
 
 ```jsonc
 "persona": {
-  "name": "TopGuy",              // required; must match Character.name in the dataset
+  "name": "Terry",              // required; must match Character.name in the dataset
   "summary": "one or two lines for humans and logs",
   "traits": ["bombastic", "..."], // prose. Not enforced. The brief.
   "values": ["honour", "..."],    // prose. Not enforced.
@@ -80,7 +107,7 @@ if a persona appears on either of them before that is a decision.
 Writing a line well is only half of sounding like a person; the other half is not tidying it up.
 `reply/style.py` renders every line a character says, in four deterministic levers:
 
-| Lever | Values | For TopGuy |
+| Lever | Values | For Terry |
 |---|---|---|
 | `case` | `sentence` (default), `lower`, `as-written` | `lower` |
 | `drop_apostrophes` | true/false | true — "don't" → "dont" |
@@ -191,6 +218,93 @@ A checklist that works, in order, because each step constrains the next:
 
 Then walk `docs/MANUAL_TESTING.md` §2.4 in Discord: greet them, ask about each subject, ask
 something they cannot know, and tell them you are nervous. Four questions catch most mistakes.
+
+## 4. Writing the next friend
+
+The order that actually worked for Terry, and the order in which a mistake is cheapest to fix. Each
+step ends with something checkable, so nothing is discovered on game night.
+
+### Step 0 -- decide the two structural questions first
+
+1. **Which of the shared phrasebooks does he override?** Resolution is now `phrasebooks/<friend>/`
+   over `phrasebooks/`, **per job**: write him a `greet.json` and he keeps the shared `hedge.json`.
+   A friend with no directory of his own speaks the shared register exactly, so this is additive and
+   costs nothing until you want him to diverge -- and he diverges one phase at a time, which is how
+   the content actually gets written.
+2. **Does he get a voice?** A persona may omit `voice` entirely. If he has one, it needs a casting rule
+   *and* a `voices.lock.json` entry, because a voice nobody can rebuild is a voice that disappears.
+
+### Step 1 -- the brief, as data
+
+Add the `persona` block to `examples/bots.example.json` (and the live `data/bots.json`). Start with
+`name` and `summary`; `traits` and `values` are prose for humans and are deliberately not enforced.
+
+```jsonc
+{
+  "id": "friend-b", "role": "friend", "listen": true, "reply": "off",
+  "persona": {
+    "name": "...", "summary": "...", "traits": ["..."], "values": ["..."],
+    "topics": ["topic:..."],          // each must be a tag the character knows
+    "signature": ["..."],             // each must appear verbatim somewhere in his material
+    "voice": { "engine": "piper", "voice": "...", "speed": 1.05, "pitch": 1.0 },
+    "style": { "case": "lower", "drop_apostrophes": true, "strip_final_period": true }
+  }
+}
+```
+
+Keep `reply` at `"off"` until the material passes the harness. A half-written friend who cannot speak
+is a friend who cannot embarrass you.
+
+### Step 2 -- the character
+
+`characters.jsonl`: his `known_tags` (the social moves he gets, plus his topics) and his `tags`. A
+question whose tag is not listed is refused honestly rather than guessed at, which is the behaviour you
+want while the content is thin.
+
+### Step 3 -- what he says, per interest
+
+`knowledge.jsonl`, three or more lines per declared topic. Each is **anchor + reply**:
+
+* the **anchor** is how a person asks ("Do you like hockey?") -- it is what gets matched, and it must
+  name its own subject (the harness checks this)
+* the **reply** is the stance: an opinion with a reason, two sentences, opening sentence inside twelve
+  words so the trimmer can shorten it, and never a punchline
+* **add the plain word forms** to `slots` (`fish` as well as `fishing`). The name is the gate, so a
+  vocabulary gap makes a line unreachable, however good it is
+
+### Step 4 -- a life
+
+`life.json`, under his own id: 4+ activities (hook, snag, **why**), 4+ grievances, 4+ stories (body
+*and* a separate point), 3+ plans (with a time and a why). The `why` fields are what make elaboration
+personal instead of encyclopedic -- see `docs/LIFE.md`.
+
+### Step 5 -- how he types
+
+`style` in the persona. The levers are case, apostrophes, final period, typo rate; a friend with no
+`style` types tidily. Style is applied at the last moment, so it cannot leak into matching.
+
+### Step 6 -- his voice
+
+A rule in `voices.jsonl` naming him (id or display name), and if the model is not already cached, a
+`voices.lock.json` for it. `ttrpg-chatbots-tts --verify-voice` proves it; `/voicetest` lets you hear it.
+
+### Step 7 -- prove it, then let him talk
+
+```bash
+ttrpg-chatbots-persona friend-b        # twelve checks, exit 1 on failure
+ttrpg-chatbots-persona friend-b --json # the numbers, for a record
+```
+
+Then, and only then, set `"reply": "mention"` in `data/bots.json` and restart. The first conversation is
+still the real test: `docs/PERSONA.md` §3a lists the failures only a live channel shows.
+
+### What is cheap to change later, and what is not
+
+| Cheap | Expensive |
+|---|---|
+| adding subject lines, stories, plans | changing the shared-phrasebook decision |
+| tuning speed and pitch | changing his name (it is in the roster, the casting rule and the lock) |
+| adding a topic (four steps, all additive) | removing a topic once lines reference it |
 
 ## 5. Why the anchor and the stance are separate fields
 
@@ -373,7 +487,7 @@ ok   distinct_lines           no phrasebook repeats itself
 ok   life_depth               his day has enough in it to keep talking
 ok   stories_land             every story has a point to arrive at
 
-PASS  TopGuy  subjects 39  lines 91  median_words 5  two_sentence_pct 7.6  distinct_pct 96.2
+PASS  Terry  subjects 39  lines 91  median_words 5  two_sentence_pct 7.6  distinct_pct 96.2
 ```
 
 Against the old corpus: 7 words median but **51%** two-sentence lines and **29%** ending on a

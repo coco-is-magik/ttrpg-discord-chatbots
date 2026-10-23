@@ -25,9 +25,9 @@ ROSTER = Path("examples/bots.example.json")
 
 
 def test_a_minimal_persona_is_enough() -> None:
-    persona = Persona(name="TopGuy")
+    persona = Persona(name="Terry")
 
-    assert persona.describe() == "TopGuy"
+    assert persona.describe() == "Terry"
     assert persona.voice is None
 
 
@@ -38,7 +38,7 @@ def test_a_persona_needs_a_name() -> None:
 
 def test_a_topic_must_be_a_tag_that_can_be_looked_up() -> None:
     with pytest.raises(PersonaError, match="must be a tag"):
-        Persona(name="TopGuy", topics=("hockey",))
+        Persona(name="Terry", topics=("hockey",))
 
 
 def test_a_voice_needs_an_engine_and_a_name() -> None:
@@ -60,7 +60,7 @@ def test_a_voice_speed_must_be_a_sane_number() -> None:
 def test_from_record_reads_every_field() -> None:
     persona = Persona.from_record(
         {
-            "name": "TopGuy",
+            "name": "Terry",
             "summary": "Big and warm.",
             "traits": ["jolly"],
             "values": ["honesty"],
@@ -72,23 +72,23 @@ def test_from_record_reads_every_field() -> None:
 
     assert persona.topics == ("topic:hockey",)
     assert persona.voice is not None and persona.voice.speed == 0.92
-    assert persona.describe() == "TopGuy (1 topics, piper:en_US-ryan-high at 0.92x)"
+    assert persona.describe() == "Terry (1 topics, piper:en_US-ryan-high at 0.92x)"
 
 
 def test_from_record_names_the_offending_field() -> None:
     with pytest.raises(PersonaError, match="'name'"):
         Persona.from_record({"summary": "nameless"})
     with pytest.raises(PersonaError, match="'traits'"):
-        Persona.from_record({"name": "TopGuy", "traits": "jolly"})
+        Persona.from_record({"name": "Terry", "traits": "jolly"})
     with pytest.raises(PersonaError, match="voice.engine"):
-        Persona.from_record({"name": "TopGuy", "voice": {"engine": 3, "voice": "x"}})
+        Persona.from_record({"name": "Terry", "voice": {"engine": 3, "voice": "x"}})
 
 
 # --- the roster --------------------------------------------------------------------------------
 
 
 def _record(**overrides) -> dict:
-    record = {"id": "friend-a", "role": "friend", "persona": {"name": "TopGuy"}}
+    record = {"id": "friend-a", "role": "friend", "persona": {"name": "Terry"}}
     record.update(overrides)
     return record
 
@@ -96,7 +96,7 @@ def _record(**overrides) -> dict:
 def test_a_friend_may_carry_a_persona() -> None:
     (spec,) = bots_from_records([_record()])
 
-    assert spec.persona is not None and spec.persona.name == "TopGuy"
+    assert spec.persona is not None and spec.persona.name == "Terry"
 
 
 def test_the_helper_must_not_have_one() -> None:
@@ -132,7 +132,7 @@ def test_the_committed_roster_gives_friend_a_a_persona() -> None:
     persona = _roster()["friend-a"].persona
 
     assert persona is not None
-    assert persona.name == "TopGuy"
+    assert persona.name == "Terry"
     assert persona.topics, "a persona with no subjects has nothing to say about anything"
     assert persona.voice is not None
 
@@ -140,8 +140,7 @@ def test_the_committed_roster_gives_friend_a_a_persona() -> None:
 def test_the_other_friends_stay_neutral_for_now() -> None:
     roster = _roster()
 
-    # One at a time: giving friend-b a voice before its turn would be a decision nobody made.
-    assert roster["friend-b"].persona is None
+    # One at a time: giving friend-c a personality before his turn would be a decision nobody made.
     assert roster["friend-c"].persona is None
 
 
@@ -193,7 +192,7 @@ def test_the_voice_is_pinned_in_the_casting_table() -> None:
         rule
         for rule in rules
         if "friend-a" in (rule.get("characters") or [])
-        or "TopGuy" in (rule.get("characters") or [])
+        or "Terry" in (rule.get("characters") or [])
     ]
 
     assert matched, "no casting rule names friend-a"
@@ -363,3 +362,55 @@ def test_the_pitch_lever_actually_lowers_the_voice() -> None:
     assert deeper.pcm == clip.pcm, "no sample is touched, so nothing is degraded"
     assert len(to_discord_pcm(deeper)) > len(to_discord_pcm(clip)), "and it plays back longer"
     assert shift_pitch(clip, 1.0) is clip, "neutral is free"
+
+
+def test_a_persona_records_what_he_plays_and_what_he_likes() -> None:
+    """Two fields that are notes rather than rules, and where a subject starts life.
+
+    A preference nobody can discuss is a note; a preference he can talk about is a subject. These
+    record the first and are the seed of the second, which is why they live with the persona rather
+    than in a chat log.
+    """
+    persona = Persona.from_record(
+        {
+            "name": "Terry",
+            "plays": ["the knight", "the operator"],
+            "favourites": ["the Rangers", "Terry Davis"],
+        }
+    )
+
+    assert persona.plays == ("the knight", "the operator")
+    assert persona.favourites == ("the Rangers", "Terry Davis")
+
+
+def test_the_fields_are_validated_like_traits() -> None:
+    with pytest.raises(PersonaError, match="plays must be non-blank strings"):
+        Persona(name="Terry", plays=("",))
+
+
+def test_the_committed_roster_records_terrys_table_preference() -> None:
+    persona = _roster()["friend-a"].persona
+
+    assert persona is not None
+    assert any("knight" in item for item in persona.plays), persona.plays
+
+
+def test_otto_is_the_second_friend_and_has_his_own_voice() -> None:
+    roster = _roster()
+    otto = roster["friend-b"].persona
+
+    assert otto is not None and otto.name == "Otto"
+    assert otto.voice is not None
+    assert otto.style is not None and otto.style.stutter_rate > 0, "he is hesitant"
+    assert otto.style.emojis, "and he talks in emoticons"
+
+
+def test_the_two_friends_do_not_share_a_voice() -> None:
+    roster = _roster()
+    terry = roster["friend-a"].persona
+    otto = roster["friend-b"].persona
+
+    assert terry is not None and terry.voice is not None
+    assert otto is not None and otto.voice is not None
+    assert terry.voice.voice != otto.voice.voice
+    assert otto.voice.speed >= terry.voice.speed, "hesitation reads as a slower line"

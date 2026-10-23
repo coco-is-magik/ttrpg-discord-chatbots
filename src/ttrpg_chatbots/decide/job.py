@@ -21,6 +21,7 @@ def choose(
     known: str = "",
     story: str = "",
     point: bool = False,
+    theirs: bool = False,
 ) -> Job:
     """The one job this turn does.
 
@@ -57,7 +58,12 @@ def choose(
     if intent == "decline":
         return "close"
     if intent == "remark":
-        return "noted"
+        # A statement about *their own* thing that he knows about gets his answer about it: measured
+        # live, "my plant is dying" was acknowledged with "oh" while his plant line ("oh no, i am
+        # sorry. tell me what the leaves look like") sat unused. The possessive is what separates it
+        # from news about the world -- "the train was late again" is their complaint, not their plant,
+        # and answering it with his own train line was a non-sequitur ("i go when i can").
+        return "explain" if known == "world" and theirs else "noted"
     if intent in ("agree", "meta"):
         return "acknowledge"
     if intent in ("about_me", "plans"):

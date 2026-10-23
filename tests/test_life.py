@@ -69,8 +69,8 @@ def test_the_real_file_loads() -> None:
     assert "friend-a" in lives
     assert lives["friend-a"].current() is not None
     assert lives["friend-a"].grievance() is not None
-    # One at a time: b and c have no life yet.
-    assert "friend-b" not in lives
+    # One at a time: c has no life yet.
+    assert "friend-c" not in lives
 
 
 def test_rendering_fills_every_slot() -> None:
@@ -84,8 +84,8 @@ def test_rendering_fills_every_slot() -> None:
 def test_a_friend_without_a_life_renders_nothing() -> None:
     voice = LifeVoice(load_lives(DATA / "life.json"))
 
-    assert voice.has("friend-b") is False
-    assert voice.doing("friend-b") is None
+    assert voice.has("friend-c") is False
+    assert voice.doing("friend-c") is None
 
 
 def test_repeated_asks_do_not_repeat_the_line() -> None:

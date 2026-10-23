@@ -101,6 +101,27 @@ def sample_render(line: str) -> str:
 MAX_MEDIAN_WORDS = 18.0
 MAX_WORDS = 30
 
+#: Openings that collapse when the budget is tight. `render/trim` drops the *end* of a line, so a
+#: stance shaped "yes. here is the reason" degrades to "yes" -- measured live on "do you like
+#: trains?", which answered "i do" while the reason was thrown away. A name ("aelita") is not weak:
+#: it is the answer to the question that was asked.
+WEAK_OPENERS: frozenset[str] = frozenset(
+    {
+        "yes",
+        "no",
+        "i do",
+        "i do not",
+        "i don't",
+        "very much",
+        "when i can",
+        "sure",
+        "maybe",
+        "mm",
+        "oh",
+        "i think so",
+    }
+)
+
 #: Life depth, so "what are you up to" cannot run dry after a week.
 MIN_STORIES = 4
 MIN_PLANS = 3
@@ -220,7 +241,13 @@ def measure(
     knowledge = list(load_world(where).knowledge)
     life: Life = load_lives(where / "life.json")[friend]
 
-    subjects = [item for item in knowledge if any(tag.startswith("topic:") for tag in item.tags)]
+    # His lines, not the world's: two friends can hold the same tag, and a report that counted both
+    # would report a median made of somebody else's sentences.
+    subjects = [
+        item
+        for item in knowledge
+        if any(tag.startswith("topic:") for tag in item.tags) and item.owned_by(friend)
+    ]
     # Rendered with sample values: a template is not a sentence until its placeholders are filled.
     # The job travels with the line, because the register rules differ by job -- a story is allowed to
     # explain itself and land, and a hook is allowed a second sentence because it carries news.
@@ -298,6 +325,22 @@ def measure(
             f"every stance opens inside {CONTENT_FLOOR} words",
             ok=not over_budget,
             evidence=tuple(over_budget),
+        )
+    )
+
+    # 5c. The opening sentence has to survive the trimmer, because that is the only part of a stance
+    #     that a tight budget keeps.
+    weak = [
+        f"{item.id}: opens with {_first_sentence(item.spoken)!r}"
+        for item in subjects
+        if _first_sentence(item.spoken).strip(" .,!?").lower() in WEAK_OPENERS
+    ]
+    report.findings.append(
+        Finding(
+            "openers_stand_alone",
+            "no stance opens with a bare yes or no",
+            ok=not weak,
+            evidence=tuple(weak),
         )
     )
 

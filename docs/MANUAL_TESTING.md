@@ -190,13 +190,13 @@ question into an honest refusal:
 ```bash
 .venv/bin/ttrpg-chatbots-reply --data examples/friends_world --character friend-a \
   --max-distance 0.65 --ask "what is the sunken crown?"
-# TopGuy [no knowledge, d=0.759 (deflected)]:
+# Terry [no knowledge, d=0.759 (deflected)]:
 # I would be lying if I answered that. Let us find something I do know.
 ```
 
 ### 2.4 The personality holds (friend-a only)
 
-`friend-a` is **TopGuy**, and he has a written brief (`docs/PERSONA.md`) that the dataset is
+`friend-a` is **Terry**, and he has a written brief (`docs/PERSONA.md`) that the dataset is
 tested against. Four questions catch most mistakes:
 
 | Message | Expected |
@@ -221,7 +221,7 @@ Then check the things a table cannot:
 * He sounds like the same person every time — that is the point of one pool per character.
 
 `friend-b` and `friend-c` are deliberately still neutral. Asking them `do you like hockey?` must
-produce a plain "I don't know", not one of TopGuy's lines.
+produce a plain "I don't know", not one of Terry's lines.
 
 ### 2.5 The greet phase on its own (module ladder)
 
@@ -270,6 +270,24 @@ Log lines that correspond to each pass:
 * he answers a **non-greeting** through the ladder.
 
 Any of the four is a reason to re-open the decomposition rather than tune the phrasebook.
+
+### 2.8d Otto (friend-b, `Otokodelyoko#7113`)
+
+He speaks when mentioned, like Terry. What to listen for, and what each failure means:
+
+| Say | Expect | If it is wrong |
+|---|---|---|
+| `@Otokodelyoko hey` | two or three words, lowercase, sometimes an emoticon | `phrasebooks/friend-b/greet.json` |
+| `@Otokodelyoko what are you up to` | one of his five small activities (plants, a program, the trains, his shelf) | `life.json` under `friend-b` |
+| `@Otokodelyoko do you like trains?` | his own train line, not Terry's | `knowledge.jsonl`, the `character` field |
+| `@Otokodelyoko i am nervous about tomorrow` | something kind and plain (`i think you can do it`) | `phrasebooks/friend-b/reassure.json` |
+| `@Otokodelyoko rough day at work` | commiseration, not a complaint of his own | `phrasebooks/friend-b/mirror.json` |
+| `@Otokodelyoko what is the plot of dune` | an apology, not a guess | `phrasebooks/friend-b/hedge.json` |
+| read five replies aloud | some stuttering (`h-hi`, `w-writing`), emoticons in about half | `style.stutter_rate` / `emoji_rate` in the persona |
+| any reply | never argues, never a long speech | `knowledge.jsonl` for his topics |
+
+And the two of them together: ask Terry and Otto the same question and check the answers are not
+each other's -- `topic:computers` is one tag they both know.
 
 ### 2.8a Speech text (no Discord needed)
 
@@ -321,7 +339,7 @@ ttrpg-chatbots-persona --quiet     # PASS, or the failing check with the offendi
 
 Twelve checks: coverage per interest, every subject in his own voice, every anchor naming its own
 subject, stances fitting the budget, the register (no beats), length, warmth, catchphrases,
-distinctness, life depth, and stories having points. Expected today: `PASS TopGuy  subjects 39  lines
+distinctness, life depth, and stories having points. Expected today: `PASS Terry  subjects 39  lines
 91  median_words 5  two_sentence_pct 7.6`.
 
 | Check | Pass | If it fails |

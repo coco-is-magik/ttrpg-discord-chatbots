@@ -69,3 +69,52 @@ def test_the_closest_fact_in_the_subject_wins() -> None:
 
     assert best is not None and other is not None
     assert best.item_id != other.item_id, "two phrasings should reach two different facts"
+
+
+def test_a_friend_does_not_answer_with_another_friends_line() -> None:
+    """Two friends can hold the same subject tag without sharing a mouth.
+
+    `topic:computers` is one tag and both friends know it, so before lines were owned, whichever line
+    scored closest got spoken -- by either of them. Otto's line about taking a computer apart is not
+    Terry's answer about machines that phone home.
+    """
+    world = _world()
+    index = EntityIndex(world.knowledge)
+
+    terry = choose(
+        text="do you like computers?",
+        index=index,
+        knowledge=world.knowledge,
+        character=world.character("friend-a"),
+    )
+    otto = choose(
+        text="do you like computers?",
+        index=index,
+        knowledge=world.knowledge,
+        character=world.character("friend-b"),
+    )
+
+    assert terry is not None and otto is not None
+    assert terry.item_id != otto.item_id
+    assert "machine" in terry.text or "phone" in terry.text, terry.text
+    assert "apart" in otto.text, otto.text
+
+
+def test_a_shared_line_is_answerable_by_anyone_who_knows_the_tag() -> None:
+    from ttrpg_chatbots.reply.types import KnowledgeItem
+
+    shared = KnowledgeItem(id="k-x", text="Hey there.", tags=frozenset({"social:greeting"}))
+
+    assert shared.owned_by("friend-a") and shared.owned_by("friend-b")
+    assert shared.owned_by(None), "no character means the world dataset, which is everybody's"
+
+
+def test_a_line_owned_by_one_friend_is_not_offered_to_another() -> None:
+    from ttrpg_chatbots.reply.types import KnowledgeItem
+
+    mine = KnowledgeItem(
+        id="k-y", text="Do you like trains?", tags=frozenset({"topic:trains"}), character="friend-b"
+    )
+
+    assert mine.owned_by("friend-b")
+    assert not mine.owned_by("friend-a")

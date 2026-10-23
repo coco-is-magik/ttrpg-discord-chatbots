@@ -307,3 +307,18 @@ message is a confirmation rather than another "sounds good".
   reasons.
 - **Wiring cost.** Mitigation: every module ≤ 60 lines, one export, and a manifest test that fails if
   the module list changes silently.
+
+---
+
+## 9. A statement that names a subject
+
+Measured live on Otto, and it changed a rule. `my plant is dying` named `topic:plants`, and the
+answer was `oh` -- the acknowledgement -- while his actual plant line (*"oh no, i am sorry.
+tell me what the leaves look like"*) sat unused. But routing every subject-naming statement to
+`explain` was worse: *"the train was late again"* got his own train line back
+(*"i go when i can"*), which is a non-sequitur.
+
+The rule that survived is about **whose thing it is**: a statement that names a subject he knows
+**and** uses a possessive (*my*, *our*, *mine*) is about *their* thing, so he answers about it;
+anything else is acknowledged. `govern/loop` passes `theirs`, `decide/job` decides, and the two
+cases are tested.

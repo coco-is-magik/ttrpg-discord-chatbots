@@ -81,16 +81,24 @@ class VoiceSpec:
 class Persona:
     """Who a friend is: the brief, in the few fields that shape what they say.
 
-    ``name`` and ``summary`` are for humans and logs. ``traits`` and ``values`` are the brief
-    proper, and are *not* enforced -- prose cannot be tested, and pretending otherwise would be
-    worse than admitting it. ``topics``, ``signature`` and ``voice`` are enforced against the
-    dataset and the casting table.
+    ``name`` and ``summary`` are for humans and logs. ``traits``, ``values``, ``plays`` and
+    ``favourites`` are the brief proper, and are *not* enforced -- prose cannot be tested, and
+    pretending otherwise would be worse than admitting it. ``topics``, ``signature`` and ``voice``
+    are enforced against the dataset and the casting table.
+
+    ``plays`` is what he likes to be at a table (the knight, the operator, the one who holds the
+    line) and ``favourites`` is the media and the characters he actually likes. They are recorded
+    here rather than left in a conversation because a preference nobody can discuss is a note, and
+    a preference he can talk about is a subject -- so these two fields are where a subject starts
+    life, and `docs/PERSONA.md` §4 step 3 is where it becomes lines.
     """
 
     name: str
     summary: str = ""
     traits: tuple[str, ...] = ()
     values: tuple[str, ...] = ()
+    plays: tuple[str, ...] = ()
+    favourites: tuple[str, ...] = ()
     topics: tuple[str, ...] = ()
     signature: tuple[str, ...] = ()
     voice: VoiceSpec | None = None
@@ -102,6 +110,8 @@ class Persona:
         for label, items in (
             ("traits", self.traits),
             ("values", self.values),
+            ("plays", self.plays),
+            ("favourites", self.favourites),
             ("signature", self.signature),
         ):
             if any(not isinstance(item, str) or not item.strip() for item in items):
@@ -142,6 +152,9 @@ class Persona:
                 raise PersonaError(f"{where}: {key!r} must be a list of strings")
             return tuple(value)
 
+        plays = strings("plays")
+        favourites = strings("favourites")
+
         voice: VoiceSpec | None = None
         voice_record = record.get("voice")
         if voice_record is not None:
@@ -181,6 +194,8 @@ class Persona:
                 summary=summary.strip(),
                 traits=strings("traits"),
                 values=strings("values"),
+                plays=plays,
+                favourites=favourites,
                 topics=strings("topics"),
                 signature=strings("signature"),
                 voice=voice,

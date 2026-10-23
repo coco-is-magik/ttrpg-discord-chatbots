@@ -30,7 +30,7 @@
 {"id": "r-fallback-3", "character": "*", "tags": ["fallback"], "template": "I can't help with that."}
 {"id": "r-fallback-4", "character": "*", "tags": ["fallback"], "template": "Not something I know."}
 
-# --- friend-a: TopGuy --------------------------------------------------------------------------
+# --- friend-a: Terry --------------------------------------------------------------------------
 # His own pool. Owned templates come before the wildcard ones in `_candidates`, so these replace
 # the neutral lines entirely for him -- friend-b and friend-c are untouched.
 #

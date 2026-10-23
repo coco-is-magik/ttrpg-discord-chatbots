@@ -1,0 +1,16 @@
+{
+  "job": "reassure",
+  "note": "Somebody is nervous. He is the one who says the kind thing plainly, because he means it and because nobody says it to him.",
+  "families": {
+    "reassure": {
+      "when": {},
+      "variants": [
+        "i think you can do it",
+        "you are doing fine",
+        "that is normal, i promise",
+        "deep breath, you are okay",
+        "i am here if you need me"
+      ]
+    }
+  }
+}

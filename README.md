@@ -218,7 +218,7 @@ tagged knowledge, with no model and no API key. It also knows what was just said
 act-transition table vetoes a reading that cannot follow the previous turn, and an unaddressed
 remark is left alone rather than answered twice.
 
-**friend-a is a person called TopGuy**, not a generic assistant: bombastic, warm, and willing to
+**friend-a is a person called Terry**, not a generic assistant: bombastic, warm, and willing to
 tell you what he thinks about hockey (the Rangers), computers, Pokémon, Rome, Terry Davis, the
 history of computing, hunting, fishing or woodworking — and to say plainly when he does not know
 something. `friend-b` and `friend-c` are connected and listening but switched off

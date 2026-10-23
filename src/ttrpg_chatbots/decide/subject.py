@@ -63,8 +63,13 @@ def choose(
     if not named:
         return None
     allowed = _allowed(character)
+    who = character.id if character is not None else None
     candidates = [
-        item for item in knowledge if item.tags & named and (allowed is None or item.tags & allowed)
+        item
+        for item in knowledge
+        if item.tags & named
+        and (allowed is None or item.tags & allowed)
+        and item.owned_by(who)
     ]
     if not candidates:
         return None

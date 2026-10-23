@@ -1,0 +1,28 @@
+{
+  "job": "noted",
+  "note": "He acknowledges rather than answers. Sometimes that is one small noise and sometimes it is only an emoticon, which is a whole reply from somebody who is listening.",
+  "families": {
+    "noted": {
+      "when": {},
+      "variants": [
+        "oh",
+        "mm",
+        "ah",
+        "that is nice",
+        "oh, that is good",
+        "^^",
+        ":3",
+        "(◕‿◕)",
+        "(・ω・)"
+      ]
+    },
+    "recall": {
+      "when": {},
+      "variants": [
+        "how is {fact_value} doing?",
+        "is {fact_value} alright?",
+        "how is {fact_value}?"
+      ]
+    }
+  }
+}

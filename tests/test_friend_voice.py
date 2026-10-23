@@ -175,9 +175,9 @@ def test_the_bot_resolves_his_own_voice_not_the_default() -> None:
 def test_a_friend_with_no_cast_rule_gets_the_default() -> None:
     from ttrpg_chatbots.bots.voice import _speaker
 
-    profile = FriendVoice(friend="friend-b")._cast_or_default().profile_for(_speaker("friend-b"))
+    profile = FriendVoice(friend="friend-c")._cast_or_default().profile_for(_speaker("friend-c"))
 
-    assert profile.engine is None, "b is deliberately neutral until its persona is written"
+    assert profile.engine is None, "c is deliberately neutral until its persona is written"
 
 
 def test_speaking_twice_in_a_row_works() -> None:

@@ -224,18 +224,24 @@ def plan(
     # about the world, it only gives him a reason to ask after it.
     if intent in ("about_me", "explain_me", "plans"):
         known = "self" if scene.life else ""
-    elif intent == "about_world":
+    elif intent in ("about_world", "remark"):
+        # A remark that names a subject has something to draw on, and `decide/job` decides whether to
+        # use it -- it also wants to know whether the subject is *theirs*, which is the difference
+        # between "my plant is dying" and "the train was late again".
         known = "world" if scene.subject is not None else ""
     else:
         known = ""
 
     # The story gate: three ways in, and none of them is "he felt like it". When it says yes the
     # story owns the turn, which is why it is decided here rather than inside a phrasebook.
+    words = {word.strip(".,!?;:'").lower() for word in scene.utterance.text.split()}
+    theirs = bool(words & {"my", "our", "mine", "ours"})
     chosen = job.choose(
         intent=intent,
         phase=where,
         depth=depth,
         known=known,
+        theirs=theirs,
         story="" if telling is None or telling.mode == "point" else telling.mode,
         point=telling is not None and telling.mode == "point",
     )

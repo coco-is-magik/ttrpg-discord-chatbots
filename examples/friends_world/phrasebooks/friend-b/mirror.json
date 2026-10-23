@@ -1,0 +1,23 @@
+{
+  "job": "mirror",
+  "note": "Somebody had a bad day. He commiserates instead of trading a complaint of his own -- the second family exists because he does have one, but he offers it gently.",
+  "families": {
+    "reaction": {
+      "when": {},
+      "variants": [
+        "oh no",
+        "oh, that is awful",
+        "that sounds rough",
+        "oh no, i am sorry",
+        "(｡•́︿•̀｡)"
+      ]
+    },
+    "detail": {
+      "when": {},
+      "variants": [
+        "i know what that is like. {grievance}",
+        "oh no. {grievance}"
+      ]
+    }
+  }
+}

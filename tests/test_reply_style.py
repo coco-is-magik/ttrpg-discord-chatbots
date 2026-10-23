@@ -120,3 +120,52 @@ def test_from_record_names_the_bad_field() -> None:
         Style.from_record({"drop_apostrophes": "yes"})
     with pytest.raises(ValueError, match="style:"):
         Style.from_record({"case": "shouty"})
+
+
+class TestOttoStyle:
+    """Stutter and emoticons: two levers that exist because of one character's brief.
+
+    They are levers rather than hardcoded behaviour because the *next* friend may want neither, and
+    because hesitation has to survive into the voice -- a synthesiser reads "h-hi" as a stutter, so a
+    hesitant character does not need an engine that can act.
+    """
+
+    def test_a_stutter_repeats_the_opening_letter(self) -> None:
+        style = Style(stutter_rate=1.0)
+        assert apply_style("hello there", style) == "H-hello there"
+
+    def test_a_one_letter_word_is_not_stuttered(self) -> None:
+        style = Style(stutter_rate=1.0)
+        assert apply_style("i think so", style) == "I think so"
+
+    def test_stutter_is_deterministic(self) -> None:
+        style = Style(stutter_rate=0.5)
+        assert apply_style("hello there", style) == apply_style("hello there", style)
+
+    def test_an_emoticon_is_appended_from_the_pool(self) -> None:
+        style = Style(emoji_rate=1.0, emojis=("^^", ":3"))
+        result = apply_style("hello", style)
+        assert result.startswith("Hello ")
+        assert result.split()[-1] in {"^^", ":3"}
+
+    def test_the_emoticon_survives_a_stripped_final_period(self) -> None:
+        style = Style(strip_final_period=True, emoji_rate=1.0, emojis=(":3",))
+        assert apply_style("hello there.", style) == "Hello there :3"
+
+    def test_a_rate_with_no_pool_is_refused(self) -> None:
+        # Otherwise the rate would silently do nothing, which is worse than an error.
+        with pytest.raises(ValueError, match="non-empty emojis pool"):
+            Style(emoji_rate=0.5)
+
+    def test_rates_outside_zero_to_one_are_refused(self) -> None:
+        with pytest.raises(ValueError, match="stutter_rate must be between"):
+            Style(stutter_rate=2.0)
+        with pytest.raises(ValueError, match="emoji_rate must be between"):
+            Style(emoji_rate=-1.0)
+
+    def test_the_pool_is_read_from_a_persona_record(self) -> None:
+        style = Style.from_record({"emoji_rate": 0.4, "emojis": ["^^", ":3"], "stutter_rate": 0.2})
+
+        assert style.emojis == ("^^", ":3")
+        assert style.emoji_rate == 0.4
+        assert "stutter" in style.describe()
