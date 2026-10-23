@@ -1,0 +1,16 @@
+{
+  "job": "follow_up",
+  "note": "The turn where they answered a question he asked. Not an acknowledgement and not another question about them: an engaged follow-up on the thing they just said. Generic on purpose -- there is no parser here, so the lines have to work for 'playing video games', 'i sorted the garage out' and 'i am reading a book about trains' alike, which is what a person does too. Reachable only when he asked the previous question, so it cannot be used to interrogate somebody who was simply talking.",
+  "families": {
+    "follow_up": {
+      "when": {},
+      "variants": [
+        "oh nice. how is it going?",
+        "how long have you been at that?",
+        "is it any good?",
+        "oh, what kind?",
+        "how come?"
+      ]
+    }
+  }
+}

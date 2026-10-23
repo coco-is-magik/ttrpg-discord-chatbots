@@ -371,15 +371,41 @@ class TestHandingTheTurnBack:
 
         return load_shelf(DATA / "phrasebooks")
 
-    def test_a_high_rate_spends_the_turn_asking(self) -> None:
+    def test_what_they_said_is_engaged_with(self) -> None:
+        """A first-person statement is *theirs*, so the turn belongs to it.
+
+        Measured, and this is the bug that mattered: he answered "what about you? ^^" to
+        "i have been rebuilding a fence myself this month" -- asking them what they were doing, one
+        line after they had said what they were doing.
+        """
         scene = _scene(
             "i have been rebuilding a fence myself this month", question_rate=1.0
         )
         out = reply(scene=scene, books=self._shelf())
 
         assert isinstance(out, Line), out
+        assert dict(out.trail.steps).get("job") == "follow_up", out.trail.describe()
+        assert out.text.rstrip().endswith("?") or out.text.endswith("^"), out.text
+
+    def test_the_turn_goes_back_after_he_has_spoken_about_himself(self) -> None:
+        """A hand-back is for when *he* has just said something about his own day."""
+        his_hook = (
+            Turn(speaker="friend-a", text="watching the trains", act="ladder|offer_hook||", is_bot=True),
+        )
+        scene = _scene("nice one", question_rate=1.0, turns=his_hook)
+        out = reply(scene=scene, books=self._shelf())
+
+        assert isinstance(out, Line), out
         assert dict(out.trail.steps).get("job") == "ask_back", out.trail.describe()
         assert out.text.rstrip().endswith("?"), out.text
+
+    def test_a_third_person_statement_is_just_noted(self) -> None:
+        """Nothing of theirs to pick up and nothing of his to hand back: a bare note is right."""
+        scene = _scene("the truck is in the shop", question_rate=1.0)
+        out = reply(scene=scene, books=self._shelf())
+
+        assert isinstance(out, Line), out
+        assert dict(out.trail.steps).get("job") == "noted", out.trail.describe()
 
     def test_a_zero_rate_never_asks(self) -> None:
         scene = _scene(
@@ -390,20 +416,48 @@ class TestHandingTheTurnBack:
         assert isinstance(out, Line), out
         assert dict(out.trail.steps).get("job") == "noted", out.trail.describe()
 
-    def test_never_twice_in_a_row(self) -> None:
-        """Two questions back to back is an interrogation, not interest."""
+    def test_an_answer_is_engaged_with_rather_than_asked_again(self) -> None:
+        """They answered his question, so the turn belongs to what they said.
+
+        Measured: he asked "what about you? ^^", they said "playing video games", and he answered "oh" --
+        correct by every rule and useless as a reply. A question about their answer is not a second
+        question about them; it is proof that he was listening.
+        """
         asked = (
             Turn(speaker="friend-a", text="what about you?", act="ladder|ask_back||", is_bot=True),
+        )
+        scene = _scene("playing video games", question_rate=1.0, turns=asked)
+        out = reply(scene=scene, books=self._shelf())
+
+        assert isinstance(out, Line), out
+        steps = dict(out.trail.steps)
+        assert steps.get("job") == "follow_up", out.trail.describe()
+        assert steps.get("family") == "follow_up"
+
+    def test_a_chained_follow_up_stays_about_what_they_said(self) -> None:
+        """Once he is following up, the next answer is followed up on too -- and never with the same line.
+
+        Asking about the thing they said is engagement; asking "what about you?" again is the
+        interrogation. So the job stays `follow_up`, and the *ledger* is what stops him repeating
+        himself word for word.
+        """
+        turns = (
+            Turn(speaker="friend-a", text="what about you? ^^", act="ladder|ask_back||", is_bot=True),
+            Turn(speaker="tav", text="playing video games", act=None, is_bot=False),
+            Turn(speaker="friend-a", text="is it any good?", act="ladder|follow_up||", is_bot=True),
         )
         scene = _scene(
             "i have been rebuilding a fence myself this month",
             question_rate=1.0,
-            turns=asked,
+            turns=turns,
         )
         out = reply(scene=scene, books=self._shelf())
 
         assert isinstance(out, Line), out
-        assert dict(out.trail.steps).get("job") == "noted", out.trail.describe()
+        steps = dict(out.trail.steps)
+        assert steps.get("job") == "follow_up", out.trail.describe()
+        assert out.text != "is it any good?", "the ledger stops a word-for-word repeat"
+        assert out.text != "what about you? ^^"
 
     def test_a_terse_reply_is_not_an_invitation(self) -> None:
         scene = _scene("k", question_rate=1.0)
@@ -458,13 +512,10 @@ class TestAQuestionWithAnEmoticonIsStillAQuestion:
         assert dict(out.trail.steps).get("job") != "ask_back", out.trail.describe()
 
     @pytest.mark.parametrize("said", ["opener this week", "night night", "messing with an old pc"])
-    def test_a_statement_does_not_block_the_question(self, said: str) -> None:
+    def test_a_statement_does_not_block_the_hand_back(self, said: str) -> None:
+        """A statement of his own is not a question, so the hand-back is still allowed."""
         turns = (Turn(speaker="friend-b", text=said, act="ladder|offer_hook||", is_bot=True),)
-        scene = _scene(
-            "i have been rebuilding a fence myself this month",
-            question_rate=1.0,
-            turns=turns,
-        )
+        scene = _scene("the truck is in the shop", question_rate=1.0, turns=turns)
         out = reply(scene=scene, books=self._shelf())
 
         assert isinstance(out, Line), out

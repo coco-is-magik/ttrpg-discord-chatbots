@@ -21,6 +21,7 @@ from ttrpg_chatbots.decide.shelf import Shelf
 from ttrpg_chatbots.decide.variant import Phrasebook
 from ttrpg_chatbots.govern.loop import Scene, reply
 from ttrpg_chatbots.govern.repeat import Recent
+from ttrpg_chatbots.reply.context import Turn
 from ttrpg_chatbots.life.state import Life
 from ttrpg_chatbots.perceive.clock import Moment, read_clock
 from ttrpg_chatbots.reply.style import Style
@@ -92,6 +93,7 @@ def run(
     repeats: int = 3,
     style: Style | None = None,
     question_rate: float = 1.0,
+    he_asked: bool = False,
 ) -> Report:
     """Push the matrix through the ladder and count what came out."""
     people = relationships or (
@@ -121,6 +123,7 @@ def run(
                             relationship=person,
                             life=life,
                             name="tav",
+                            turns=_after_his_question() if he_asked else (),
                             # The harness measures what a phase *can* say, so it asks as often as it
                             # can: `ask_back` is unreachable at question_rate 0, and a phase the
                             # harness cannot reach is a phase nothing proves.
@@ -162,7 +165,19 @@ PHASE_MESSAGES: dict[str, tuple[str, ...]] = {
         "i finally finished the thing i was working on",
         "i spent the weekend sorting the garage out",
     ),
+    # The answers to a question he asked. Unreachable without `he_asked`, which is the point: the phase
+    # exists to prove he was listening, so it may only follow a question of his own.
+    "follow_up": (
+        "playing video games",
+        "i sorted the garage out",
+        "reading a book about trains",
+    ),
 }
+
+
+def _after_his_question() -> tuple[Turn, ...]:
+    """A turn of his own that asked a question, so the follow-up phase is reachable."""
+    return (Turn(speaker="friend", text="what about you?", act="ladder|ask_back||", is_bot=True),)
 
 
 def run_phases(
@@ -178,6 +193,11 @@ def run_phases(
         if messages is None:
             continue
         reports[job] = run(
-            books=books, messages=messages, repeats=3, style=style, life=life
+            books=books,
+            messages=messages,
+            repeats=3,
+            style=style,
+            life=life,
+            he_asked=job == "follow_up",
         )
     return reports

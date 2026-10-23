@@ -243,6 +243,29 @@ class TestOneEmoticonPerLine:
         style = Style(emoji_rate=1.0, emojis=("^^",))
         assert apply_style("hello there", style) == "Hello there ^^"
 
-    def test_an_emoticon_in_the_middle_is_not_the_end(self) -> None:
+    def test_a_line_that_opens_with_one_is_left_alone(self) -> None:
+        """Any emoticon anywhere is the line's mark, not just a trailing one -- measured when a
+        follow-up reading "oh nice ^^. how is it going?" came out with a second emoticon appended."""
         style = Style(emoji_rate=1.0, emojis=("^^",))
-        assert apply_style("^^ hello", style) == "^^ hello ^^"
+        assert apply_style("^^ hello", style) == "^^ hello"
+
+
+class TestOneEmoticonPerLineAnywhere:
+    """The check is membership in the pool, not the last character.
+
+    Measured: the first version only looked at the final token, so "oh nice ^^. how is it going?" -- a
+    follow-up that already had its emoticon -- came out with a second one after the question mark.
+    """
+
+    def test_one_in_the_middle_is_still_one(self) -> None:
+        style = Style(emoji_rate=1.0, emojis=("^^", ":3"))
+        assert apply_style("oh nice ^^. how is it going?", style) == "Oh nice ^^. how is it going?"
+
+    def test_a_line_with_none_still_gets_one(self) -> None:
+        style = Style(emoji_rate=1.0, emojis=("^^",))
+        assert apply_style("how is it going?", style) == "How is it going? ^^"
+
+    def test_a_mark_inside_a_word_is_not_a_mark(self) -> None:
+        """`:3` must not match `3:30`."""
+        style = Style(emoji_rate=1.0, emojis=(":3",))
+        assert apply_style("the 3:30 train", style) == "The 3:30 train :3"

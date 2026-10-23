@@ -10,6 +10,8 @@ how a half-built pipeline stays usable while the rest of it is written.
 
 from __future__ import annotations
 
+import re
+
 from dataclasses import dataclass, field
 from datetime import date
 
@@ -45,6 +47,7 @@ from ttrpg_chatbots.govern.repeat import Recent
 from ttrpg_chatbots.govern.trace import Recorder
 from ttrpg_chatbots.life.state import Life
 from ttrpg_chatbots.memory.long import Fact
+from ttrpg_chatbots.perceive import sentiment as sentiment_rung
 from ttrpg_chatbots.perceive import tone as tone_rung
 from ttrpg_chatbots.perceive.clock import Moment, read_clock
 from ttrpg_chatbots.perceive.inbound import looks_like_question
@@ -154,7 +157,18 @@ def intent_of(text: str) -> Intent:
     """
     tag = social.match_intent(text)
     if tag is None:
-        return "about_world" if looks_like_question(text) else "remark"
+        if looks_like_question(text):
+            return "about_world"
+        # **Bad news is a move, not a remark.** The lexicon knows a handful of complaints and
+        # sympathies; sentiment knows whether the sentence is bad news at all, and it was being read
+        # only to *rank* knowledge items -- never to route. Measured on a held-out probe: "my cat died"
+        # routed as a neutral remark, was treated as something of theirs to engage with, and got
+        # "is it any good?". The target decides which move: about them is sympathy, about the world is
+        # a complaint to share.
+        feeling = sentiment_rung.read(text)
+        if feeling.polarity in ("negative", "mixed"):
+            return "complain" if feeling.target == "it" else "comfort"
+        return "remark"
     return _INTENT.get(tag, "remark")
 
 
@@ -255,13 +269,31 @@ def plan(
     # is the persona's `question_rate`, not the ladder's decision. Measured: Otto's brief says he
     # prompts people to keep talking, and before this the rung that decides to hand the turn back was
     # referenced by nothing but its own test.
-    if chosen == "noted" and reciprocate.ask_about_them(
-        question_rate=scene.question_rate,
-        text=scene.utterance.text,
-        tone=tone_rung.read(scene.utterance.text),
-        already_asked=_asked_last(scene.turns),
-    ):
-        chosen = "ask_back"
+    if chosen == "noted" and remembered is None:
+        # `remembered is None` is deliberate: asking after their dog is a stronger, more specific move
+        # than a generic follow-up, and the `noted` book is the one that carries the recall family.
+        # Measured: without this guard "my dog is called otis" got "is it any good?".
+        tone = tone_rung.read(scene.utterance.text)
+        if reciprocate.engage(
+            question_rate=scene.question_rate,
+            text=scene.utterance.text,
+            tone=tone,
+            already_asked=_asked_last(scene.turns),
+            theirs=_about_them(scene.utterance.text),
+            bad_news=sentiment_rung.read(scene.utterance.text).polarity in ("negative", "mixed"),
+        ):
+            # There is something of theirs to pick up: they answered a question of his, or they said
+            # something about themselves. Measured both ways round -- engaging is right, and asking
+            # "what about you?" in reply to "i have been rebuilding a fence myself" is not.
+            chosen = "follow_up"
+        elif reciprocate.hand_back(
+            question_rate=scene.question_rate,
+            text=scene.utterance.text,
+            tone=tone,
+            he_spoke=_he_spoke_last(scene.turns),
+        ):
+            # He has just spoken about himself, so the turn goes back to them.
+            chosen = "ask_back"
 
     chosen_book = book if book is not None else (books.for_job(chosen) if books else None)
     if chosen_book is None:
@@ -279,6 +311,63 @@ def plan(
         remembered=remembered,
         telling=telling,
     )
+
+
+def _about_them(text: str) -> bool:
+    """Whether they said something about themselves -- a first-person statement.
+
+    Two signals, and the second is the general one. A first-person pronoun is obvious ("i have been
+    rebuilding a fence myself this month", "we got the shed up"). But **chat omits the subject**:
+    "sorted the garage out", "went for a run" -- the person is the subject and never says so. A
+    past-tense verb in front is that signal, and it is a linguistic category rather than a list of our
+    examples, while "the game got cancelled" opens with a determiner and is not about them at all.
+
+    Measured on a held-out probe: without the second signal, every subject-less statement was noted
+    rather than engaged with -- 2 of 20 messages, and both of them the kind a friend would pick up.
+    """
+    words = [word.strip(".,!?;:'\"").lower() for word in (text or "").split()]
+    if set(words) & FIRST_PERSON:
+        return True
+    return bool(words) and _PAST_VERB.match(words[0]) is not None
+
+
+#: A word that looks like a past-tense verb: regular (`-ed`) or one of the common irregulars. A
+#: category, not a topic list -- which is the difference between generalising and overfitting.
+_PAST_VERB = re.compile(
+    r"^(?:\w+ed|went|got|made|took|saw|did|had|came|gave|bought|sold|found|felt|kept|left|met|ran|"
+    r"said|sent|sat|told|thought|wrote|ate|drank|slept|woke|broke|chose|drove|fell|flew|grew|knew|"
+    r"lost|paid|put|read|rode|rose|sang|spoke|stood|swam|threw|wore|won|quit|finished|sorted)$"
+)
+
+#: Phrasings that carry a *special* reason to be said -- a memory, something on his calendar, a story,
+#: an invitation. They are longer than the ordinary register, so they are the ones that may need to fall
+#: back to it when the budget is tight.
+SPECIAL_REGISTERS = frozenset({"recall", "event", "story", "plan"})
+
+#: The words that make a message about the person saying it.
+FIRST_PERSON = frozenset(
+    {
+        "i", "im", "i'm", "ive", "i've", "id", "i'd", "ill", "i'll",
+        "me", "my", "mine", "myself", "we", "we're", "were", "us", "our", "ours",
+    }
+)
+
+
+def _he_spoke_last(turns: tuple[Turn, ...]) -> bool:
+    """Whether his last turn was about himself -- a hook, an explanation, or a story.
+
+    Read from the act he recorded (`ladder|job|...`), because that is the only place the conversation
+    knows what he was doing. This is what makes ``ask_back`` a *hand-back*: it is only natural once he
+    has said something about his own day.
+    """
+    for turn in reversed(turns):
+        if not turn.is_bot:
+            continue
+        parts = (turn.act or "").split("|")
+        if len(parts) >= 2 and parts[0] == "ladder":
+            return parts[1] in ("offer_hook", "explain", "tell_story")
+        return False
+    return False
 
 
 def _asked_last(turns: tuple[Turn, ...]) -> bool:
@@ -531,6 +620,28 @@ def reply(
     trace.add("fill", text)
 
     trimmed = trim.enforce(text, budget)
+    if trimmed is None and register in SPECIAL_REGISTERS:
+        # A *special* phrasing that does not fit falls back to the ordinary one, rather than going
+        # silent. The template stage already did this; the trim stage did not, so a plan line that was
+        # one sentence too long for a five-word question produced nothing at all -- measured on
+        # "are you free this weekend".
+        ordinary = family_rung.choose(
+            job=chosen,
+            relationship=scene.relationship,
+            part_of_day=moment.part_of_day,
+            depth=depth,
+            subject=scene.subject is not None,
+        )
+        alternative = variant.choose(
+            book=chosen_book, family=ordinary, recent=ledger.recent(), budget=budget
+        )
+        if alternative is not None:
+            refilled = fill.render(alternative, slots)
+            if refilled is not None:
+                retrimmed = trim.enforce(refilled, budget)
+                if retrimmed is not None:
+                    trace.add("fallback", f"{ordinary} (no room for {register})")
+                    register, template, text, trimmed = ordinary, alternative, refilled, retrimmed
     trace.add("trim", trimmed or "over budget")
     if trimmed is None:
         return Abstain("over budget")

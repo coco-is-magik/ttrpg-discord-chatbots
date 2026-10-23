@@ -531,10 +531,11 @@ class FriendBot(discord.Client):
         steps = dict(out.trail.steps)
         job = steps.get("job", "?")
         about = steps.get("about", "|")
-        if job == "ask_back":
-            # He asked about *them*, so nothing of his is under discussion. Measured: the ask_back turn
-            # recorded the subject carried from earlier ("topic:trains"), the next message inherited it,
-            # and "playing video games" was matched to his trains at 0.96.
+        if job in ("ask_back", "follow_up"):
+            # Both are about *them* -- one asks about them, the other picks up what they said -- so
+            # nothing of his is under discussion. Measured: these turns recorded his activity
+            # ("topic:trains"), the next message inherited it, and "playing video games" was matched to
+            # his trains at 0.96.
             about = "|"
         # `ladder|job|topic|story_id`: what he said, and what it was about. The next turn reads
         # this, which is how a follow-up reaches the point of a story.

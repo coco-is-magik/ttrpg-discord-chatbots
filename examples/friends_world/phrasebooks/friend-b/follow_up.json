@@ -1,0 +1,16 @@
+{
+  "job": "follow_up",
+  "note": "Otto's own: he is the one who asks, so he is the one who has to prove he was listening. Warmer than the shared register and shorter -- 'oh nice' is a whole reaction for him. Every line has to survive the persona gate, and the emoticon is only on the ones that would otherwise read as flat.",
+  "families": {
+    "follow_up": {
+      "when": {},
+      "variants": [
+        "oh nice ^^. how is it going?",
+        "how long have you been at that?",
+        "is it any good?",
+        "oh, what kind?",
+        "oh, tell me more ^^"
+      ]
+    }
+  }
+}

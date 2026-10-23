@@ -68,8 +68,12 @@ answering.
 | `@Otokodelyoko rough day at work` | commiseration, never a complaint of his own | `phrasebooks/friend-b/mirror.json` |
 | `@Otokodelyoko thanks` | `no worries`, `oh, it is nothing`, an emoticon | `phrasebooks/friend-b/acknowledge.json` |
 | `@Otokodelyoko good night` | `night night`, `sleep well` | `phrasebooks/friend-b/close.json` |
-| `@Otokodelyoko i have been rebuilding a fence myself this month` | **a question back** — `what about you? ^^`. Otto asks 8 times in 10 on a statement like this; the same line to Terry is `yeah` 8 times in 10 | `question_rate` in the persona, `phrasebooks/friend-b/ask_back.json` |
+| `@Otokodelyoko i have been rebuilding a fence myself this month` | **engaged with what you said** — `how long have you been at that?`. Never `what about you?`: you just told him what you were doing | `decide/reciprocate.engage`, `phrasebooks/friend-b/follow_up.json` |
+| `@Otokodelyoko what are you up to` then a bare `nice one` | `what about you? ^^` — a hand-back, because *he* has just spoken about his own day | `decide/reciprocate.hand_back` |
+| `@Otokodelyoko the truck is in the shop` | a bare note (`ah, oh`) — third person, nothing of yours to pick up | `decide/job` (noted) |
 | two statements in a row to Otto | he asks **once**, never twice running | `decide/reciprocate.ask_about_them` |
+| answer his question (`playing video games`) | an engaged follow-up (`oh nice ^^. how is it going?`), never a bare `oh` and never the same question again | `decide/reciprocate.follow_up_on_their_answer`, `phrasebooks/friend-b/follow_up.json` |
+| `yeah it is pretty good` | `nice` / `oh nice ^^` — an agreement is not a thank-you, so never `no worries` | `decide/job.py` (agree → noted) |
 | `@Otokodelyoko how was your weekend` | something from his own week, not a hedge | `reply/intents.py` (the wellbeing patterns) |
 | `@TerrysTopGuy anyway how is your day going` | his own day (`opener this week`), never `i do not know that one` | same |
 | `@Otokodelyoko what is the plot of dune?` | an apology, **never a guess** | `phrasebooks/friend-b/hedge.json` |

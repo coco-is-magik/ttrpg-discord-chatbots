@@ -84,6 +84,9 @@ def choose(
         # Its own family, not the warm register: the whole line is a question, and a register that
         # mixes statements in would put "{hook}" after a question mark.
         return "ask_back"
+    if job == "follow_up":
+        # Asking about the thing they just said, which is a different move from asking about them.
+        return "follow_up"
     if job == "hedge":
         return "hedge"
     if relationship.warmth >= 2:

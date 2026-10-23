@@ -33,6 +33,7 @@ PHASES = (
     "ask_back",
     "close",
     "explain",
+    "follow_up",
     "greet",
     "hedge",
     "mirror",

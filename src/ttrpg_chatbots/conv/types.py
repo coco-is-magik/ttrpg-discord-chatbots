@@ -31,6 +31,7 @@ Job = Literal[
     "decline",
     "close",
     "ask_back",
+    "follow_up",
 ]
 Form = Literal["word", "clause", "clause_question", "two_beat"]
 Family = Literal[
@@ -48,6 +49,7 @@ Family = Literal[
     "closing",
     "noted",
     "ask_back",
+    "follow_up",
     "recall",
     "hedge",
 ]

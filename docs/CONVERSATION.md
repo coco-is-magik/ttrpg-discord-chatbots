@@ -396,13 +396,66 @@ asked about **them**, so nothing of his was under discussion; the act now carrie
 Held by six ladder tests (including four ways of decorating a question) and two supervisor tests that
 walk the exact exchange.
 
-### What is still not right in that exchange
+### The third fix: engaging with the answer
 
-The answer he gives to "playing video games" is `ah, oh` -- correct by the rules (one question, no
-repeat) and weak as a reply, because nothing in the ladder picks up what *they* just said. A person
-says "oh nice, what are you playing?". That is the next capability, not a bug: it needs a job that
-follows up on their answer, which is the same shape as the "relating one thing to another" item on the
-roadmap.
+The exchange still read wrong after those two, in a way the rules could not see:
+
+```
+Otto:   what about you? ^^        (ask_back)
+noodle: playing video games
+Otto:   ah, oh                    (noted)  correct, and useless
+```
+
+`noted` is the job for a statement he has nothing to add to, and something *they* said is not that. So
+there is now **`follow_up`**: when there is something of theirs to pick up, that is what the turn is
+for.
+
+**Getting the triggers the right way round was the whole problem**, and the first version had them
+backwards: it spent the turn asking "what about you? ^^" in reply to *"i have been rebuilding a fence
+myself this month"* -- asking them what they were doing, one line after they had said what they were
+doing. The two moves are:
+
+| | signal | why |
+|---|---|---|
+| **`follow_up`** | they answered a question of his (`already_asked`), **or** they said something about themselves (`theirs` -- a first-person statement) | there is something of theirs to pick up |
+| **`ask_back`** | **he** has just spoken about himself (his last turn was a hook, an explanation or a story) | "what about you?" is only natural after he has said something about his own day |
+
+Both are gated by `question_rate`, so a reserved friend does neither and simply notes.
+
+| | |
+|---|---|
+| the signal | `already_asked`, or a first-person statement from them |
+| the bar | lower than asking out of the blue: `question_rate` is scaled by `ANSWERED_BONUS` (1.5) when they have just answered him, because being answered is a bigger opening than anything volunteered |
+| the wording | `phrasebooks/follow_up.json`, overridable per friend (Otto has his own) |
+| generic on purpose | there is no parser here, so the lines have to work for "playing video games", "i sorted the garage out" and "reading a book about trains" alike -- which is what a person does too |
+
+It fires only when there is something of theirs in the message, so it cannot become a way to
+interrogate somebody who was simply talking. Chained follow-ups are allowed, because *"is it any
+good?"* after *"playing video games"* is engagement; the ledger is what stops him repeating a line
+word for word. And it stands aside when there is something better to do: if a fact of theirs is in
+play, the **recall** family wins, because asking after their dog beats a generic question.
+
+```
+Terry                                          Otto
+what are you up to      -> opener this week      -> watching the trains        (offer_hook)
+i have been rebuilding… -> yeah                  -> how long have you been at that?  (follow_up)
+playing video games     -> nice                  -> oh nice ^^. how is it going?     (follow_up)
+yeah it is pretty good  -> ah right              -> ah, oh nice ^^                   (follow_up)
+the truck is in the shop -> fair enough          -> ah, oh                           (noted)
+```
+
+Two people, one ladder: Terry notes and rarely asks, Otto engages with almost everything.
+
+### Two more bugs it exposed
+
+* **An agreement is not a thank-you.** `yeah it is pretty good` was answered with `no worries`, because
+  `agree` and `thanks` shared the `acknowledge` job. `agree` now goes to `noted` ("nice"), and
+  `acknowledge` is only for the two moves that have a stock reply: thanks and apologies.
+* **"One emoticon per line" had two wrong versions.** Checking only the final token let
+  "oh nice ^^. how is it going?" collect a second mark after the question mark; stripping punctuation
+  from every token turned ":3" into "3", so the mark went unrecognised and was appended anyway. A mark
+  is now matched as a whole token with optional trailing punctuation -- `^^.` counts, `:3` counts,
+  `3:30` does not.
 
 ### A bug the work found
 
@@ -414,3 +467,43 @@ in it is what the check tests -- not a hand-written list.
 **Measured, both friends:** `ask_back` answers 108 of 108 attempts at median 3 words, 0% ending on a
 beat, 5% distinct (repetition is the register). Held by five ladder tests, four persona tests and a
 fourteen-case lexicon table.
+
+
+---
+
+## 11. Overfitting, measured
+
+Every phrase in the material was written by hand, and every slice in §10 was debugged against real
+conversations. That is how a system quietly narrows: the detectors get tuned to the examples the tests
+also use, and the suite keeps passing while the system gets worse at everything else.
+
+So there is a **held-out probe**: twenty ordinary messages, written down with what a person would do,
+run through the live routing. `tests/test_generalisation.py` pins it, and refuses to let a probe message
+become a phrasebook variant -- the moment it does, the probe stops measuring anything.
+
+**First run: 13 of 20.** Every miss was in a *detector*, not in a mechanism:
+
+| what happened | why | the general fix |
+|---|---|---|
+| `my cat died` → *"is it any good?"* | **sentiment was read only to rank knowledge items, never to route.** A bereavement was a neutral remark, and a first-person statement was therefore something to be curious about | negative sentiment now routes: about them → sympathy, about the world → a complaint to share. And `engage` refuses outright when the news is bad -- a guard, not a routing rule, so it holds even when the routing misses |
+| `the boss is being a nightmare` → noted | the complaint lexicon knew a handful of phrases | same fix: sentiment decides, not the phrase list |
+| `sorted the garage out`, `went for a run` → noted | **chat omits the subject.** The first-person detector needed a pronoun, so every subject-less statement looked like a remark about the world | a past-tense verb in front is the signal -- a linguistic category (`-ed` plus the common irregulars), not a list of our examples. `the game got cancelled` opens with a determiner and is correctly not about them |
+| `are you free this weekend` → silence | a *plan* phrasing that did not fit the budget produced nothing | the special-register fallback now covers the trim stage and `plan` too: fall back to the ordinary phrasing rather than going silent |
+| `i am going to bed` → noted | the closing pattern was anchored and its lead-ins did not include "i am" | lead-ins widened to how people actually open a goodbye |
+
+**After: 18 of 20**, and both remaining are judgement calls rather than faults -- `i quit my job` can
+legitimately be noted (the engagement roll misses one time in five) and `the game got cancelled`
+commiserated rather than noted, which is better than what I had written down as the expectation.
+
+The lesson is in the table: **the phrase lists were the overfitting, and sentiment plus syntax were the
+generalisation.** A detector built on "words that look like a complaint" only ever knows the complaints
+somebody thought of; one built on polarity knows the next one too.
+
+### What is still narrow
+
+* The **emotion vocabulary** is a lexicon. It will miss grief that does not use its words ("we said
+goodbye to him on tuesday"), and the honest fix for that is the model, not more words.
+* **Significance is not measured.** `i quit my job` engages only as often as `i got a new bike`, because
+  the roll knows nothing about how big the news is.
+* **English only**, by construction: past-tense detection, pronoun lists and the closings are all
+  English shapes.

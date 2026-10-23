@@ -244,6 +244,23 @@ def _introduce_filler(text: str, pool: tuple[str, ...]) -> str:
     return f"{_pick_from(text, pool)}, {text}"
 
 
+def _already_has_mark(text: str, pool: tuple[str, ...]) -> bool:
+    """Whether the line already carries one of these marks as a token.
+
+    A mark is matched as a whole token, optionally followed by punctuation: ``^^.`` counts, ``^^``
+    counts, and ``:3`` counts -- while ``3:30`` does not, and neither does a mark that happens to sit
+    inside a word. Written after two wrong versions: the first only looked at the final token, the
+    second stripped punctuation from both ends and so destroyed every emoticon that *starts* with it.
+    """
+    for token in text.split():
+        for mark in pool:
+            if token == mark or (
+                token.startswith(mark) and not token[len(mark) :].strip(".,!?;:'")
+            ):
+                return True
+    return False
+
+
 def _pick_from(text: str, pool: tuple[str, ...]) -> str:
     """A stable pick from a pool, keyed on the line so a replay is a replay."""
     return pool[_digest(text) % len(pool)]
@@ -287,11 +304,11 @@ def apply_style(text: str, style: Style | None = None) -> str:
     elif active.case == "sentence":
         result = result[:1].upper() + result[1:]
     if active.emoji_rate and active.emojis:
-        # Not if the line already carries one. Measured: a phrasebook variant that ends in "^_" got
-        # a second emoticon appended by the style, so a shy friend said "what about you? ^^ (◕‿◕)".
-        # The pool is the phrasebook's own vocabulary, so this is the right thing to test against.
-        last = result.rsplit(None, 1)[-1] if result else ""
-        if last not in active.emojis:
+        # Not if the line already carries one -- **anywhere in it**, not just at the end. Two failure
+        # modes were measured: checking only the last token let "oh nice ^^. how is it going?" collect a
+        # second emoticon after the question mark, and stripping punctuation from every token turned
+        # ":3" into "3", so the mark went unrecognised and was appended again.
+        if not _already_has_mark(result, active.emojis):
             if _digest(f"emoji:{result}") % 10_000 < int(active.emoji_rate * 10_000):
                 result = f"{result} {_pick_from(result, active.emojis)}"
     return result

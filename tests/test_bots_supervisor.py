@@ -868,23 +868,33 @@ def test_an_ask_back_turn_carries_no_subject_of_his_own(monkeypatch) -> None:
     chat = _Chat()
     friend = _MentionedFriend(_asking_friend(), chat=chat)
 
-    asyncio.run(
-        friend.on_message(
-            _mention(friend, "<@1> i have been rebuilding a fence myself this month")
-        )
-    )
+    # He speaks about his own day, then they answer with something that is not about them -- so the
+    # turn is a hand-back, which is the job that must not carry his subject.
+    asyncio.run(friend.on_message(_mention(friend, "<@1> what are you up to")))
+    asyncio.run(friend.on_message(_mention(friend, "<@1> nice one")))
 
     acts = [turn.act for turn in tuple(friend.history) if turn.is_bot]
     assert acts, "he answered"
     assert acts[-1].startswith("ladder|ask_back|"), acts[-1]
     assert acts[-1] == "ladder|ask_back||", "no topic of his is carried into their answer"
 
+    # And the same for a follow-up: that turn is about what *they* said.
+    third = _mention(friend, "<@1> i have been rebuilding a fence myself this month")
+    asyncio.run(friend.on_message(third))
+    acts = [turn.act for turn in tuple(friend.history) if turn.is_bot]
+    assert acts[-1] == "ladder|follow_up||", acts[-1]
+
 
 def test_he_does_not_ask_the_same_person_twice_running(monkeypatch) -> None:
-    """The exchange that was wrong: he asked \"what about you? ^^\", they answered, he asked again.
+    """The exchange that was wrong, walked end to end.
 
-    The rule existed and could not fire, because `_asked_last` tested `endswith(\"?\")` and his line
-    ended in an emoticon.
+    He asked "what about you? ^^" (and the rule that stops him asking again could not fire, because it
+    tested `endswith("?")` while his line ended in an emoticon), they answered "playing video games",
+    and he asked about *them* again -- while ignoring what they had just said.
+
+    Two properties now, and they are different: he asks about **them** once, and the next turn is about
+    **what they said**. A question about their answer is engagement; another "what about you?" is an
+    interrogation.
     """
     monkeypatch.setenv("TTRPG_CONVERSATION", "ladder")
     friend = _MentionedFriend(_asking_friend(), chat=_Chat())
@@ -897,4 +907,6 @@ def test_he_does_not_ask_the_same_person_twice_running(monkeypatch) -> None:
     asyncio.run(friend.on_message(second))
 
     assert second.replies, "he answered the answer"
-    assert "?" not in second.replies[0][0], second.replies
+    assert second.replies[0][0] != first.replies[0][0], "and not with the same line"
+    acts = [turn.act for turn in tuple(friend.history) if turn.is_bot]
+    assert acts[-1].startswith("ladder|follow_up|"), acts[-1]

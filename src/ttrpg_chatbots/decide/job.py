@@ -64,7 +64,13 @@ def choose(
         # from news about the world -- "the train was late again" is their complaint, not their plant,
         # and answering it with his own train line was a non-sequitur ("i go when i can").
         return "explain" if known == "world" and theirs else "noted"
-    if intent in ("agree", "meta"):
+    if intent == "agree":
+        # "yeah it is pretty good" is somebody agreeing with themselves out loud, and the answer is a
+        # note ("nice"), not a thank-you reply. Measured: mapping both here produced "no worries" in
+        # reply to an agreement, which reads as a bot that mistook what it was being told.
+        return "noted"
+    if intent == "meta":
+        # Thanks and apologies: the two moves that have a stock reply.
         return "acknowledge"
     if intent in ("about_me", "plans"):
         return "offer_hook" if known == "self" else "hedge"

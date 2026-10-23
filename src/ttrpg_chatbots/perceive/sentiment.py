@@ -20,7 +20,8 @@ _POSITIVE = re.compile(
 #: could tell it apart from "i am getting a plant" and the sympathy line was picked for both.
 _NEGATIVE = re.compile(
     r"\b(?:bad|awful|terrible|hate|hated|sick|tired|wrecked|rough|worst|annoying|dying|died|dead|"
-    r"broke|broken|killed|ruined|failed|lost|stuck|missed|late)\b"
+    r"broke|broken|killed|ruined|failed|lost|stuck|missed|late|nightmare|hell|disaster|disasterous|"
+    r"cancelled|canceled|fired|laid off|struggling|exhausted|cried|crying|funeral|hospital|ill|pain)\b"
 )
 _SELF = re.compile(r"\b(?:i|i'm|my|me|myself)\b")
 _YOU = re.compile(r"\b(?:you|your|you're|yours)\b")

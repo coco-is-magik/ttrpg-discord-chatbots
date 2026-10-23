@@ -120,9 +120,10 @@ _PATTERNS: tuple[tuple[str, str], ...] = (
         # question, and answering it with a farewell ends the conversation by accident -- which
         # is exactly what happened on 2026-10-21. Anchored, with an optional lead-in so
         # "ok later" and "alright, night" still count.
-        r"^(?:ok|okay|alright|right|well|aight|yeah)?[, ]*"
+        r"^(?:ok|okay|alright|right|well|aight|yeah|i am|i'm|im)?[, ]*"
         r"(?:bye|byebye|goodbye|good night|night|nights|see you|see ya|cya|later|"
-        r"catch you|catch you later|take care|ttyl|talk later|off to bed|i'?m off)\b",
+        r"catch you|catch you later|take care|ttyl|talk later|off to bed|going to bed|"
+        r"calling it a night|bedtime|i'?m off|i am off|heading off)\b",
     ),
     (SOCIAL_APOLOGY, r"\bsorry\b|\bapologies\b|\bmy bad\b"),
     (
