@@ -105,18 +105,42 @@ station aspect, and changed nothing else -- `rearranging my shelf` still reached
 into `domains/<area>/` when you want to deepen it, and leave the rest where it is. The loader reads both, so a
 half-migrated world works, and no migration has to happen in one sitting.
 
-## 4. What still has to be wired
+**Where a big corpus comes from.** The four sizes above are how we grow by hand. When that runs out,
+`SOURCES.md` is the survey of external corpora (measured sizes, verified licences, sampled lines), which
+one feeds which module, and the three conditions under which bulk data is honest rather than a way of
+hiding a structural problem.
 
-The loader, the matching, the decision and the answering lookup are built and tested. **The ladder does not
-call them yet** -- the two jobs (`dig`, `answer_dig`) are not in the job vocabulary, and the loop still treats
-a phrasebook as the only source of words. That is deliberate rather than overlooked: a domain supplies words
-*without* a phrasebook, which changes an invariant the whole render path rests on ("only the leaf writes
-words, and it writes them from a phrasebook"), so it deserves its own pass with its own tests rather than
-being bolted onto the end of a long one.
+## 4. It is wired, and what that took
 
-The wiring, in order: `dig` and `answer_dig` in `decide/job.py`; a branch in `govern/loop.py` that sources the
-words from domain material and still runs them through `trim` and `audition`; `domains` on the `Scene`; and
-the dig recorded on the turn's act so the answering side can read it.
+`dig` and `answer_dig` are jobs in the vocabulary, the loop sources their words from domain material, and
+the room does the exchange for real:
+
+```
+friend-b: i have been rearranging my shelf        (offer_hook)
+friend-a: what is on it?                          (dig, cute-things:the-shelf)
+friend-b: a- a ceramic frog, a tin train, and a leaf i pressed   (answer_dig)
+friend-c: Oh, that is lovely                      (noted)
+```
+
+Four things had to change, and each was found by running it rather than by reading it:
+
+* **A domain line is not a phrasebook line.** The render path had one invariant -- *only the leaf writes
+  words, and it writes them from a phrasebook* -- so the loop now has one branch that takes its text from the
+  domain and still runs it through the budget, the typing style and the persona gate. A domain cannot smuggle
+  in a line the rest of the ladder would have refused, and a test asserts exactly that.
+* **The budget knows what the turn is for.** A question is longer than the hook it answers: "what is
+  different about the old ones?" is seven words against a three-word hook, and the mirror rule trimmed it to
+  nothing. `decide.length` gained an answer floor, the same shape as the story floor.
+* **The room reads the act from the trail.** It used to invent `ladder|chat|` for every line, so the room
+  could not see that a turn was a story or a dig. Measured consequence: the friend being asked answered a
+  different question and hedged. It now rebuilds the real act, and takes the **last** `about=` (the trail
+  carries the ordinary subject and then the aspect).
+* **The floor goes to whoever offered.** Terry asked Otto's shelf a question, the rotation handed the floor to
+  Crusty, and she hedged -- it was never her shelf. After a dig the offerer answers, which is also what makes
+  the answer available at all.
+
+Measured effect on a simulated day: the job mix went from **two jobs to eight** (offer_hook 54, noted 40, dig
+34, answer_dig 34, ask_back 4, mirror 3, greet 1, follow_up 1, hedge 1), with zero silences.
 
 ## 5. How growth is measured
 

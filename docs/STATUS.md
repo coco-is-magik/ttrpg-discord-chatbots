@@ -27,6 +27,7 @@ lands; it should never be more than one slice out of date.
 | Room clock | **the room's day is local**, not UTC. Measured: at 21:24 EDT the schedule read 01:24 UTC and the friends went to bed at nine in the evening. The live loop and the simulator both use `local_now()`; silence logs its reason (`next message at 21:40 (spoke as friend-b)`) and warns if the room is quiet for longer than twice the longest draw |
 | Overnight run | bedtime off, 300s mean, transcript at `data/chatter.jsonl` | `TTRPG_CHATTER_SLEEP=0` + `tools/analyse_chatter.py`; Discord's documented global limit is 50 req/s and we peak at 0.006 |
 | First dataset | 11h live night, 67 lines, read in `docs/DATASET.md`; five findings, four of them structural | `tools/analyse_chatter.py`; the biggest was that bedtime was only half switched off (one friend asleep for ten hours) |
+| Hooks are taken | `dig` and `answer_dig` wired; a domain supplies the words | `docs/CORPUS.md`; the job mix went from 2 to 8 on a simulated day |
 | Ambient | **the friends talk to each other.** `TTRPG_CHATTER=1`, one channel, one message per five minutes on average (gamma-drawn: median 4 min, 9% of gaps over 10), 45 s floor, 20/hour and 260/day caps, bed at the earliest of 01:00 / human+1h / goodnight+30m, up 7-8 h later with a greeting. Off by default. See `docs/AMBIENT.md` |
 | Simulating | `ttrpg-chatbots-simulate --hours 24 --seed 11` -- the same director and ladder, a virtual clock, no Discord, no network, no database. Measured: a day is 169 messages in about a second |
 | Known gap | **Crusty is not raspy.** Her brief asks for it; raspiness is vocal fry and no piper model produces it. Accepted 2026-10-23 with the rest of the brief met (high, bright, girly). Recorded in the voice lock as `known_limitation` + `revisit_when`: re-audition when the speech engine changes. See `docs/SPEECH.md` for the full list of what the engine cannot do |
@@ -139,7 +140,11 @@ The corpus it came from is already at `corpora/switchboard/`; to rebuild the tab
   reproducible from a clone. That is why the measured table is local-only: CC BY-NC-SA.
 - **`corpora/` is git-ignored too, and that is load-bearing.** The corpus is 37 MiB — nearly
   four times the tracked repository. Never `git add -f` anything inside it; if `git status` ever
-  lists a megabyte of `.jsonl`, something bypassed the rule.
+  lists a megabyte of `.jsonl`, something bypassed the rule. **It was bypassed once**: commit
+  `b04ca1c` deleted the `corpora/*` rules and committed Switchboard's `utterances.jsonl`, which is
+  still the largest object in history (38 MB raw, in an 11 MB `.git`). The rules are back, the six
+  files are untracked (still on disk), and the check is
+  `git check-ignore -v corpora/switchboard/utterances.jsonl`.
 - **The helper must not request Message Content.** It is a test: `tests/test_bot.py` asserts the
   helper's intents stay at `discord.Intents.default()`.
 - **A token cannot hold two gateway sessions, and two processes are worse than that.** They
@@ -176,6 +181,8 @@ The corpus it came from is already at `corpora/switchboard/`; to rebuild the tab
 | Which act follows which | `reply/transitions.py` |
 | Reading a corpus into that table | `reply/importers.py` |
 | The classifier's full account | `docs/CLASSIFIER.md` |
+| Where a bigger corpus comes from | `docs/SOURCES.md` |
+| How the corpus is split so it can grow | `docs/CORPUS.md` |
 | Who a friend is, and how the brief is enforced | `docs/PERSONA.md`, `bots/persona.py` |
 | The group's design and invariants | `docs/GROUP.md` |
 | Testing against Discord by hand | `docs/MANUAL_TESTING.md` |
