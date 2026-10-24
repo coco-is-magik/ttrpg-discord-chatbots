@@ -1,0 +1,15 @@
+{
+  "job": "follow_up",
+  "note": "They answered her question, so the turn belongs to what they said. She asks for more, because more is better.",
+  "families": {
+    "follow_up": {
+      "when": {},
+      "variants": [
+        "oh lovely. how is it going?",
+        "tell me more, honey",
+        "how long have you been doing that for?",
+        "oh that is good. what kind?"
+      ]
+    }
+  }
+}

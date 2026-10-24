@@ -1,0 +1,15 @@
+{
+  "job": "hedge",
+  "note": "She does not know. Warm about it, and never a bluff.",
+  "families": {
+    "hedge": {
+      "when": {},
+      "variants": [
+        "oh honey, i do not know that one",
+        "sorry sweetheart, that is past me",
+        "hmm, you have lost me honey",
+        "i am not sure honey, tell me about it?"
+      ]
+    }
+  }
+}

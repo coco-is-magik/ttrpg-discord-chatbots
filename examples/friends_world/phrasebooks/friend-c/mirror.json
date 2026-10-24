@@ -1,0 +1,21 @@
+{
+  "job": "mirror",
+  "note": "Their bad day. A reaction first, and her own grievance only once they have leaned in -- which is what stops a bad day turning into a monologue about her tank.",
+  "families": {
+    "reaction": {
+      "when": {},
+      "variants": [
+        "oh honey, that sounds like a day",
+        "oh no sweetheart",
+        "oh love, no wonder you are tired"
+      ]
+    },
+    "detail": {
+      "when": {},
+      "variants": [
+        "oh honey, that sounds like a day. i had one of those myself this week, everything went sideways at once",
+        "oh sweetheart, that is a lot. i have been having one of those weeks too, i think it is going around"
+      ]
+    }
+  }
+}

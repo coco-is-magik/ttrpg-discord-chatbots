@@ -15,8 +15,8 @@
     "detail": {
       "when": {},
       "variants": [
-        "i know what that is like. {grievance}",
-        "oh no. {grievance}"
+        "i know what that is like, {grievance}",
+        "oh no, {grievance}"
       ]
     }
   }

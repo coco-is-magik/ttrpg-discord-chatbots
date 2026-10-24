@@ -1,0 +1,45 @@
+{
+  "job": "greet",
+  "note": "Her hello. Warmth first, and she is visibly pleased that somebody turned up -- her brief says the act of messaging is a joyful activity in itself, so a greeting is never a formality.",
+  "families": {
+    "time_morning": {
+      "when": {},
+      "variants": [
+        "morning honey, have you had anything to eat yet?",
+        "good morning sweetheart",
+        "hello you, morning honey"
+      ]
+    },
+    "time_evening": {
+      "when": {},
+      "variants": [
+        "evening honey, how has your day been?",
+        "hello you, are you winding down?",
+        "hi sweetheart, i was just thinking about you"
+      ]
+    },
+    "warm": {
+      "when": {},
+      "variants": [
+        "hello you, i am so glad you turned up",
+        "there you are honey",
+        "hi sweetheart, come and sit down"
+      ]
+    },
+    "casual": {
+      "when": {},
+      "variants": [
+        "hi honey",
+        "hello sweetheart",
+        "hi you"
+      ]
+    },
+    "recall": {
+      "when": {},
+      "variants": [
+        "hi honey. how is {fact_value} doing?",
+        "hello you. any news about {fact_value}?"
+      ]
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "id": "the-ocean",
+  "about": "Crusty's water: the tank, the crabs, the shore",
+  "names": ["the ocean", "the sea", "the shore", "the water", "my tank", "the tank", "the aquarium"],
+  "aspects": [
+    {
+      "name": "the-tank",
+      "names": ["the tank", "my tank", "the aquarium"],
+      "questions": [
+        "what is in there at the moment?",
+        "how long has it been running?"
+      ]
+    },
+    {
+      "name": "the-crabs",
+      "names": ["crabs", "the crabs", "hermit crabs", "crustaceans"],
+      "questions": [
+        "do they need much looking after?",
+        "what do you feed them?"
+      ]
+    }
+  ]
+}

@@ -56,11 +56,18 @@ class Ladder:
         style: Style | None = None,
         jobs: tuple[str, ...] | None = None,
         question_rate: float = 0.0,
+        verbosity: float = 1.0,
+        obey_schedule: bool = True,
     ) -> None:
         self._data = Path(data or os.environ.get(DATA_ENV, str(DEFAULT_DATA)))
         self.friend = friend
         self._style = style
         self._question_rate = question_rate
+        self._verbosity = verbosity
+        # A run with bedtime switched off must switch off *his* night too, not only the room's quiet
+        # hours. Measured: an overnight run put one friend to sleep at 23:00 and he stayed silent for
+        # eight hours while the other two -- who have no schedule entry -- carried the conversation.
+        self._obey_schedule = obey_schedule
         self.jobs = jobs
         self._shelf: Shelf | None = None
         self._recent = Recent()
@@ -236,7 +243,7 @@ class Ladder:
         return Scene(
             utterance=Utterance(text=text, speaker=speaker),
             addressed=addressed,
-            asleep=self.asleep(now),
+            asleep=self._obey_schedule and self.asleep(now),
             moment=now,
             relationship=_relationship(memory),
             turns=turns,
@@ -252,6 +259,7 @@ class Ladder:
             offered_hook=_offered_a_hook(turns),
             gap_bucket=_gap(memory, now).bucket,
             question_rate=self._question_rate,
+            verbosity=self._verbosity,
         )
 
     def line(

@@ -300,6 +300,120 @@
           "why": "he has been in that pot since i got him"
         }
       ]
+    },
+    "friend-c": {
+      "activities": [
+        {
+          "id": "tank",
+          "doing": "fiddling with the tank again",
+          "hook": "messing with the tank",
+          "short": "elbows deep in the tank",
+          "phase": "the filter is making a noise and i cannot find where it comes from",
+          "why": "the little one hides when it gets loud, and i would rather he did not have to",
+          "invite": "do you want to see a photo of him?",
+          "topic": "topic:aquariums"
+        },
+        {
+          "id": "book",
+          "doing": "reading the same book for the fourth time",
+          "hook": "reading something for the fourth time",
+          "short": "back in the same book again",
+          "phase": "i know exactly how it ends and i do not care",
+          "why": "the ending is the good part, that is why i keep going back to it",
+          "topic": "topic:harry-potter"
+        },
+        {
+          "id": "shells",
+          "doing": "sorting out my shells",
+          "hook": "sorting shells",
+          "short": "surrounded by shells",
+          "phase": "i have far too many and i will not be stopping",
+          "why": "every one of them is a little house that somebody left behind",
+          "topic": "topic:crustaceans"
+        },
+        {
+          "id": "series",
+          "doing": "half watching an old series",
+          "hook": "half watching an old series",
+          "short": "half watching something old",
+          "phase": "i have seen it so many times that i just listen to it now",
+          "why": "it is the only thing that settles my head in the evening",
+          "topic": "topic:anime"
+        },
+        {
+          "id": "soup",
+          "doing": "making far too much soup",
+          "hook": "making too much soup",
+          "short": "cooking for an army",
+          "phase": "there is enough for everybody and then some",
+          "why": "feeding people is how i say it, i am no good at the other way",
+          "topic": ""
+        }
+      ],
+      "grievances": [
+        {
+          "id": "heater",
+          "text": "the tank heater gave up in the night and i lost an hour of sleep over it"
+        },
+        {
+          "id": "disposable",
+          "text": "somebody told me hermit crabs are disposable pets and i have not stopped thinking about it"
+        },
+        {
+          "id": "three-am",
+          "text": "i stayed up until three finishing a book i have already read twice"
+        },
+        {
+          "id": "not-rung",
+          "text": "my sister forgot to ring me back and i do not want to be the one who brings it up"
+        }
+      ],
+      "stories": [
+        {
+          "id": "first-crab",
+          "body": "my first hermit crab came out of a shop that was keeping them in a tiny box. he lived four years longer than anybody said he would",
+          "point": "nobody is disposable, honey. that is the whole of it",
+          "words": "crab rescue shop box"
+        },
+        {
+          "id": "shell-jar",
+          "body": "i have a jar of shells from every beach i have ever been to, and i can tell you where each one came from",
+          "point": "i keep the places i have been, otherwise they go",
+          "words": "shell jar beach collection"
+        },
+        {
+          "id": "tank-crash",
+          "body": "my first tank crashed and i lost everything in it inside a week. i cried about a snail, and my family found that very funny",
+          "point": "i would rather have cared too much than not at all",
+          "words": "tank crash snail lost"
+        },
+        {
+          "id": "ill",
+          "body": "i read the whole series again when i was ill and it was the only thing that helped",
+          "point": "comfort is real and it counts as help",
+          "words": "ill read series comfort"
+        }
+      ],
+      "plans": [
+        {
+          "id": "coast",
+          "what": "go down to the coast",
+          "when": "saturday",
+          "why": "i want to stand on the beach and do absolutely nothing for an hour"
+        },
+        {
+          "id": "big-tank",
+          "what": "set the big tank up properly",
+          "when": "sunday afternoon",
+          "why": "the little one has earned it"
+        },
+        {
+          "id": "one-go",
+          "what": "watch the whole thing through in one sitting",
+          "when": "sometime this week",
+          "why": "i have been promising myself since january"
+        }
+      ]
     }
   }
 }

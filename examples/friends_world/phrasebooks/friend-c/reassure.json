@@ -1,0 +1,15 @@
+{
+  "job": "reassure",
+  "note": "Somebody is struggling. Her whole point: she comes close rather than offering solutions, and she stays available afterwards.",
+  "families": {
+    "reassure": {
+      "when": {},
+      "variants": [
+        "oh sweetheart, come here. you are doing better than you think",
+        "you are allowed to find this hard, honey",
+        "i am right here. you tell me if you need anything",
+        "that is a lot to be carrying on your own, sweetheart"
+      ]
+    }
+  }
+}

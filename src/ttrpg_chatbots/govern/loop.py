@@ -112,6 +112,8 @@ class Scene:
     #: How often he would rather hand the turn back than answer with a bare acknowledgement. The
     #: persona's number, not the ladder's: it is a property of the person, not of the turn.
     question_rate: float = 0.0
+    #: The persona's own length multiplier. See `decide.length.budget`.
+    verbosity: float = 1.0
 
 
 def _has_plan(scene: Scene) -> bool:
@@ -224,7 +226,10 @@ def plan(
         story=telling is not None,
     )
     budget = length.budget(
-        their_words=len(scene.utterance.text.split()), phase=where, story=telling is not None
+        their_words=len(scene.utterance.text.split()),
+        phase=where,
+        story=telling is not None,
+        verbosity=scene.verbosity,
     )
 
     allowed = floor.decide(addressed=scene.addressed, asleep=scene.asleep, budget=budget)

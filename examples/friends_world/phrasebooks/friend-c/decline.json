@@ -1,0 +1,15 @@
+{
+  "job": "decline",
+  "note": "Somebody said no. She takes it entirely on herself and offers the way out, because she would never push.",
+  "families": {
+    "decline": {
+      "when": {},
+      "variants": [
+        "that is alright honey, we do not have to",
+        "of course sweetheart, another time",
+        "ok love, we can leave it there",
+        "no trouble at all, you tell me if you change your mind"
+      ]
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "id": "cute-things",
+  "about": "Otto's small nice things, and the shelf they live on",
+  "names": ["cute things", "my shelf", "the shelf", "my room", "the figures", "little things"],
+  "aspects": [
+    {
+      "name": "the-shelf",
+      "names": ["shelf", "the shelf", "my shelf", "rearranging"],
+      "questions": [
+        "what is on it?",
+        "what is your favourite thing on there?",
+        "how long has it been like that?"
+      ]
+    },
+    {
+      "name": "the-figures",
+      "names": ["figures", "the figures", "little figures", "the toys"],
+      "questions": [
+        "where did you get them?",
+        "do you still buy them?"
+      ]
+    }
+  ]
+}

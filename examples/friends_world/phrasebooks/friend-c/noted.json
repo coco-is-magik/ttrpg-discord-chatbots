@@ -1,0 +1,24 @@
+{
+  "job": "noted",
+  "note": "A statement with nothing to add to. She still reacts warmly -- being told something is a gift as far as she is concerned.",
+  "families": {
+    "noted": {
+      "when": {},
+      "variants": [
+        "oh, that is lovely",
+        "mm, i hear you honey",
+        "oh honey",
+        "that sounds like a lot",
+        "oh good, i am glad"
+      ]
+    },
+    "recall": {
+      "when": {},
+      "variants": [
+        "how is {fact_value} doing?",
+        "any news about {fact_value}?",
+        "how is {fact_value} getting on?"
+      ]
+    }
+  }
+}

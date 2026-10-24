@@ -44,6 +44,7 @@ ttrpg-chatbots-voice = "ttrpg_chatbots.voice.cli:main"
 ttrpg-chatbots-persona = "ttrpg_chatbots.bots.persona_cli:main"
 ttrpg-chatbots-llm = "ttrpg_chatbots.llm.cli:main"
 ttrpg-chatbots-dice = "ttrpg_chatbots.dice.cli:main"
+ttrpg-chatbots-simulate = "ttrpg_chatbots.ambient.cli:main"
 ttrpg-chatbots-sheet = "ttrpg_chatbots.sheets.cli:main"
 ttrpg-chatbots-character = "ttrpg_chatbots.character.cli:main"
 

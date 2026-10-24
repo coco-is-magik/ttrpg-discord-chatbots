@@ -21,12 +21,40 @@ CONTENT_FLOOR = 12
 STORY_FLOOR = 26
 
 
-def budget(*, their_words: int, phase: str = "pleasantries", story: bool = False) -> Budget:
-    """Their length plus two, clamped; two sentences only when the conversation has depth."""
-    words = max(FLOOR, min(CEILING, int(their_words) + 2))
+#: How much room a person needs before they are allowed a third sentence. Above this, `verbosity` buys
+#: one: a rambler does not say the same thing in more words, they say more things.
+RAMBLING = 1.4
+
+
+def budget(
+    *,
+    their_words: int,
+    phase: str = "pleasantries",
+    story: bool = False,
+    verbosity: float = 1.0,
+) -> Budget:
+    """Their length plus two, clamped; two sentences only when the conversation has depth.
+
+    ``verbosity`` is the persona's own multiplier, because how much a person says is a property of the
+    person: at 1.0 nothing changes, at 1.5 a friend is allowed half again as many words, and above
+    :data:`RAMBLING` they get a third sentence as well. Measured against one friend who writes four-word
+    lines and another whose brief says she "overexplains and rambles" -- one ladder, two registers.
+    """
+    if isinstance(verbosity, bool) or not isinstance(verbosity, (int, float)):
+        raise ValueError("verbosity must be a number")
+    if not 0.5 <= float(verbosity) <= 3.0:
+        raise ValueError(f"verbosity must be between 0.5 and 3.0, got {verbosity}")
+    factor = float(verbosity)
+    base = max(FLOOR, min(CEILING, int(their_words) + 2))
+    words = max(FLOOR, int(round(base * factor)))
     if story:
-        return Budget(max_words=STORY_FLOOR, max_sentences=2)
+        return Budget(
+            max_words=max(STORY_FLOOR, int(round(STORY_FLOOR * factor))),
+            max_sentences=3 if factor >= RAMBLING else 2,
+        )
     if phase == "substance":
-        words = max(CONTENT_FLOOR, words)
+        words = max(int(round(CONTENT_FLOOR * factor)), words)
     sentences = 2 if phase == "substance" else 1
+    if factor >= RAMBLING:
+        sentences += 1
     return Budget(max_words=words, max_sentences=sentences)

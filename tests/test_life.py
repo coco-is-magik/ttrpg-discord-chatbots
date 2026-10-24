@@ -70,7 +70,11 @@ def test_the_real_file_loads() -> None:
     assert lives["friend-a"].current() is not None
     assert lives["friend-a"].grievance() is not None
     # One at a time: c has no life yet.
-    assert "friend-c" not in lives
+    # All three written friends have a day now. A friend with *no* life file is a valid state and is
+    # covered below; this one is about the real file being readable end to end.
+    assert "friend-c" in lives
+    assert lives["friend-c"].current() is not None
+    assert lives["friend-c"].plan() is not None
 
 
 def test_rendering_fills_every_slot() -> None:
@@ -84,8 +88,8 @@ def test_rendering_fills_every_slot() -> None:
 def test_a_friend_without_a_life_renders_nothing() -> None:
     voice = LifeVoice(load_lives(DATA / "life.json"))
 
-    assert voice.has("friend-c") is False
-    assert voice.doing("friend-c") is None
+    assert voice.has("friend-d") is False, "a friend with no life file renders nothing"
+    assert voice.doing("friend-d") is None
 
 
 def test_repeated_asks_do_not_repeat_the_line() -> None:

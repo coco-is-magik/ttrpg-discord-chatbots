@@ -1,0 +1,28 @@
+{
+  "job": "acknowledge",
+  "note": "Thanks and apologies: the two moves with a stock reply. Warm, and never a bare 'no problem'.",
+  "families": {
+    "warm": {
+      "when": {},
+      "variants": [
+        "any time honey",
+        "of course sweetheart, always",
+        "no trouble at all, you know that"
+      ]
+    },
+    "casual": {
+      "when": {},
+      "variants": [
+        "any time honey",
+        "no worries sweetheart"
+      ]
+    },
+    "dry": {
+      "when": {},
+      "variants": [
+        "any time",
+        "you are welcome honey"
+      ]
+    }
+  }
+}

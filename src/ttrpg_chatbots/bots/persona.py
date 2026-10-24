@@ -87,7 +87,8 @@ class Persona:
     are enforced against the dataset and the casting table.
 
     ``plays`` is what he likes to be at a table (the knight, the operator, the one who holds the
-    line) and ``favourites`` is the media and the characters he actually likes. They are recorded
+    line), ``favourites`` is the media and the characters he actually likes, and ``taste`` is *why* --
+    what he looks for in a character and what leaves him cold. They are recorded
     here rather than left in a conversation because a preference nobody can discuss is a note, and
     a preference he can talk about is a subject -- so these two fields are where a subject starts
     life, and `docs/PERSONA.md` §4 step 3 is where it becomes lines.
@@ -99,6 +100,7 @@ class Persona:
     values: tuple[str, ...] = ()
     plays: tuple[str, ...] = ()
     favourites: tuple[str, ...] = ()
+    taste: str = ""
     topics: tuple[str, ...] = ()
     signature: tuple[str, ...] = ()
     voice: VoiceSpec | None = None
@@ -107,6 +109,11 @@ class Persona:
     #: Otto 0.8, Terry 0.2: the same ladder, a different person -- and the one number behind "he
     #: would rather listen and have you keep talking". Zero means he never does it.
     question_rate: float = 0.2
+    #: How much more this person says than the mirror. 1.0 is the plain register; above 1.4 they are
+    #: allowed a third sentence as well, because a rambler does not say the same thing in more words,
+    #: they say more things. Measured against one friend who writes four-word lines and another whose
+    #: brief says she overexplains.
+    verbosity: float = 1.0
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -120,6 +127,10 @@ class Persona:
         ):
             if any(not isinstance(item, str) or not item.strip() for item in items):
                 raise PersonaError(f"{label} must be non-blank strings")
+        if isinstance(self.verbosity, bool) or not isinstance(self.verbosity, (int, float)):
+            raise PersonaError("verbosity must be a number")
+        if not 0.5 <= float(self.verbosity) <= 3.0:
+            raise PersonaError(f"verbosity must be between 0.5 and 3.0, got {self.verbosity}")
         if isinstance(self.question_rate, bool) or not isinstance(self.question_rate, (int, float)):
             raise PersonaError("question_rate must be a number")
         if not 0.0 <= float(self.question_rate) <= 1.0:
@@ -206,11 +217,13 @@ class Persona:
                 values=strings("values"),
                 plays=plays,
                 favourites=favourites,
+                taste=str(record.get("taste", "") or "").strip(),
                 topics=strings("topics"),
                 signature=strings("signature"),
                 voice=voice,
                 style=style,
                 question_rate=record.get("question_rate", 0.2),
+                verbosity=record.get("verbosity", 1.0),
             )
         except PersonaError as error:
             raise PersonaError(f"{where}: {error}") from error

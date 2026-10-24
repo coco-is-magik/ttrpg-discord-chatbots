@@ -4,7 +4,7 @@ Dated snapshot, not a wish list. `DESIGN.md` says where the project is *going*; 
 is true *today*, so a later session can pick up without re-deriving it. Update it when a slice
 lands; it should never be more than one slice out of date.
 
-**Last updated:** 2026-10-23 (Otto closed out: his own last two books, and the `decline` job wired).
+**Last updated:** 2026-10-23 (Crusty written: the third friend, live, with two new levers).
 
 ---
 
@@ -16,13 +16,21 @@ lands; it should never be more than one slice out of date.
 | Bots live | 4 applications: `ttrpg-bot` (helper) + `friend-a/b/c` |
 | Permissions | **8/8 each** in `#general` |
 | Slash commands | **54/54** synced to guild 1364544268609523762 |
-| Who speaks | `friend-a` (Terry) and `friend-b` (Otto), both `reply: mention`; `friend-c` is `reply: off` |
+| Who speaks | **all three**: `friend-a` (Terry), `friend-b` (Otto), `friend-c` (Crusty), each `reply: mention` |
+| Personas | three complete briefs: Terry (`docs/PERSONA.md` 1), Otto (1b), **Crusty (1c)**. Crusty rambles (`verbosity` 1.8) and asks more than the others (`question_rate` 0.7) |
 | Conversation | **thirteen phases on the module ladder** -- every job in the vocabulary is now reachable and has a book (greet, close, acknowledge, noted, reassure, mirror, offer_hook, explain, tell_story, hedge, ask_back, follow_up, **decline**), live behind `TTRPG_CONVERSATION=ladder`; subject questions answered by the ladder too (`decide/subject`) |
 | Modules | **57/57 built**, manifest clean |
 | Voice | friend-a speaks: `piper` **`en_US-joe-medium`** at length scale **1.05**, no pitch shift — chosen by measuring 13 candidates (98 Hz vs ryan-high's 144 Hz). friend-b: **`en_US-ryan-medium`** at 1.15 with `pitch_hz` 205 / `formant` 1.06 — a *male* model raised to 204 Hz with its formants kept male, applied by `audio/formants.py` (Praat), which leaves the duration alone. `/voicetest friend:<name> join\|speak\|leave` |
-| Voice lock | `examples/friends_world/voices.lock.json`: sha256 + md5 per file, two sources, CC0 provenance, rebuild steps; `ttrpg-chatbots-tts --verify-voice\|--fetch-voice` |
+| Voice lock | `examples/friends_world/voices.lock.json`: **three voices**, sha256 + md5 per file, two sources each, provenance (CC0 / CC BY-NC-SA / public domain), rebuild steps; `ttrpg-chatbots-tts --verify-voice\|--fetch-voice` |
 | Speech text | `tts/spoken/` — five modules + a fixed order, wrapped around every engine at build time; `--spoken TEXT` prints the spoken form |
 | Procedure | `tools/check_friend.sh <friend>` (offline) + `docs/TESTING.md` (Discord, with what to blame) |
+| Room clock | **the room's day is local**, not UTC. Measured: at 21:24 EDT the schedule read 01:24 UTC and the friends went to bed at nine in the evening. The live loop and the simulator both use `local_now()`; silence logs its reason (`next message at 21:40 (spoke as friend-b)`) and warns if the room is quiet for longer than twice the longest draw |
+| Overnight run | bedtime off, 300s mean, transcript at `data/chatter.jsonl` | `TTRPG_CHATTER_SLEEP=0` + `tools/analyse_chatter.py`; Discord's documented global limit is 50 req/s and we peak at 0.006 |
+| First dataset | 11h live night, 67 lines, read in `docs/DATASET.md`; five findings, four of them structural | `tools/analyse_chatter.py`; the biggest was that bedtime was only half switched off (one friend asleep for ten hours) |
+| Ambient | **the friends talk to each other.** `TTRPG_CHATTER=1`, one channel, one message per five minutes on average (gamma-drawn: median 4 min, 9% of gaps over 10), 45 s floor, 20/hour and 260/day caps, bed at the earliest of 01:00 / human+1h / goodnight+30m, up 7-8 h later with a greeting. Off by default. See `docs/AMBIENT.md` |
+| Simulating | `ttrpg-chatbots-simulate --hours 24 --seed 11` -- the same director and ladder, a virtual clock, no Discord, no network, no database. Measured: a day is 169 messages in about a second |
+| Known gap | **Crusty is not raspy.** Her brief asks for it; raspiness is vocal fry and no piper model produces it. Accepted 2026-10-23 with the rest of the brief met (high, bright, girly). Recorded in the voice lock as `known_limitation` + `revisit_when`: re-audition when the speech engine changes. See `docs/SPEECH.md` for the full list of what the engine cannot do |
+| Startup | a transient gateway failure is **retried** (3 attempts, 5 s apart) before a bot is declared down. Measured: a Discord 503 on the websocket handshake took the helper and Terry offline while the other two connected, and nothing tried again -- the helper was down for eight minutes and `/voicetest` could not be run. A bad token is still reported at once |
 | Overfitting | `tests/test_generalisation.py`: 20 held-out messages, pinned. Measured 13/20 before the sentiment and syntax fixes, 18/20 after. A probe message that becomes a phrasebook variant fails the suite |
 | Persona | `ttrpg-chatbots-persona` — twelve checks per friend over his whole material. Terry: 39 subjects, median 5 words. Otto: 18 subjects, median 4 words, stutter and emoticons. Both PASS |
 | Phrasebooks | resolved per friend, per job: `phrasebooks/<friend>/` over the shared `phrasebooks/`. **Otto overrides all twelve** he can use; Terry owns none and *is* the shared register; `friend-c` would inherit Terry's voice until it gets its own |

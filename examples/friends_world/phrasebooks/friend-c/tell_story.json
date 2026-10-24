@@ -1,0 +1,14 @@
+{
+  "job": "tell_story",
+  "note": "Two sentences of something that happened, and the point deliberately lives in explain so it can only arrive if it is asked for.",
+  "families": {
+    "story": {
+      "when": {},
+      "variants": [
+        "{story_body}",
+        "oh, {story_body}",
+        "well. {story_body}"
+      ]
+    }
+  }
+}

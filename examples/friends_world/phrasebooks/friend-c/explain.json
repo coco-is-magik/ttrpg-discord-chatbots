@@ -1,0 +1,26 @@
+{
+  "job": "explain",
+  "note": "The why, and the point of a story. Longer than the others on purpose -- explaining is the one thing she genuinely overdoes.",
+  "families": {
+    "detail": {
+      "when": {},
+      "variants": [
+        "{why}",
+        "well, {why}",
+        "because {why}, honey"
+      ]
+    },
+    "subject": {
+      "when": {},
+      "variants": [
+        "{fact}"
+      ]
+    },
+    "point": {
+      "when": {},
+      "variants": [
+        "{story_point}"
+      ]
+    }
+  }
+}

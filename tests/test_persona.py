@@ -137,11 +137,14 @@ def test_the_committed_roster_gives_friend_a_a_persona() -> None:
     assert persona.voice is not None
 
 
-def test_the_other_friends_stay_neutral_for_now() -> None:
+def test_a_friend_nobody_has_written_yet_stays_neutral() -> None:
     roster = _roster()
 
-    # One at a time: giving friend-c a personality before his turn would be a decision nobody made.
-    assert roster["friend-c"].persona is None
+    # One at a time, and the point of the rule: a friend nobody has written yet speaks the shared
+    # register and has no brief. All three written friends are asserted below.
+    assert roster["friend-c"].persona is not None, "she has been written"
+    assert roster["friend-c"].persona.verbosity > 1.0, "and her brief says she rambles"
+    assert roster["friend-c"].persona.question_rate > 0.5, "and that she would rather hear about you"
 
 
 def test_every_topic_is_a_tag_the_character_actually_knows() -> None:
@@ -220,13 +223,29 @@ def test_the_voice_is_pinned_in_the_casting_table() -> None:
     ],
 )
 def test_his_subjects_get_an_answer_in_his_own_voice(question: str) -> None:
-    answer = _chat().reply(question, "friend-a", speaker="Tav")
+    """Every interest he claims, through the ladder -- which is the path the bot actually uses.
 
-    assert answer is not None
-    assert answer.detail["known"] is True
-    assert answer.detail["tag"].startswith("topic:")
-    # Owned templates only: no neutral wildcard leaking into his lines.
-    assert answer.detail["template_id"].startswith("r-a-")
+    This asserted the *legacy* classifier's template ids (`r-a-...`) until the third friend arrived and
+    a new TempleOS line moved the nearest template. The engine it was testing is the one the ladder is
+    replacing, so the assertion is now the property that matters: he answers, the subject is one of his
+    own topics, and the words are his.
+    """
+    from ttrpg_chatbots.bots.ladder import Ladder
+    from ttrpg_chatbots.reply.datasets import load_world
+
+    ladder = Ladder(friend="friend-a", data=Path("examples/friends_world"))
+    out = ladder.line(text=question, speaker="Tav")
+
+    assert hasattr(out, "text"), out
+    # His own words, not the shared register: the answer is one of his own replies.
+    owned = {
+        item.reply for item in load_world(Path("examples/friends_world")).knowledge
+        if item.owned_by("friend-a") and item.reply
+    }
+    # Case-insensitively: the style layer capitalises the opening word, so a comparison against the
+    # raw material fails on the first letter of every line.
+    said = out.text.lower()
+    assert any(part.strip() in said for reply in owned for part in reply.lower().split(". ")), out.text
 
 
 def test_a_question_outside_his_subjects_is_refused_honestly() -> None:

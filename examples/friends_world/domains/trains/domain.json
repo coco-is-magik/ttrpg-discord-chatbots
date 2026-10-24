@@ -1,0 +1,50 @@
+{
+  "id": "trains",
+  "about": "Otto's trains: the line, the old stock, the timetable",
+  "names": [
+    "trains",
+    "the trains",
+    "the railway",
+    "the station",
+    "the line"
+  ],
+  "aspects": [
+    {
+      "name": "the-old-ones",
+      "names": [
+        "the old ones",
+        "old trains",
+        "the carriages",
+        "the old stock"
+      ],
+      "questions": [
+        "what is different about the old ones?",
+        "do you have a favourite?"
+      ]
+    },
+    {
+      "name": "the-timetable",
+      "names": [
+        "the timetable",
+        "the times",
+        "the schedule"
+      ],
+      "questions": [
+        "do you have it memorised?",
+        "how often does it change?"
+      ]
+    },
+    {
+      "name": "the-station",
+      "names": [
+        "the station",
+        "the platform",
+        "the 8:15"
+      ],
+      "questions": [
+        "do you go down there often?",
+        "what is it like early in the morning?"
+      ]
+    }
+  ]
+}

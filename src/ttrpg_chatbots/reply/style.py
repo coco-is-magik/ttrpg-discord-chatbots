@@ -220,6 +220,14 @@ def _drop_apostrophes(text: str) -> str:
     return " ".join(out)
 
 
+#: Fragments that read as a *word or prefix* rather than a cut-off sound, so false-starting on one looks
+#: like a typo instead of hesitation. Measured live: "re- rearranging" was in the channel, and it reads as a
+#: keyboard mistake because "re" is already the word's prefix. A closed class, so it is a list.
+_STUTTER_BLOCKED = frozenset(
+    {"re", "un", "in", "im", "de", "ex", "en", "be", "co", "no", "an", "ab", "ad", "up", "so", "to", "do"}
+)
+
+
 def _introduce_stutter(text: str) -> str:
     """False-start the first word: "hi" -> "h- hi", "think" -> "th- think".
 
@@ -230,11 +238,16 @@ def _introduce_stutter(text: str) -> str:
 
     A one-letter word keeps a one-letter fragment ("i- i think"), which is the classic typed stutter --
     and it is the commonest opening word there is, so excluding it would leave most lines unstuttered.
+
+    A fragment that is already a word or a prefix is skipped, because repeating it looks like a typo
+    rather than hesitation -- see ``_STUTTER_BLOCKED``.
     """
     first, _, rest = text.partition(" ")
     if not first or not first[0].isalpha():
         return text
     fragment = first[:2] if len(first) > 2 else first[0]
+    if len(first) > len(fragment) and fragment.lower() in _STUTTER_BLOCKED:
+        return text
     stuttered = f"{fragment}- {first}"
     return f"{stuttered} {rest}" if rest else stuttered
 

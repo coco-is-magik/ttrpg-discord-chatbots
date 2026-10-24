@@ -213,8 +213,19 @@ def load_persona(roster: Path, friend: str) -> Persona:
     raise PersonaError(f"no bot called {friend!r} in {roster}")
 
 
-def phrasebooks(directory: Path) -> dict[str, Phrasebook]:
-    """Every phrasebook in the world directory, by job name."""
+def phrasebooks(directory: Path, friend: str | None = None) -> dict[str, Phrasebook]:
+    """Every phrasebook a friend *speaks*, by job name -- his own over the world's shared ones.
+
+    The first version read `phrasebooks/*.json` and nothing else, so it measured the shared register
+    for every friend: the per-friend override (``phrasebooks/<friend>/``) was invisible to the report.
+    Measured when the third friend arrived -- her own `close` book was nowhere in the check that
+    decides whether her catchphrase is really in her mouth.
+    """
+    if friend is not None:
+        from ttrpg_chatbots.decide.shelf import load_shelf
+
+        shelf = load_shelf(directory / "phrasebooks" / friend, fallback=directory / "phrasebooks")
+        return dict(shelf.books)
     books = {}
     for path in sorted((directory / "phrasebooks").glob("*.json")):
         book = load_book(path)
@@ -235,7 +246,7 @@ def measure(
     """Check the material against the brief, and report the numbers behind each verdict."""
     where = Path(data)
     persona = load_persona(Path(roster), friend)
-    books = phrasebooks(where)
+    books = phrasebooks(where, friend)
     # Through the world loader, not the raw file: the items it returns carry `spoken`, which is what
     # "what he actually says" means for a subject line with an anchor and a separate reply.
     knowledge = list(load_world(where).knowledge)
@@ -290,13 +301,22 @@ def measure(
     #     distance ceiling -- so an item whose own anchor names nothing is unreachable, however good
     #     its reply is. Measured live: "do you fish?" and "tell me about rome" both answered nothing,
     #     because the vocabulary held "fishing" and "Roman history" but not "fish" or "rome".
+    # Resolved as the *friend*, not as nobody: the live path passes the character (see
+    # `Ladder.subject_of`), and resolving without one let another friend's item win -- measured when a
+    # third friend's "what are your favourite sea creatures?" took Terry's "What is your favourite
+    # Pokemon?" at a distance of 0.13 and the report blamed his anchor.
+    character = None
+    try:
+        character = load_world(where).character(friend)
+    except Exception:  # noqa: BLE001 - a friend with no character knows nothing in particular
+        character = None
     unnamed = []
     for item in subjects:
         found = subject.choose(
             text=item.text,
             index=EntityIndex(knowledge),
             knowledge=knowledge,
-            character=None,
+            character=character,
         )
         if found is None or not (found.tag in item.tags):
             unnamed.append(f"{item.id}: {item.text[:40]}")
@@ -314,10 +334,15 @@ def measure(
     #    of the first. So a stance whose opening sentence is longer than twelve words makes the stage
     #    go silent -- measured, when eight freshly written stances were one long sentence each and
     #    "do you like hockey?" stopped answering at all.
+    # The budget is the *persona's*, not a universal twelve: `decide/length` gives substance
+    # `CONTENT_FLOOR` scaled by `verbosity`, so a friend whose brief says she overexplains is allowed
+    # longer openings -- and measuring her against somebody else's budget would report her register as
+    # a fault. (This is the same mistake as the phrasebook bug above, one layer down.)
+    opening_budget = int(round(CONTENT_FLOOR * persona.verbosity))
     over_budget = [
-        f"{item.id}: {_first_sentence(item.spoken)[:52]} ({_words(_first_sentence(item.spoken))} words)"
+        f"{item.id}: {_first_sentence(item.spoken)[:52]} ({_words(_first_sentence(item.spoken))} words, budget {opening_budget})"
         for item in subjects
-        if _words(_first_sentence(item.spoken)) > CONTENT_FLOOR
+        if _words(_first_sentence(item.spoken)) > opening_budget
     ]
     report.findings.append(
         Finding(
@@ -384,10 +409,16 @@ def measure(
     # 5. Two *declarative* sentences is the ceiling for a social line. A greeting with a question
     #    after it ("morning. how is the fence?") is one of the good patterns, not a paragraph, so the
     #    rule is about statements that stack up -- which is what the old corpus did 51% of the time.
+    # A rambler says two things in one breath, and that is the character rather than a fault -- the
+    # rule is about *stacking* when the persona is not supposed to. Above `RAMBLING` the ceiling is
+    # three, because a third statement is what her brief asks for.
+    from ttrpg_chatbots.decide.length import RAMBLING
+
+    ceiling = 3 if persona.verbosity >= RAMBLING else 2
     two_sentence = [
         f"{line[:44]} ({_declaratives(line)} statements)"
         for line in social_lines
-        if _declaratives(line) >= 2 and _words(line) > 10
+        if _declaratives(line) >= ceiling and _words(line) > 10
     ]
     report.findings.append(
         Finding(

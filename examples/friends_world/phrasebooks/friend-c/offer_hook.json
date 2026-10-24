@@ -1,0 +1,49 @@
+{
+  "job": "offer_hook",
+  "note": "What she is up to. The hook is the thing, and she will happily keep going about it if you let her.",
+  "families": {
+    "warm": {
+      "when": {},
+      "variants": [
+        "{hook}",
+        "oh, {hook}, honey",
+        "{hook}, which has taken over my whole afternoon"
+      ]
+    },
+    "casual": {
+      "when": {},
+      "variants": [
+        "{hook}",
+        "just {short}"
+      ]
+    },
+    "dry": {
+      "when": {},
+      "variants": [
+        "{hook}"
+      ]
+    },
+    "recall": {
+      "when": {},
+      "variants": [
+        "{hook}. how is {fact_value} doing?",
+        "{hook}. and how is {fact_value}?"
+      ]
+    },
+    "event": {
+      "when": {},
+      "variants": [
+        "{hook}. {event_phrase}",
+        "{event_phrase}, and {hook}"
+      ]
+    },
+    "plan": {
+      "when": {},
+      "variants": [
+        "{plan_what} {plan_when}",
+        "i was going to {plan_what} {plan_when}, honey",
+        "{hook}, and then i am going to {plan_what} {plan_when}"
+      ]
+    }
+  }
+}

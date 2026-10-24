@@ -138,3 +138,28 @@ worth it; the lock exists so that it does not have to be.
 `tts/spoken/` is a leaf band like `render/`: pure string functions in, one string out, no engine and no
 Discord. The wrapper is the seam, and it is applied at the two places engines are constructed rather
 than at the call sites, which is what keeps it from being forgotten as the bot grows.
+
+---
+
+## What the engine cannot do
+
+A running list, because every one of these is a thing a brief might ask for and a casting rule cannot
+deliver. They are limitations of **piper**, not of the code around it -- the pitch and formant shifter in
+`audio/formants.py` moves resonances, and no amount of it changes how a glottis behaves.
+
+| asked for | status |
+|---|---|
+| **raspiness / vocal fry** | **not possible.** Irregular glottal pulses; no piper model produces them. Measured and accepted for Crusty (`docs/PERSONA.md` 1c), who asked for it |
+| breathiness, a whisper | not possible -- same reason, it is a phonation type |
+| acting: warmth, sarcasm, shouting | not possible. Delivery is flat by design; the *words* carry the register |
+| emotion conditioned on context | not possible |
+| a specific real person's voice | not possible, and not attempted |
+| a language other than the model's | only with a model for that language; the friends are all `en_US` |
+| pitch and timbre | **possible** -- `pitch_hz` and `formant`, independently, with the duration left alone |
+| pace | possible -- the engine's length scale |
+| hesitation | possible *in the text* (`style.stutter_rate`, `style.filler_rate`), read by the engine as written |
+
+**When the engine changes, re-audition in this order:** raspiness (the one live gap), then acting, then
+emotion conditioning. Everything else is already handled, and each voice's settings are pinned in
+`examples/friends_world/voices.lock.json` so a re-audition starts from the accepted state rather than
+from nothing.

@@ -1,0 +1,15 @@
+{
+  "job": "ask_back",
+  "note": "Handing the turn back, which she does readily: she would rather hear about you, and being asked things is its own pleasure.",
+  "families": {
+    "ask_back": {
+      "when": {},
+      "variants": [
+        "what about you, honey?",
+        "how has your week been sweetheart?",
+        "and you? tell me yours",
+        "what have you been up to, love?"
+      ]
+    }
+  }
+}

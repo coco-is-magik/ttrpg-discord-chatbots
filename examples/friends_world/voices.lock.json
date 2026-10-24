@@ -97,6 +97,48 @@
         "3. place them in $(TTRPG_TTS_MODEL_DIR or ~/.cache/ttrpg-chatbots/models)/piper/",
         "4. the casting rule names the voice, its length scale and its pitch"
       ]
+    },
+    {
+      "voice": "en_US-amy-medium",
+      "engine": "piper",
+      "quality": "medium",
+      "sample_rate_hz": 22050,
+      "speakers": 1,
+      "chosen": "2026-10-23",
+      "chosen_because": "**Girly, high and bright** -- 'raspy, girly, higher pitched', tuned by ear five times. Pitch alone was the wrong axis twice: lessac measured 187 Hz and was heard as male, because what reads as female is the **formant** structure, and lessac's are dark (F1 452, F2 1800). amy is a different instrument at the same pitch -- F1 543, F2 1963 -- and this takes her to F0 211, F1 583, F2 1955 with a small lift (+25 Hz, formant 1.07) rather than the +33 Hz on a dark voice that produced the 'pitched-up male' and GLaDOS complaints. **Raspiness is still not available**: it is vocal fry, and none of these models produce it. Alternatives measured in data/samples/crusty/girly/: amy at 205 and 220 Hz, hfc_female at 204 and 218 (higher, less bright), and amy untouched.",
+      "settings": {
+        "speed": 0.76,
+        "volume": 1.0,
+        "pitch_hz": 212,
+        "formant": 1.07
+      },
+      "files": [
+        {
+          "name": "en_US-amy-medium.onnx",
+          "bytes": 63201294,
+          "sha256": "b3a6e47b57b8c7fbe6a0ce2518161a50f59a9cdd8a50835c02cb02bdd6206c18",
+          "md5": "778d28aeb95fcdf8a882344d9df142fc"
+        },
+        {
+          "name": "en_US-amy-medium.onnx.json",
+          "bytes": 4882,
+          "sha256": "95a23eb4d42909d38df73bb9ac7f45f597dbfcde2d1bf9526fdeaf5466977d77",
+          "md5": "7f37dadb26340c90ebc8088e0b252310"
+        }
+      ],
+      "sources": [
+        "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/{file}?download=true",
+        "https://hf-mirror.com/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/{file}?download=true"
+      ],
+      "also_via": "piper.download_voices.download_voice('en_US-amy-medium', dir) -- the same origin",
+      "provenance": {
+        "upstream_manifest": "https://huggingface.co/rhasspy/piper-voices/resolve/main/voices.json",
+        "dataset": "the piper voice-datasets collection",
+        "license": "see the model card"
+      },
+      "accepted": "2026-10-23",
+      "known_limitation": "Crusty's brief asks for a **raspy** voice. Raspiness is vocal fry -- irregular glottal pulses -- and no piper model produces it; a pitch/formant shifter cannot invent it either, because it moves resonances rather than changing how the glottis behaves. What this voice gives is the rest of the brief: high (211 Hz), bright (F1 583, F2 1955) and girly. The owner has accepted it on that basis.",
+      "revisit_when": "the speech engine changes. Any engine that can act -- style or emotion conditioning, a custom/RVC-style voice model, or an engine with explicit vocal-fry control -- should be auditioned for this voice first, because raspy is the one thing the brief asked for that is still missing. The rest of the casting is reproducible from this entry, so a re-audition does not have to start over."
     }
   ]
 }

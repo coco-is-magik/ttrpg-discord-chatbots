@@ -68,6 +68,10 @@ answering.
 | `@Otokodelyoko rough day at work` | commiseration, never a complaint of his own | `phrasebooks/friend-b/mirror.json` |
 | `@Otokodelyoko thanks` | `no worries`, `oh, it is nothing`, an emoticon | `phrasebooks/friend-b/acknowledge.json` |
 | `@Otokodelyoko good night` | `night night`, `sleep well` | `phrasebooks/friend-b/close.json` |
+| `@Crusty.chan do you like hermit crabs?` | a long warm answer about them (`oh sweetheart, hermit crabs are my favourite thing...`), 15-20 words | `phrasebooks/friend-c/`, `verbosity` 1.8 |
+| `@Crusty.chan hey` then `@Crusty.chan hey` again | she is pleased both times, and never says the identical line | `phrasebooks/friend-c/greet.json` |
+| `@Crusty.chan i am nervous about tomorrow` | `oh sweetheart, come here`, and she stays available | `phrasebooks/friend-c/reassure.json` |
+| `@Crusty.chan no thanks` | `that is alright honey, we do not have to` | `phrasebooks/friend-c/decline.json` |
 | `@Otokodelyoko i have been rebuilding a fence myself this month` | **engaged with what you said** — `how long have you been at that?`. Never `what about you?`: you just told him what you were doing | `decide/reciprocate.engage`, `phrasebooks/friend-b/follow_up.json` |
 | `@Otokodelyoko what are you up to` then a bare `nice one` | `what about you? ^^` — a hand-back, because *he* has just spoken about his own day | `decide/reciprocate.hand_back` |
 | `@Otokodelyoko the truck is in the shop` | a bare note (`ah, oh`) — third person, nothing of yours to pick up | `decide/job` (noted) |
@@ -98,6 +102,19 @@ grep -aE 'did not answer|stayed quiet|greeted' data/logs/bot.log | tail -5
 ```
 
 ---
+
+### If some bots are missing from the member list
+
+Startup is per bot, and a transient Discord gateway error used to leave a bot down for the life of the
+process -- measured, with the *helper* among them, which took `/voicetest` with it. Startup now retries
+three times, five seconds apart, and logs `retrying in 5s (a gateway hiccup, not a bad token)`.
+
+```bash
+./start-bot.sh --status                       # one process?
+awk '$0 ~ /2026-10-23/' data/logs/bot.log | grep -aE 'connected as|8/8|retrying|ERROR' | tail
+```
+
+Four `connected as` lines and four `8/8` lines is the healthy shape. Fewer than four means a restart.
 
 ## 3. The two of them together
 
@@ -171,3 +188,74 @@ All of these, on one run:
 3. §3 gives two different friends for the same question.
 4. The second `/voicetest speak` makes sound, and the voice is one you chose by ear.
 5. Nothing in §2 makes you wince -- the tests check shape, not taste, and only you can check taste.
+
+---
+
+## 4. Watching the friends talk to each other
+
+With `TTRPG_CHATTER=1` the room holds a conversation without you. What to look at:
+
+```bash
+grep -aE 'talk to each other|said it unprompted' data/logs/bot.log | tail
+# 20:54:36 the friends will talk to each other in channel 1364... (mean gap 300s)
+# 20:56:17 friend-c said it unprompted (chat): Half watching an old series 🐠
+```
+
+| do | expect | if it fails, blame |
+|---|---|---|
+| wait five minutes | one or two messages, from different friends | `ambient/cadence.py` |
+| wait half an hour | nobody speaks twice in a row; no two messages inside 45 s | `social/inclusion.py` |
+| check the hour after 01:00 | silence | `ambient/quiet.py` |
+| leave it overnight | a greeting in the morning, once | `ambient/quiet.py` + the director |
+| say goodnight, wait 35 minutes | silence | `quiet.py` (`AFTER_GOODNIGHT`) |
+| talk to them normally | they still answer, as before | the mention path, not the room |
+
+To rehearse any of it without waiting:
+
+```bash
+ttrpg-chatbots-simulate --hours 24 --seed 11 --start 2026-10-24T09:00 | tail -20
+```
+
+Turn it off with `TTRPG_CHATTER=0` and a restart; nothing else changes.
+
+## 5. The overnight run
+
+Start it, then go to bed:
+
+```bash
+# one-time, in .env
+#   TTRPG_CHATTER=1
+#   TTRPG_CHATTER_SLEEP=0
+#   TTRPG_CHATTER_LOG=data/chatter.jsonl
+rm -f data/chatter.jsonl          # a clean dataset for this run
+./start-bot.sh --stop && ./start-bot.sh -d
+grep -aE 'connected as|bedtime|talk to each other' data/logs/bot.log | tail -6
+```
+
+A healthy start is **four `connected as` lines**, `bedtime is switched off`, and `the friends will talk to
+each other … (mean gap 300s)`.
+
+In the morning:
+
+```bash
+tools/analyse_chatter.py data/chatter.jsonl        # the numbers
+tools/analyse_chatter.py data/chatter.jsonl --top 8
+```
+
+What to look at, in order: the **job mix** (which rungs the room actually used — if it is two jobs, the
+prompts are the problem), the **share of lines at three words or fewer** (content, not cadence), the
+**distinct ratio** (repetition is intended; a *low* number with no immediate repeats means a small
+register), and the **rate against 12/hour**.
+
+If the room went quiet, the log says why — every tick that produced nothing carries a reason:
+
+```bash
+grep -aE 'quiet for|stayed quiet|had nothing to say|budget spent|asleep' data/logs/bot.log | tail
+```
+
+**Simulate first if in doubt.** A day costs a second and touches nothing:
+
+```bash
+ttrpg-chatbots-simulate --hours 24 --seed 11 --awake --out /tmp/day.jsonl
+tools/analyse_chatter.py /tmp/day.jsonl
+```

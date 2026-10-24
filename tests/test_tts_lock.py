@@ -113,7 +113,14 @@ class TestTheRealLock:
         from ttrpg_chatbots.tts.casting import load_voice_directory
 
         rules = load_voice_directory(data_directory()).rules
-        for pinned in lock_module.load(WORLD):
+        # Both directions, and the first one used to raise a bare `StopIteration` that said nothing:
+        # the lock pins the voices *in use*, so a pinned voice no rule casts is a stale entry (kristin
+        # was tuned by ear four times and then replaced), and a rule with no pin cannot be rebuilt.
+        cast = {rule.profile.voice for rule in rules if rule.profile.voice}
+        pinned = {entry.voice for entry in lock_module.load(WORLD)}
+        assert pinned == cast, f"pinned but unused: {pinned - cast}; used but unpinned: {cast - pinned}"
+        for entry in lock_module.load(WORLD):
+            pinned = entry
             rule = next(rule for rule in rules if rule.profile.voice == pinned.voice)
             assert rule.profile.speed == pinned.settings["speed"]
             # Whatever the lock records about the delivery must match the rule: `pitch` is the crude

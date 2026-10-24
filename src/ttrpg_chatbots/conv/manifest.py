@@ -17,7 +17,9 @@ from dataclasses import dataclass
 from typing import Literal
 
 Status = Literal["built", "planned"]
-BANDS = ("perceive", "remember", "decide", "render", "govern")
+#: The bands, in the order a turn passes through them. `deliver` is how a turn arrives and `invite` is
+#: how the human is drawn in -- both added by `docs/TEXTURE.md`.
+BANDS = ("perceive", "remember", "decide", "render", "deliver", "govern", "invite")
 
 
 class ManifestError(RuntimeError):
@@ -54,6 +56,25 @@ MODULES: tuple[ModuleSpec, ...] = (
     _m("perceive", "perceive.modality", "is this text, voice, an image, a system notice?", "built"),
     _m("perceive", "perceive.attachments", "is there a picture, and can he see it?", "built"),
     _m("perceive", "perceive.addressee", "was he named, replied to, or neither?", "built"),
+    _m("perceive", "perceive.assembly", "is this one thought or three?", "built"),
+    _m("deliver", "conv.parts", "what is a part?", "built"),
+    _m("deliver", "parts.derive", "what parts does this text already have?", "built"),
+    _m("deliver", "deliver.split", "one message or several?", "built"),
+    _m("deliver", "deliver.pace", "how long between the messages of one turn?", "built"),
+    _m("remember", "reply.domains", "what does he know about this subject?", "built"),
+    _m("decide", "decide.dig", "what should he ask about what they just offered?", "built"),
+    _m("deliver", "parts.recipe", "what shape should this turn take?", "planned"),
+    _m("deliver", "render.fragment", "what words fill this part?", "planned"),
+    _m("deliver", "deliver.revise", "send it, or send it and fix it?", "planned"),
+    _m("govern", "govern.cycle", "is this conversation going in circles?", "planned"),
+    _m("govern", "govern.break_cycle", "what should change?", "planned"),
+    _m("perceive", "perceive.condition", "how is this person typing right now?", "planned"),
+    _m("render", "render.typo", "what does a mistake look like here?", "planned"),
+    _m("decide", "decide.misread", "what did he think they meant?", "planned"),
+    _m("decide", "decide.feeling", "how much does he care about this?", "planned"),
+    _m("invite", "invite.presence", "is there a human here, and how present are they?", "planned"),
+    _m("invite", "invite.open_door", "is this a good moment for a low-stakes invitation?", "planned"),
+    _m("invite", "invite.pester", "has he already tried, and how often is too often?", "planned"),
     _m("perceive", "perceive.gap", "how long since this person spoke?", "built"),
     _m("perceive", "perceive.events", "what is happening that he would care about?", "built"),
     _m("perceive", "perceive.situation", "what kind of conversation is this?", "built"),

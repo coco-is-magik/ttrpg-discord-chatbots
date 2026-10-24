@@ -145,7 +145,12 @@ def test_a_missing_privileged_intent_says_where_to_enable_it() -> None:
     assert "Developer Portal" in message
 
 
-def test_one_failing_bot_does_not_stop_the_other(caplog) -> None:
+def test_one_failing_bot_does_not_stop_the_other(caplog, monkeypatch) -> None:
+    # The failure is now retried before it is reported (see the two tests below), so the backoff is
+    # patched out here: this test is about isolation, not about how long a retry takes.
+    from ttrpg_chatbots.bots import supervisor as module
+
+    monkeypatch.setattr(module, "START_BACKOFF", 0.01)
     good, bad = _Client(), _Client(fail=RuntimeError("boom"))
     entries = (
         Entry(spec=_helper(), client=good, token="one"),
@@ -173,7 +178,9 @@ def test_several_bots_go_through_asyncio(monkeypatch) -> None:
     monkeypatch.setenv("TTRPG_FRIEND_A_TOKEN", "friend-token")
     seen = []
 
-    async def fake_run_all(entries):
+    async def fake_run_all(entries, chatter=None):
+        # The chatter is None here: the friends only talk to each other when TTRPG_CHATTER is on.
+        assert chatter is None
         seen.extend(entry.spec.id for entry in entries)
 
     monkeypatch.setattr("ttrpg_chatbots.bots.supervisor._run_all", fake_run_all)
@@ -910,3 +917,52 @@ def test_he_does_not_ask_the_same_person_twice_running(monkeypatch) -> None:
     assert second.replies[0][0] != first.replies[0][0], "and not with the same line"
     acts = [turn.act for turn in tuple(friend.history) if turn.is_bot]
     assert acts[-1].startswith("ladder|follow_up|"), acts[-1]
+
+
+def test_a_transient_start_failure_is_retried(monkeypatch) -> None:
+    """Measured: a Discord gateway hiccup took the *helper* offline while the other bots connected.
+
+    Nothing tried again, so the helper stayed down for eight minutes and `/voicetest` -- a helper
+    command -- could not be run at all. A transient failure should cost seconds, not the process.
+    """
+    from ttrpg_chatbots.bots import supervisor as module
+
+    monkeypatch.setattr(module, "START_BACKOFF", 0.01)
+    attempts: list[int] = []
+
+    class _Client:
+        async def start(self, token):
+            attempts.append(1)
+            if len(attempts) < 3:
+                # exactly what discord.py raised on its own resume path during the gateway hiccup
+                raise AttributeError("'NoneType' object has no attribute 'sequence'")
+
+        async def close(self):
+            return None
+
+    entry = module.Entry(spec=_friend("friend-a", reply="mention"), client=_Client(), token="t")
+    asyncio.run(module._supervise(entry))
+
+    assert len(attempts) == 3, "it kept trying until it connected"
+
+
+def test_a_bad_token_is_not_retried(monkeypatch, caplog) -> None:
+    """A failure that will never fix itself is reported at once, with the fix."""
+    import discord
+
+    from ttrpg_chatbots.bots import supervisor as module
+
+    attempts: list[int] = []
+
+    class _Client:
+        async def start(self, token):
+            attempts.append(1)
+            raise discord.LoginFailure("Improper token has been passed.")
+
+        async def close(self):
+            return None
+
+    entry = module.Entry(spec=_friend("friend-a", reply="mention"), client=_Client(), token="bad")
+    asyncio.run(module._supervise(entry))
+
+    assert len(attempts) == 1, "retrying a bad token just delays the message"

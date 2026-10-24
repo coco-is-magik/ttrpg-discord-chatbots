@@ -36,3 +36,4 @@
 # a twenty-word line renders in about 5.5 s at roughly 0.4x realtime on this CPU.
 {"id": "cast-terry", "characters": ["friend-a", "Terry"], "engine": "piper", "voice": "en_US-joe-medium", "speed": 1.05, "volume": 1.0}
 {"id": "cast-otto", "characters": ["friend-b", "Otto"], "engine": "piper", "voice": "en_US-ryan-medium", "speed": 1.15, "volume": 1.0, "pitch_hz": 205, "formant": 1.06}
+{"id": "cast-crusty", "characters": ["friend-c", "Crusty"], "engine": "piper", "voice": "en_US-amy-medium", "speed": 0.76, "volume": 1.0, "pitch_hz": 212, "formant": 1.07}

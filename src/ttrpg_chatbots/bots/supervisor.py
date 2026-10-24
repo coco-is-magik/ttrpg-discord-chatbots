@@ -38,6 +38,7 @@ from ttrpg_chatbots.govern.loop import intent_of
 from ttrpg_chatbots.reply.intents import (
     SOCIAL_AGREEMENT,
     SOCIAL_GREETING,
+    SOCIAL_GOODBYE,
     SOCIAL_PLANS,
     match_intent,
 )
@@ -58,6 +59,12 @@ LADDER_INTENTS = frozenset(
     }
 )
 LOGGER = logging.getLogger(__name__)
+
+#: The snowflake ids of every bot in *our* roster, and which friend each one is. The friends have to hear
+#: each other -- that is the whole point of the group conversation -- while other people's bots stay
+#: ignored, so nothing here can start a reply loop with a stranger.
+_ROSTER_IDS: set[int] = set()
+_ID_TO_FRIEND: dict[int, str] = {}
 
 PROBE_READY_TIMEOUT = 30.0
 PROBE_WAIT = 6.0
@@ -116,6 +123,9 @@ class FriendBot(discord.Client):
         except MemoryError as error:
             LOGGER.warning("%s: %s; starting with an empty memory", spec.id, error)
             self.memory = FriendMemory(spec.id)
+        # The shared room, when the friends are talking to each other. Set by `build_entries` on every
+        # friend, so one conversation is heard by all of them rather than three private ones.
+        self.room = None
         # The last few turns as this friend heard them. Volatile and per-process on purpose:
         # durable memory is a later slice, and a restart starting from silence is correct.
         self.history: deque[Turn] = deque(maxlen=DEFAULT_WINDOW)
@@ -132,11 +142,14 @@ class FriendBot(discord.Client):
         if self._ladder is None:
             jobs = ("greet",) if self.conversation == "greet" else None
             persona = self.spec.persona
+            from ttrpg_chatbots.bots.conversation import sleep_enabled
             self._ladder = Ladder(
                 friend=self.spec.id,
                 style=self.style,
                 jobs=jobs,
                 question_rate=persona.question_rate if persona is not None else 0.0,
+                verbosity=persona.verbosity if persona is not None else 1.0,
+                obey_schedule=sleep_enabled(),
             )
         return self._ladder
 
@@ -164,6 +177,21 @@ class FriendBot(discord.Client):
         """How this friend types, from the persona; ``None`` means tidy text."""
         persona = self.spec.persona
         return persona.style if persona is not None else None
+
+    def _hear(self, text: str, *, speaker: str, at) -> None:
+        """Put what was heard into the shared room, so the next turn has a conversation to join.
+
+        Only two things about a message matter to the room: who said it, and whether it was a goodnight,
+        which moves bedtime. Everything else is the ladder's business.
+        """
+        if self.room is None or not text.strip():
+            return
+        if speaker == "human":
+            self.room.say("human", text, at, kind="human")
+            if match_intent(text) == SOCIAL_GOODBYE:
+                self.room.human_goodnight_at = at
+            return
+        self.room.say(speaker, text, at)
 
     def _remember_human(self, message: discord.Message, content: str) -> None:
         """Record a human turn, with the act it looked like at the time."""
@@ -274,12 +302,17 @@ class FriendBot(discord.Client):
             )
         if message.author == self.user:
             return
-        if getattr(message.author, "bot", False) and not self.trust_bots:
-            # Another bot is talking. Counted above, but not remembered: a group where the
-            # bots answer each other is the chorus the design exists to avoid.
+        author_is_bot = getattr(message.author, "bot", False)
+        if author_is_bot and not (
+            self.trust_bots or getattr(message.author, "id", None) in _ROSTER_IDS
+        ):
+            # Another bot is talking. Counted above, but not remembered: a group where *strangers'* bots
+            # answer each other is the chorus the design exists to avoid. Our own friends are the
+            # exception -- the room is supposed to hear them, or there is no group conversation.
             return
         self.received += 1
         self.last_message = dict(self.last_delivery)
+        self._hear(content, speaker=_who(message), at=datetime.now(timezone.utc))
         self._remember_human(message, content)
         self._learn(content)
         addressed = self._addressed(message)
@@ -718,6 +751,10 @@ def build_entries(
 
             chat = FriendChat()
 
+    _ROSTER_IDS.clear()
+    _ROSTER_IDS.update(spec.user_id for spec in roster if spec.user_id)
+    _ID_TO_FRIEND.clear()
+    _ID_TO_FRIEND.update({spec.user_id: spec.id for spec in roster if spec.user_id})
     entries: list[Entry] = []
     for spec in roster.enabled():
         token = helper_token if spec.is_helper else roster.token_for(spec)
@@ -781,25 +818,62 @@ def run(
         entry = entries[0]
         entry.client.run(entry.token, log_handler=None)
         return
+    chatter = _build_chatter(entries)
     try:
-        asyncio.run(_run_all(entries))
+        asyncio.run(_run_all(entries, chatter))
     except KeyboardInterrupt:
         LOGGER.info("interrupted; closing %d bot(s)", len(entries))
 
 
-async def _run_all(entries: tuple[Entry, ...]) -> None:
-    await asyncio.gather(*(_supervise(entry) for entry in entries))
+async def _run_all(entries: tuple[Entry, ...], chatter=None) -> None:
+    if chatter is not None:
+        chatter.start()
+    try:
+        await asyncio.gather(*(_supervise(entry) for entry in entries))
+    finally:
+        if chatter is not None:
+            await chatter.stop()
+
+
+#: How many times a bot's connection is retried before it is left down, and how long between tries.
+#: Measured: a Discord gateway hiccup (a 503 on the websocket handshake, then discord.py raising
+#: `AttributeError: 'NoneType' object has no attribute 'sequence'` on its own resume path) took the
+#: **helper and Terry** offline while the other two connected, and nothing tried again -- so the helper
+#: was down for eight minutes and `/voicetest` could not be run at all. A transient failure should cost
+#: seconds, not the process lifetime.
+START_ATTEMPTS = 3
+START_BACKOFF = 5.0
+
+#: Failures that will never fix themselves, so retrying only delays the message.
+PERMANENT = ("LoginFailure", "PrivilegedIntentsRequired")
 
 
 async def _supervise(entry: Entry) -> None:
-    """Start one client; report its failure without taking the other bots down."""
+    """Start one client; retry a transient failure, and report without taking the others down."""
     try:
-        await entry.client.start(entry.token)
-    except asyncio.CancelledError:
-        raise
-    except Exception as error:  # noqa: BLE001 - one bot's failure is not the process's
-        LOGGER.error("%s", explain_failure(entry.spec, error))
+        for attempt in range(1, START_ATTEMPTS + 1):
+            try:
+                await entry.client.start(entry.token)
+                return
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:  # noqa: BLE001 - one bot's failure is not the process's
+                if type(error).__name__ in PERMANENT or attempt == START_ATTEMPTS:
+                    LOGGER.error("%s", explain_failure(entry.spec, error))
+                    return
+                LOGGER.warning(
+                    "%s: %s on attempt %d/%d; retrying in %.0fs (a gateway hiccup, not a bad token)",
+                    entry.spec.id,
+                    type(error).__name__,
+                    attempt,
+                    START_ATTEMPTS,
+                    START_BACKOFF,
+                )
+                await asyncio.sleep(START_BACKOFF)
     finally:
+        # Always, on every path -- a client that connected and then stopped, and one that never got
+        # there. The first version returned on success *before* closing, so a clean shutdown left the
+        # connection open; the test caught it.
         try:
             await entry.client.close()
         except Exception:  # noqa: BLE001 - closing is best effort on the way out
@@ -874,6 +948,74 @@ async def _wait_ready(
             return ready
         await asyncio.sleep(0.25)
     return {entry.spec.id for entry in entries if entry.client.is_ready()}
+
+
+def _who(message) -> str:
+    """Who said this, in the room's vocabulary: a friend id for our own bots, else "human"."""
+    author_id = getattr(getattr(message, "author", None), "id", None)
+    return _ID_TO_FRIEND.get(author_id, "human")
+
+
+def _build_chatter(entries: tuple[Entry, ...]):
+    """The group conversation, if it is switched on.
+
+    One room, one director, one loop for the whole process: the friends are meant to be in the *same*
+    conversation, and three private ones is the failure mode this exists to avoid.
+    """
+    from ttrpg_chatbots.ambient.room import Room
+    from ttrpg_chatbots.bots import conversation as conversation_module
+
+    if not conversation_module.enabled():
+        LOGGER.info(
+            "the friends will not talk to each other: set TTRPG_CHATTER=1 to let them"
+        )
+        return None
+
+    friends = [entry for entry in entries if isinstance(entry.client, FriendBot)]
+    if len(friends) < 2:
+        LOGGER.warning("TTRPG_CHATTER is on but there is only %d friend listening", len(friends))
+        return None
+
+    room = Room()
+    for entry in friends:
+        entry.client.room = room
+
+    channel_id = os.environ.get("TTRPG_CHATTER_CHANNEL", "").strip()
+    channel = int(channel_id) if channel_id.isdigit() else None
+    if channel is None:
+        for entry in friends:
+            if entry.spec.channels:
+                channel = int(entry.spec.channels[0])
+                break
+    if channel is None:
+        LOGGER.warning("TTRPG_CHATTER is on but no channel is configured for it")
+        return None
+
+    sleep = conversation_module.sleep_enabled()
+    from ttrpg_chatbots.ambient.quiet import Quiet
+
+    director = conversation_module.Director(
+        ladders={entry.spec.id: entry.client.ladder for entry in friends},
+        memories={entry.spec.id: entry.client.memory for entry in friends},
+        room=room,
+        quiet=Quiet(sleep_enabled=sleep),
+    )
+    if not sleep:
+        LOGGER.info(
+            "bedtime is switched off (TTRPG_CHATTER_SLEEP=0): the room and the friends will talk "
+            "through the night"
+        )
+    LOGGER.info(
+        "the friends will talk to each other in channel %s (mean gap %.0fs)",
+        channel,
+        director.cadence.mean_seconds,
+    )
+    return conversation_module.Chatter(
+        director=director,
+        room=room,
+        channel_id=channel,
+        clients={entry.spec.id: entry.client for entry in friends},
+    )
 
 
 def _failure_line(entry: Entry, task: asyncio.Task) -> str:

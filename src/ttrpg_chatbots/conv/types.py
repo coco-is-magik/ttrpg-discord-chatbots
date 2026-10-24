@@ -152,14 +152,23 @@ class Trail:
 
 @dataclass(frozen=True)
 class Line:
-    """The only object in the system that contains words to send."""
+    """The only object in the system that contains words to send.
+
+    ``parts`` is what the line is made of -- see `docs/TEXTURE.md`. Empty means "one undifferentiated
+    message", which is exactly how every line behaved before parts existed, so a line without parts is
+    still valid and still arrives as one message.
+    """
 
     text: str
     trail: Trail = field(default_factory=Trail)
+    parts: tuple = ()
 
     def __post_init__(self) -> None:
         if not self.text.strip():
             raise ValueError("a line must say something")
+        for part in self.parts:
+            if not getattr(part, "text", "").strip():
+                raise ValueError("every part of a line must say something")
 
 
 @dataclass(frozen=True)

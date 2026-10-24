@@ -1679,7 +1679,16 @@ class TestHearingAFriend:
         otto = _default_line("friend-b")
 
         assert terry != otto, "one fixed line tested the engine and told you nothing about the friend"
-        assert "hockey" in terry, "Terry's own material"
+        # His own material, by property rather than by keyword: naming words made this a test of the
+        # dataset's vocabulary, and it failed the moment his own lines grew.
+        from ttrpg_chatbots.bots.voice import data_directory
+        from ttrpg_chatbots.reply.datasets import load_world
+
+        owned = {
+            item.reply for item in load_world(data_directory()).knowledge
+            if item.owned_by("friend-a") and item.reply
+        }
+        assert any(part.strip() in terry for reply in owned for part in reply.split(". ")), terry
         # Otto's is a line from his own material *that the style changed*: his stutter and his
         # emoticons are where the hesitation lives, and a line the style leaves alone demonstrates
         # nothing about how he sounds.
@@ -1701,7 +1710,7 @@ class TestHearingAFriend:
     def test_a_friend_with_no_material_still_gets_a_line(self) -> None:
         from ttrpg_chatbots.bot import _default_line
 
-        assert _default_line("friend-c") == "hello, can you hear me?"
+        assert _default_line("friend-d") == "hello, can you hear me?"
 
     def test_the_friend_can_be_named_rather_than_numbered(self) -> None:
         from ttrpg_chatbots.bot import _resolve_friend
