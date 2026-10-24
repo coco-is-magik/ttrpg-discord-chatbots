@@ -164,9 +164,18 @@ by a script, written to a git-ignored directory, loaded at runtime, and deletabl
 repository. Three things hold that in place, and each is a command rather than an intention:
 
 ```bash
-git check-ignore -v corpora/switchboard/utterances.jsonl    # must name the rule
-git ls-files | grep -vE '\.(py|md|toml|cfg|txt|sh|yml|yaml|example)$'   # must print only LICENSE
-git add --dry-run corpora/                                   # must stage nothing
+# 1. the corpus is ignored, and by which rule
+git check-ignore -v corpora/switchboard/utterances.jsonl
+#    -> .gitignore:37:corpora/*	corpora/switchboard/utterances.jsonl
+
+# 2. nothing but code, docs, config and LICENSE is tracked
+git ls-files | grep -vE '\.(py|md|toml|cfg|txt|sh|yml|yaml|example)$' \
+              | grep -vE '^\.gitignore$|^(tests/fixtures|examples)/'
+#    -> LICENSE
+
+# 3. a corpus cannot be staged even by accident
+git add --dry-run corpora/
+#    -> The following paths are ignored by one of your .gitignore files: corpora
 ```
 
 The rules: `.gitignore` ignores `corpora/*` (keeping `corpora/README.md` so the folder exists and
