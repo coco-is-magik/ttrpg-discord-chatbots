@@ -25,6 +25,8 @@ from ttrpg_chatbots.conv.types import (
 )
 from ttrpg_chatbots.decide import subject as subject_rung
 from ttrpg_chatbots.decide.shelf import Shelf, load_shelf
+from ttrpg_chatbots.reply.domains import DOMAIN_DIR, DomainBook
+from ttrpg_chatbots.reply.domains import load as load_domains
 from ttrpg_chatbots.govern.loop import Scene, reply, would_answer
 from ttrpg_chatbots.govern.repeat import Recent
 from ttrpg_chatbots.life.calendar import load_calendar
@@ -70,6 +72,7 @@ class Ladder:
         self._obey_schedule = obey_schedule
         self.jobs = jobs
         self._shelf: Shelf | None = None
+        self._domains: DomainBook | None = None
         self._recent = Recent()
         self._schedule: Schedule | None = None
         self._schedule_loaded = False
@@ -80,6 +83,17 @@ class Ladder:
         self._index = None
         self._year = None
         self._year_loaded = False
+
+    @property
+    def domains(self) -> DomainBook:
+        """What he knows, one subject area at a time, loaded once.
+
+        A world with no `domains/` folder loads an empty book, which is exactly the behaviour before domains
+        existed: `find` returns nothing, no dig is ever chosen, and every turn takes the ordinary path.
+        """
+        if self._domains is None:
+            self._domains = load_domains(self._data / DOMAIN_DIR, friend=self.friend)
+        return self._domains
 
     @property
     def shelf(self) -> Shelf:
@@ -260,6 +274,7 @@ class Ladder:
             gap_bucket=_gap(memory, now).bucket,
             question_rate=self._question_rate,
             verbosity=self._verbosity,
+            domains=self.domains,
         )
 
     def line(

@@ -25,6 +25,7 @@ from ttrpg_chatbots.conv.types import (
     Situation,
     Utterance,
 )
+from ttrpg_chatbots.decide import dig as dig_rung
 from ttrpg_chatbots.decide import family as family_rung
 from ttrpg_chatbots.decide import (
     depth as depth_rung,
@@ -109,6 +110,9 @@ class Scene:
     just_told: str = ""
     gap_bucket: str = "fresh"
     named: tuple[str, ...] = ()
+    #: What he knows, one subject area at a time -- the material a dig is asked from and answered
+    #: with. None means the ladder has no domains, which is exactly the behaviour before they existed.
+    domains: object = None
     #: How often he would rather hand the turn back than answer with a bare acknowledgement. The
     #: persona's number, not the ladder's: it is a property of the person, not of the turn.
     question_rate: float = 0.0
@@ -188,12 +192,16 @@ class Plan:
     """
 
     job: str
-    book: Phrasebook
+    book: Phrasebook | None
     where: str
     budget: object
     depth: int
     remembered: object = None
     telling: object = None
+    #: Set when the turn takes a hook: the question to ask, and what it is about.
+    dig: object = None
+    #: Set when the turn answers one: which aspect of which area he was asked about.
+    asked: object = None
 
 
 def plan(
@@ -225,10 +233,27 @@ def plan(
         known_subject=scene.subject is not None,
         story=telling is not None,
     )
+    # Taking a hook and answering one are decided here, before the budget, because a domain line is
+    # longer than the thing that prompted it: measured, "what is different about the old ones?" is seven
+    # words against a three-word hook, and the mirror rule trimmed it to nothing.
+    asked_about = None
+    dig_now = None
+    if scene.domains:
+        asked_about = dig_rung.answer_for(turns=scene.turns, domains=scene.domains)
+        if asked_about is None:
+            dig_now = dig_rung.question_for(
+                turns=scene.turns,
+                domains=scene.domains,
+                offered_hook=scene.offered_hook,
+                question_rate=scene.question_rate,
+            )
+    domain_turn = asked_about is not None or dig_now is not None
+
     budget = length.budget(
         their_words=len(scene.utterance.text.split()),
         phase=where,
         story=telling is not None,
+        answer=domain_turn,
         verbosity=scene.verbosity,
     )
 
@@ -302,6 +327,34 @@ def plan(
         ):
             # He has just spoken about himself, so the turn goes back to them.
             chosen = "ask_back"
+
+    # Taking a hook, and answering one -- the only two jobs whose words come from *domain material*
+    # rather than a phrasebook. They are decided here, after the ordinary job, because they are what
+    # to do *instead* of a low-content turn: measured, every line in the log was an offer answered
+    # with "nice" or "ah right", and the conversation never left the entry point.
+    if asked_about is not None and intent not in ("greet", "comfort", "complain", "refuse"):
+        # Somebody asked him about his own thing. Answering is what a person does next.
+        chosen = "answer_dig"
+    elif dig_now is not None and chosen in ("noted", "follow_up", "hedge", "ask_back"):
+        # Taking the hook is what to do *instead* of a low-content turn -- and only instead of one, because
+        # a story or an explanation is a better answer than a question.
+        chosen = "dig"
+
+    if chosen in ("dig", "answer_dig"):
+        # No phrasebook: the material *is* the words. Everything after this still runs the line
+        # through the budget, the style and the persona gate, so a domain cannot smuggle in a line
+        # that the rest of the ladder would have refused.
+        return Plan(
+            job=chosen,
+            book=None,
+            where=where,
+            budget=budget,
+            depth=depth,
+            remembered=remembered,
+            telling=telling,
+            dig=dig_now,
+            asked=asked_about,
+        )
 
     chosen_book = book if book is not None else (books.for_job(chosen) if books else None)
     if chosen_book is None:
@@ -544,6 +597,7 @@ def reply(
     where, budget, depth = decided.where, decided.budget, decided.depth
     remembered = decided.remembered
     telling = decided.telling
+    dig_now, asked_about = decided.dig, decided.asked
     trace.add("phase", where)
     trace.add("length", budget)
     trace.add("floor", "Speak(reason='addressed')")
@@ -554,14 +608,28 @@ def reply(
     trace.add("story", f"{telling.story.id} ({telling.mode})" if telling else "nothing")
     trace.add("about", _about(scene=scene, telling=telling))
 
-    chosen_book = book if book is not None else (books.for_job(chosen) if books else None)
-    if chosen_book is None:
-        return Abstain(f"no phrasebook for {chosen}")
-    if chosen_book.job != chosen:
-        # One phrasebook per job, and no borrowing across them. This is the phase boundary that
-        # makes "prove greet before moving on" true instead of aspirational.
-        return Abstain(f"the {chosen_book.job} phrasebook does not do {chosen}")
+    domain_text = None
+    if chosen == "dig" and dig_now is not None:
+        domain_text = dig_now.question
+        trace.add("about", dig_now.about)
+    elif chosen == "answer_dig" and asked_about is not None:
+        # Not the same answer twice. Measured: asked about the shelf twice, he said the frog both times.
+        material = scene.domains.answers(
+            asked_about[0], asked_about[1], avoid=(recent.recent() if recent is not None else ())
+        )
+        domain_text = material[0] if material else None
+        if domain_text is None:
+            return Abstain(f"nothing of his own to say about {asked_about[1].name}")
+        trace.add("about", f"{asked_about[0].id}:{asked_about[1].name}")
 
+    if domain_text is None:
+        chosen_book = book if book is not None else (books.for_job(chosen) if books else None)
+        if chosen_book is None:
+            return Abstain(f"no phrasebook for {chosen}")
+        if chosen_book.job != chosen:
+            # One phrasebook per job, and no borrowing across them. This is the phase boundary that
+            # makes "prove greet before moving on" true instead of aspirational.
+            return Abstain(f"the {chosen_book.job} phrasebook does not do {chosen}")
 
     speaker = who.choose(situation=scene.situation.kind, table_active=scene.table_active)
     trace.add("who", speaker)
@@ -569,23 +637,31 @@ def reply(
     shape = form.choose(job=chosen, budget=budget)
     trace.add("form", shape)
 
-    register = family_rung.choose(
-        job=chosen,
-        relationship=scene.relationship,
-        part_of_day=moment.part_of_day,
-        depth=depth,
-        recall=remembered.mode if remembered else "",
-        subject=scene.subject is not None,
-        event=bool(scene.events),
-        plan=_has_plan(scene) and intent == "plans",
-        story=telling is not None,
-        point=telling is not None and telling.mode == "point",
-    )
-
     ledger = recent if recent is not None else Recent()
-    template = variant.choose(
-        book=chosen_book, family=register, recent=ledger.recent(), budget=budget
-    )
+    if domain_text is not None:
+        # The material *is* the words. No family, no variant, no slots: a question about a shelf is not a
+        # phrasing of something else. Everything *below* still runs, which is the point -- the budget, the
+        # typing style and the persona gate all apply to a domain line too.
+        register, template = "domain", domain_text
+        trace.add("family", register)
+        trace.add("variant", template)
+    else:
+        register = family_rung.choose(
+            job=chosen,
+            relationship=scene.relationship,
+            part_of_day=moment.part_of_day,
+            depth=depth,
+            recall=remembered.mode if remembered else "",
+            subject=scene.subject is not None,
+            event=bool(scene.events),
+            plan=_has_plan(scene) and intent == "plans",
+            story=telling is not None,
+            point=telling is not None and telling.mode == "point",
+        )
+
+        template = variant.choose(
+            book=chosen_book, family=register, recent=ledger.recent(), budget=budget
+        )
     if template is None and register in ("recall", "event", "story"):
         # A special phrasing that does not fit the budget -- "hey" is a three-word opening and a
         # recall line is five; "what are you up to" is seven and an event clause is nine. Fall
@@ -655,8 +731,9 @@ def reply(
         return Abstain("over budget")
 
     typed = typing.apply(trimmed, style)
-    if ledger.seen_last(typed):
-        # Say the same *thing* differently before giving up on saying it. Measured: "what are you up
+    if ledger.seen_last(typed) and chosen_book is not None:
+        # Say the same *thing* differently before giving up on saying it. A domain line has no book to
+        # resay it from -- and the questions a domain offers are already varied by `avoid`. Measured: "what are you up
         # to" twice in a minute produced the identical line, because a four-word answer is allowed to
         # repeat and the hook value does not change with the wording.
         alternative = _resay(chosen_book, register, chosen, scene, budget, style, ledger)
@@ -671,7 +748,7 @@ def reply(
         fit=persona_fit.read(typed, story=telling is not None),
     )
     trace.add("audition", verdict.reason or "ok")
-    if not verdict.ok:
+    if not verdict.ok and chosen_book is not None:
         # A refused candidate is not the end of the turn. `render/audition`'s own docstring promises
         # that "on a reject the ladder asks decide.variant for another candidate" -- it did not, and
         # the gap produced silence whenever the *material* was the problem: measured on "why?",

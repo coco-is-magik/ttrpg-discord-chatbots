@@ -44,6 +44,31 @@ WAKE_PROMPT = "good morning"
 REACTABLE_WORDS = 4
 
 
+def _act_from(entry) -> str:
+    """The turn's act, rebuilt from the ladder's own trail.
+
+    ``ladder|job|about|`` is what the rest of the system reads -- the dig's aspect, a story's topic, the
+    subject a follow-up reaches. The trail already carries both parts (``job=`` and ``about=``), so the
+    room reconstructs exactly what the friend recorded rather than inventing a placeholder.
+    """
+    trail = getattr(entry, "trail", "") or ""
+    job = ""
+    about = "|"
+    if "job=" in trail:
+        job = trail.split("job=")[1].split(" >")[0].strip()
+    if "about=" in trail:
+        # The **last** one: the trail records the ordinary subject and then, for a domain turn, overrides
+        # it with the aspect. Measured: taking the first made a dig about "cute-things:the-shelf" read as
+        # "topic:rome", so the friend being asked answered a different question and hedged.
+        about = trail.rsplit("about=", 1)[1].split(" >")[0].strip()
+    if not job:
+        job = entry.kind
+    if "|" not in about:
+        # `about` is a two-part field (`topic|story`), and a domain aspect arrives as one part.
+        about = f"{about}|"
+    return f"ladder|{job}|{about}"
+
+
 def _worth_reacting_to(text: str) -> bool:
     """Whether the last line was a *thing said* rather than a nod."""
     return len([word for word in (text or "").split() if word]) >= REACTABLE_WORDS
@@ -129,7 +154,9 @@ class Director:
             return None
 
         waking = self.quiet.sleep.just_woke(now)
-        speaker = inclusion.choose(self.room, self.friends, now, rng=self._rng)
+        speaker = self._owner_of_the_dig() or inclusion.choose(
+            self.room, self.friends, now, rng=self._rng
+        )
         if speaker is None:
             self.next_at = self.cadence.next_at(now)
             self.reason = "nobody may speak yet (everyone has just spoken)"
@@ -167,6 +194,25 @@ class Director:
             self.room.human_goodnight_at = at
         return entry
 
+    def _owner_of_the_dig(self) -> str | None:
+        """Who answers, when the last thing said was a question about somebody's own thing.
+
+        Measured in a three-friend room: Terry asked Otto's shelf a question, the rotation handed the floor
+        to Crusty, and she hedged -- because it was never her shelf. A question about somebody's own thing
+        is answered by them, which is also what makes the answer available at all.
+        """
+        tail = self.room.tail()
+        if len(tail) < 2:
+            return None
+        last, offered = tail[-1], tail[-2]
+        if offered.is_human or last.is_human:
+            return None
+        if "job=dig" not in (last.trail or ""):
+            return None
+        if offered.speaker == last.speaker or offered.speaker not in self.ladders:
+            return None
+        return offered.speaker
+
     def _prompt(self, speaker: str, waking: bool) -> str:
         """What the ladder is told. A greeting at the start of the day, a reaction if somebody else has
         just spoken something worth reacting to, and otherwise his own day."""
@@ -182,19 +228,28 @@ class Director:
     def _turns(self) -> tuple[Turn, ...]:
         """The room as the ladder's own history, so depth, follow-ups and the repeat ledger all work
         exactly as they do when a person is talking."""
+    def _turns(self) -> tuple[Turn, ...]:
+        """The room as the ladder's own history, so depth, follow-ups and the repeat ledger all work
+        exactly as they do when a person is talking.
+
+        The act is read from the **trail**, not invented from the message kind. Measured: it used to be
+        ``ladder|chat|`` for every line, so the room could not see that a turn was a story (no topic to
+        follow up on) or a dig (nothing for the answering side to answer) -- the same two things a person
+        talking to a friend gets for free.
+        """
         turns: list[Turn] = []
         for entry in self.room.tail():
             if entry.is_human:
                 turns.append(Turn(speaker="human", text=entry.text, act=None, is_bot=False))
-            else:
-                turns.append(
-                    Turn(
-                        speaker=entry.speaker,
-                        text=entry.text,
-                        act=f"ladder|{entry.kind}|{''}|",
-                        is_bot=True,
-                    )
+                continue
+            turns.append(
+                Turn(
+                    speaker=entry.speaker,
+                    text=entry.text,
+                    act=_act_from(entry),
+                    is_bot=True,
                 )
+            )
         return tuple(turns)
 
     def _speak(self, speaker: str, now: datetime, *, waking: bool) -> Spoke | None:

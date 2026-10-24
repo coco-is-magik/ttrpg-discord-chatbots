@@ -24,6 +24,8 @@ Job = Literal[
     "mirror",
     "reassure",
     "offer_hook",
+    "dig",
+    "answer_dig",
     "explain",
     "tell_story",
     "hedge",

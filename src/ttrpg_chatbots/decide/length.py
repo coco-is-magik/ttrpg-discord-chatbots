@@ -19,6 +19,10 @@ CONTENT_FLOOR = 12
 # A story is two sentences of something that happened. Measured: the bodies are 20-22 words, so a
 # substance budget of twelve refused every one of them and the story stage went silent.
 STORY_FLOOR = 26
+#: Answering a question is longer than asking it. Measured: "what is on it?" is four words, so the budget
+#: came out at six and the answer lost its ending -- "a ceramic frog, a tin train, and a leaf i pressed"
+#: arrived as "a ceramic frog, a tin train". The floor is what an answer to a question needs.
+ANSWER_FLOOR = 16
 
 
 #: How much room a person needs before they are allowed a third sentence. Above this, `verbosity` buys
@@ -31,6 +35,7 @@ def budget(
     their_words: int,
     phase: str = "pleasantries",
     story: bool = False,
+    answer: bool = False,
     verbosity: float = 1.0,
 ) -> Budget:
     """Their length plus two, clamped; two sentences only when the conversation has depth.
@@ -54,6 +59,12 @@ def budget(
         )
     if phase == "substance":
         words = max(int(round(CONTENT_FLOOR * factor)), words)
+    if answer:
+        # Answering a question somebody asked: longer than the question, and not a ramble. Same shape as
+        # the story floor, for the same reason -- the material was written for this and the mirror rule
+        # does not apply to it.
+        words = max(int(round(ANSWER_FLOOR * factor)), words)
+        return Budget(max_words=words, max_sentences=2 if factor < RAMBLING else 3)
     sentences = 2 if phase == "substance" else 1
     if factor >= RAMBLING:
         sentences += 1

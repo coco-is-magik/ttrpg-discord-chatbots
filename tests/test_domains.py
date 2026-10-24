@@ -206,3 +206,168 @@ def test_answering_a_domain_he_does_not_know_is_ignored():
     found = answer_for(turns=(asked,), domains=crusty)
     assert found is not None  # she knows the domain...
     assert not crusty.answers(found[0], found[1])  # ...but has nothing of her own to say about it
+
+
+# --- wired into the ladder --------------------------------------------------------------------
+
+
+def test_the_ladder_takes_a_hook_and_answers_one():
+    """The exchange from the log, through the real ladder rather than the decision modules.
+
+    Before this, five turns went by and the conversation never left the entry point: "rearranging my
+    shelf" was answered with "nice", and the same line came back.
+    """
+    from ttrpg_chatbots.conv.types import Line, Utterance
+    from ttrpg_chatbots.decide.shelf import load_shelf
+    from ttrpg_chatbots.govern.loop import Scene, reply
+
+    def shelf(friend):
+        return load_shelf(f"{WORLD}/phrasebooks/{friend}", fallback=f"{WORLD}/phrasebooks")
+
+    offered = Turn(
+        speaker="friend-b",
+        text="i have been rearranging my shelf",
+        act="ladder|offer_hook|topic:cute-things|",
+        is_bot=True,
+    )
+    asked = reply(
+        scene=Scene(
+            utterance=Utterance(text="i have been rearranging my shelf", speaker="friend-b"),
+            addressed="named",
+            turns=(offered,),
+            domains=load(f"{WORLD}/domains", friend="friend-c"),
+            offered_hook=True,
+            question_rate=0.9,
+        ),
+        books=shelf("friend-c"),
+    )
+    assert isinstance(asked, Line), asked
+    steps = dict(asked.trail.steps)
+    assert steps["job"] == "dig"
+    assert steps["about"] == "cute-things:the-shelf"
+    assert asked.text.endswith("?")
+
+    dig_turn = Turn(speaker="friend-c", text=asked.text, act=f"ladder|dig|{steps['about']}|", is_bot=True)
+    answered = reply(
+        scene=Scene(
+            utterance=Utterance(text=asked.text, speaker="friend-c"),
+            addressed="named",
+            turns=(dig_turn,),
+            domains=load(f"{WORLD}/domains", friend="friend-b"),
+            question_rate=0.8,
+        ),
+        books=shelf("friend-b"),
+    )
+    assert isinstance(answered, Line), answered
+    steps = dict(answered.trail.steps)
+    assert steps["job"] == "answer_dig"
+    # The whole answer, not the first half of it: a question is shorter than its answer, so the budget
+    # has a floor for this job. Measured: without it the ending was trimmed off.
+    assert "leaf" in answered.text
+
+
+def test_a_domain_line_still_passes_the_persona_gate():
+    """A domain cannot smuggle in a line the rest of the ladder would have refused."""
+    from ttrpg_chatbots.conv.types import Line, Utterance
+    from ttrpg_chatbots.decide.shelf import load_shelf
+    from ttrpg_chatbots.govern.loop import Scene, reply
+
+    offered = Turn(speaker="friend-b", text="watching the trains", act="ladder|offer_hook|topic:trains|", is_bot=True)
+    out = reply(
+        scene=Scene(
+            utterance=Utterance(text="watching the trains", speaker="friend-b"),
+            addressed="named",
+            turns=(offered,),
+            domains=load(f"{WORLD}/domains", friend="friend-c"),
+            offered_hook=True,
+            question_rate=1.0,
+        ),
+        books=load_shelf(f"{WORLD}/phrasebooks/friend-c", fallback=f"{WORLD}/phrasebooks"),
+    )
+    assert isinstance(out, Line), out
+    steps = dict(out.trail.steps)
+    assert steps["job"] == "dig"
+    assert steps["audition"] == "ok"  # it went through the gate, and passed it
+
+
+def test_a_world_with_no_domains_behaves_as_before():
+    """The layer is additive: no domains means no dig, and every turn takes the ordinary path."""
+    from ttrpg_chatbots.conv.types import Line, Utterance
+    from ttrpg_chatbots.decide.shelf import load_shelf
+    from ttrpg_chatbots.govern.loop import Scene, reply
+
+    offered = Turn(speaker="friend-b", text="i have been rearranging my shelf", is_bot=True)
+    out = reply(
+        scene=Scene(
+            utterance=Utterance(text="i have been rearranging my shelf", speaker="friend-b"),
+            addressed="named",
+            turns=(offered,),
+            offered_hook=True,
+            question_rate=0.9,
+        ),
+        books=load_shelf(f"{WORLD}/phrasebooks/friend-c", fallback=f"{WORLD}/phrasebooks"),
+    )
+    assert isinstance(out, Line), out
+    assert dict(out.trail.steps)["job"] != "dig"
+
+
+# --- the two bugs the room found ---------------------------------------------------------------
+
+
+def test_the_room_reads_the_last_about_not_the_first():
+    """A dig's trail has two `about=` steps; the aspect is the last one.
+
+    Measured in a three-friend room: taking the first made a dig about "cute-things:the-shelf" read as
+    "topic:rome", so the friend being asked answered a different question and hedged.
+    """
+    from ttrpg_chatbots.ambient.director import _act_from
+    from ttrpg_chatbots.ambient.room import Said
+
+    entry = Said(
+        speaker="friend-a",
+        text="what is on it?",
+        at=__import__("datetime").datetime(2026, 10, 24, 12, 0),
+        trail="intent=remark > job=dig > about=topic:rome| > about=cute-things:the-shelf",
+    )
+    assert _act_from(entry) == "ladder|dig|cute-things:the-shelf|"
+
+
+def test_a_line_with_no_trail_still_makes_an_act():
+    from ttrpg_chatbots.ambient.director import _act_from
+    from ttrpg_chatbots.ambient.room import Said
+
+    entry = Said(speaker="friend-a", text="morning", at=__import__("datetime").datetime(2026, 10, 24, 8, 0))
+    assert _act_from(entry) == "ladder|chat||"
+
+
+def test_after_a_dig_the_floor_goes_to_whoever_offered():
+    """A question about somebody's own thing is answered by them -- which is also what makes it
+    answerable at all."""
+    from datetime import datetime, timedelta
+    from pathlib import Path
+
+    from ttrpg_chatbots.ambient.cli import build_director
+
+    friends = ("friend-a", "friend-b", "friend-c")
+    director = build_director(
+        roster=Path("data/bots.json"), friends=friends, seed=3, mean_seconds=60.0, sleep_enabled=False
+    )
+    director.room.say(
+        "friend-b",
+        "i have been rearranging my shelf",
+        datetime(2026, 10, 24, 12, 0),
+        trail="intent=about_me > job=offer_hook > about=topic:cute-things|",
+    )
+    now = datetime(2026, 10, 24, 12, 5)
+    said = []
+    for _ in range(40):
+        out = director.tick(now)
+        if out is not None:
+            said.append(out)
+        now += timedelta(seconds=20)
+    jobs = [(line.speaker, [s for s in line.trail.split(" > ") if s.startswith("job=")][0]) for line in said]
+    assert ("friend-a", "job=dig") in jobs or ("friend-c", "job=dig") in jobs, jobs
+    # whoever asked, the answer is the shelf's owner
+    asked_at = next(index for index, (_, job) in enumerate(jobs) if job == "job=dig")
+    assert jobs[asked_at + 1][0] == "friend-b", jobs
+    assert jobs[asked_at + 1][1] == "job=answer_dig", jobs
