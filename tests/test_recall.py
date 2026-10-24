@@ -131,6 +131,45 @@ def test_he_only_brings_it_up_once_a_day() -> None:
     )
 
 
+def test_the_ladder_marks_what_it_said_so_the_room_cannot_loop_on_it() -> None:
+    """Measured on an overnight run: 61 of 95 unprompted lines carried the same recall.
+
+    The room hands the previous line back as the prompt, so when that line mentioned the dog the next
+    speaker *answered* it -- and appended the clause again. A self-sustaining cycle: "how is otis doing?"
+    nineteen times in one night, each one raised by the last.
+
+    Two things had to be true for that, and this test pins both: the fact is marked when it is really
+    said, and a marked fact is not raised again the same day.
+    """
+    memory = _memory()
+    prompt = "messing with the tank. how is otis doing? \u2661"
+
+    first = _say(prompt, memory)
+    assert isinstance(first, Line)
+    assert "otis" in first.text.lower(), "the clause in the prompt should be answered"
+    raised = next(fact.meta.get("raised") for fact in memory.facts if fact.key == "pet.name")
+    assert raised == DAY.isoformat(), "what he actually said must be marked as raised"
+
+    second = _say(prompt, memory)
+    assert isinstance(second, Line)
+    assert "otis" not in second.text.lower(), "and must not be raised again the same day"
+
+
+def test_a_selected_recall_that_was_never_said_is_not_marked() -> None:
+    # A recall the budget trimmed away was not raised. Marking it would spend the fact silently, so the
+    # condition is "he said it", not "the trail mentions it" -- measured: `messing with the tank` carried
+    # recall=pet.name in its trail with no mention of the dog in its text.
+    memory = _memory()
+
+    out = _say("messing with the tank", memory)
+
+    assert isinstance(out, Line)
+    assert dict(out.trail.steps)["recall"].startswith("pet.name")
+    assert "otis" not in out.text.lower()
+    raised = next((fact.meta.get("raised") for fact in memory.facts if fact.key == "pet.name"), None)
+    assert raised is None
+
+
 def test_a_fact_he_cannot_answer_for_is_asked_after() -> None:
     out = _say("how is the dog?")
 

@@ -165,6 +165,9 @@ The corpus it came from is already at `corpora/switchboard/`; to rebuild the tab
 - **`./start-bot.sh` with no argument runs in the foreground.** Use `-d` / `--background`.
 - **Friends ignore other bots, and count the delivery anyway.** "Only from bots" in
   `/friendcheck` means the pipe works and the message was correctly dropped.
+- **A marker wired to one of two callers is not wired.** The recall marker had exactly one caller --
+  the human reply path -- so the ambient room recalled the same fact on 61 of 95 lines. Anything that
+  must happen "once" belongs where the line is made, not in one of its callers.
 - **Silence is not failure.** `FriendChat.reply` returns `None` to stay quiet;
   `ChatError` is a real problem.
 

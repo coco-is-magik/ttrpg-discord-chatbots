@@ -398,20 +398,6 @@ class FriendBot(discord.Client):
             ", ".join(f"{fact.key}={fact.value}" for fact in kept),
         )
 
-    def _mark_recalled(self, trail) -> None:
-        """Note that he brought something up, so he does not bring it up again today."""
-        steps = dict(trail.steps)
-        if steps.get("family") != "recall":
-            return
-        key = steps.get("recall", "").split(" ")[0]
-        if not key or key == "nothing":
-            return
-        self.memory.mark_raised(key, day=date.today().isoformat())
-        try:
-            self.memory.save()
-        except MemoryError as error:
-            LOGGER.warning("%s could not save its memory: %s", self.spec.id, error)
-
     def _remember_sent(self, sent) -> None:
         """Remember the id of a message he posted, so a reply-arrow can be recognised later."""
         identifier = getattr(sent, "id", None)
@@ -555,7 +541,6 @@ class FriendBot(discord.Client):
             LOGGER.warning("%s could not send its reply: %s", self.spec.id, error)
             return
         self._remember_sent(sent)
-        self._mark_recalled(out.trail)
         identifier = getattr(message, "id", None)
         if identifier is not None:
             self.answered.append(identifier)

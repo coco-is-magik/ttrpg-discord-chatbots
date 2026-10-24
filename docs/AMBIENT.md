@@ -324,4 +324,53 @@ report a dead bot as healthy. To run it every ten minutes:
 ```
 
 A restart writes a `{"kind": "start"}` marker into the transcript, so a gap in the data can be told from a
+## 10. The loop, measured
+
+The first overnight run: 164 lines over 18 hours, five restarts, cadence met at 9.1/hour. The instrument
+said what the eye had been saying:
+
+```
+distinct: 51 of 164 (31%)           <- 69% of everything said was a repeat
+  x12  ah, oh
+  x12  Messing with the tank. how is otis doing? ♡
+  x10  hmm, ho- how long have you been at that?
+  x10  Oh honey, i do not know that one 🌿
+35% of lines are three words or fewer
+job mix: offer_hook 52.6%, noted 23.2%, follow_up 6.3%, hedge 5.3%, dig 4.2%, answer_dig 3.2%
+15 distinct (job × topic) pairs over 95 turns; repeat interval median 17.7 min
+topics reached: three (aquariums 37, cute-things 34, rome 24)
+stories: 0 of 95
+```
+
+### Four causes, each one measured
+
+1. **A self-sustaining recall loop — fixed.** `recall=pet.name (session)` appeared on **61 of 95** trailed
+   lines, and "how is otis doing?" nineteen times. The mechanism: the room hands the previous line back as
+   the prompt, so a line that mentioned the dog *raised* the fact for the next speaker, who answered it and
+   appended the clause again. And nothing marked the fact as raised on the room path — `mark_raised` had
+   exactly one caller, in the human reply path. Fixed in `bots/ladder.py`, so the marking happens where the
+   line is made and covers both paths, with a second condition the first attempt got wrong: only a fact he
+   actually **said** counts, because a clause the budget trimmed away was never raised (measured:
+   `messing with the tank` carried `recall=pet.name` with no mention of the dog in its text). After the fix:
+   **1 of 20** lines, and the loop cannot re-form because a raised fact is not raised again the same day.
+
+2. **Three of fifteen hooks can be taken at all.** A dig needs the offered hook to name a domain, and
+   measured per friend: **Terry 0 of 5** activities have one, Otto 2 of 5, Crusty 1 of 5. So the progression
+   machinery (`dig` 4.2%, `answer_dig` 3.2%) is starved of *material*, not of rules. It also explains the
+   speaker imbalance (33 / 63 / 68 lines): the floor goes to the owner of the dig, and Terry never owns one.
+
+3. **Announcements dominate.** `offer_hook` is 52.6% of lines, drawn from 14 distinct texts. Partly a
+   consequence of (2) — there is nothing else to do — and partly the prompt: a hook under four words is not
+   "worth reacting to", so the room is told to talk about its own day again.
+
+4. **Filler.** 35% of lines are three words or fewer, and they are 12 distinct texts between them.
+
+### What this means for the next pass
+
+(2) is the one to fix, and it is **data, not code**: every activity needs a domain aspect so a hook has
+somewhere to go. Fifteen aspects is small enough to author by hand as the stopgap, and it is exactly the
+shape the corpus pipeline feeds (`SOURCES.md`). Until then the room has one move and two decorations, and
+more phrasebook lines would change the *words* of "ah, oh" rather than the fact that half the room is
+announcing its day with fourteen sentences.
+
 silence in the room.

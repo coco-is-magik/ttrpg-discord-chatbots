@@ -10,9 +10,12 @@ with a full shelf uses this one.
 
 from __future__ import annotations
 
+import logging
 import os
 from datetime import date
 from pathlib import Path
+
+LOGGER = logging.getLogger(__name__)
 
 from ttrpg_chatbots.conv.types import (
     Abstain,
@@ -289,7 +292,7 @@ class Ladder:
         day: date | str | None = None,
     ) -> Line | Abstain:
         """A line, or the reason there is not one."""
-        return reply(
+        out = reply(
             scene=self._scene(
                 text=text, memory=memory, moment=moment, addressed=addressed, speaker=speaker,
                 turns=turns, day=day,
@@ -298,6 +301,40 @@ class Ladder:
             style=self._style,
             recent=self._recent,
         )
+        if isinstance(out, Line):
+            self._mark_recalled(out.trail, memory, text=out.text, day=day)
+        return out
+
+    def _mark_recalled(self, trail, memory, *, text: str = "", day=None) -> None:
+        """Note that he brought a fact up, so he does not bring it up again today.
+
+        Here rather than in the caller, because there are two callers and the marker existed on only one
+        of them. Measured on an overnight run: **61 of 95** unprompted lines carried the same recall
+        ("how is otis doing?" nineteen times), because the room path recalled the fact and nothing marked
+        it -- so every following line offered it again.
+
+        Two conditions, and the second one was a bug in the first version of this fix:
+
+        * a fact was *selected* -- the trail says so, and it is not only the family called `recall` that
+          can raise one, which is why those went unmarked even on the human path;
+        * he actually *said* it -- a recall the budget trimmed away was never raised, and marking it
+          would spend the fact silently. Measured: `messing with the tank` carried `recall=pet.name` in
+          its trail with no mention of the dog in its text.
+        """
+        if memory is None:
+            return
+        key = dict(trail.steps).get("recall", "nothing").split(" ")[0]
+        if not key or key == "nothing":
+            return
+        fact = next((item for item in (memory.facts or ()) if item.key == key), None)
+        if fact is None or fact.value.lower() not in (text or "").lower():
+            return
+        when = day or date.today()
+        try:
+            memory.mark_raised(key, day=when.isoformat() if hasattr(when, "isoformat") else str(when))
+            memory.save()
+        except Exception as error:  # noqa: BLE001 - failing to note it must not lose the line
+            LOGGER.warning("%s could not save its memory: %s", self.friend, error)
 
 
 def _carried(turns: tuple[Turn, ...]) -> tuple[str, str]:
