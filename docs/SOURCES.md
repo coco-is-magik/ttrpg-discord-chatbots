@@ -126,7 +126,9 @@ corpora/derived/<source>/    extracted, filtered, registered — with `source` o
 - **filter** — register, length, person, banned lexicon; drop the unusable
 - **register** — rewrite into our format, keeping `source` provenance per line
 - **review** — sample N per family/job and read them; a human gate, because shape ≠ voice
-- **promote** — move reviewed lines into `examples/`, provenance intact, only for permissive sources
+- **promote** — move reviewed lines into the **overlay**, never into `examples/`: `TTRPG_FRIENDS_DATA`
+  points at a git-ignored world directory that the loader merges over the shipped one, so a friend's
+  expanded corpus is loaded at runtime and can be deleted again without touching the repository
 
 `source` on every line is what makes contribution measurable rather than assumed.
 
@@ -154,3 +156,35 @@ sounds like a machine, so the sample-read stays either way.
 
 Worth naming because it changes what "expand the corpus" means: **authored > generated > borrowed**,
 in that order, for anything a friend says in his own voice.
+
+## 7. What may be in the repository
+
+**Code, docs, config, and tiny authored examples. Nothing else.** Every dataset is user-sourced: pulled
+by a script, written to a git-ignored directory, loaded at runtime, and deletable without touching the
+repository. Three things hold that in place, and each is a command rather than an intention:
+
+```bash
+git check-ignore -v corpora/switchboard/utterances.jsonl    # must name the rule
+git ls-files | grep -vE '\.(py|md|toml|cfg|txt|sh|yml|yaml|example)$'   # must print only LICENSE
+git add --dry-run corpora/                                   # must stage nothing
+```
+
+The rules: `.gitignore` ignores `corpora/*` (keeping `corpora/README.md` so the folder exists and
+explains itself), plus `data/`, `datasets/`, `models/`, and anything `.jsonl.gz`.
+
+**This was violated twice**, which is why the section exists:
+
+* commit `b04ca1c` deleted the `corpora/` rules and committed Switchboard's `utterances.jsonl` — 36 MB,
+  the largest object in the repository;
+* the early `Create LICENSE` commit had swept the user's `OG Character Sheets.xlsx` (2.4 MB) and
+  `My House Games Edits.md` (615 KB) into its tree, and that commit was the remote's tip.
+
+Both were purged with `git filter-repo --invert-paths` on 2026-10-24: **139 of 200 commits rewritten,
+`.git` from 9.7 MB to 1.4 MB**, and the largest remaining blob is 130 KB of Python. The two user files
+were extracted from history *before* the rewrite and now live in `data/user-supplied/`, and the remote
+was force-pushed to the same cleaned history — it held only six commits, all present in the rewrite, so
+nothing was published.
+
+**One caveat that is not ours to fix:** GitHub may keep the unreachable objects on its side until its own
+garbage collection. The refs no longer point at them, but if the data must be gone from GitHub's storage
+immediately, the only guaranteed way is to delete and recreate the repository.

@@ -140,11 +140,11 @@ The corpus it came from is already at `corpora/switchboard/`; to rebuild the tab
   reproducible from a clone. That is why the measured table is local-only: CC BY-NC-SA.
 - **`corpora/` is git-ignored too, and that is load-bearing.** The corpus is 37 MiB — nearly
   four times the tracked repository. Never `git add -f` anything inside it; if `git status` ever
-  lists a megabyte of `.jsonl`, something bypassed the rule. **It was bypassed once**: commit
-  `b04ca1c` deleted the `corpora/*` rules and committed Switchboard's `utterances.jsonl`, which is
-  still the largest object in history (38 MB raw, in an 11 MB `.git`). The rules are back, the six
-  files are untracked (still on disk), and the check is
-  `git check-ignore -v corpora/switchboard/utterances.jsonl`.
+  lists a megabyte of `.jsonl`, something bypassed the rule. **It was bypassed twice, and both are
+  now purged from history** — the rules, the two violations, the verification commands and the
+  force-push are recorded in `docs/SOURCES.md` §7. The short version: `.git` went from 9.7 MB to
+  1.4 MB, and `git ls-files | grep -vE '\.(py|md|toml|cfg|txt|sh|yml|yaml|example)$'` must print
+  nothing but `LICENSE`.
 - **The helper must not request Message Content.** It is a test: `tests/test_bot.py` asserts the
   helper's intents stay at `discord.Intents.default()`.
 - **A token cannot hold two gateway sessions, and two processes are worse than that.** They
