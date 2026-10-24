@@ -26,6 +26,17 @@ datasets/
 *.jsonl.gz
 custom_assets/
 
+# Downloaded corpora, and anything derived from them, are regenerated locally rather
+# than shipped: they run to tens or hundreds of megabytes and most carry licences that
+# forbid redistribution. corpora/ keeps one tracked file, its README, so the folder
+# exists in a fresh clone and explains itself.
+#
+# This rule was removed by accident in b04ca1c, which also committed the 36 MB
+# Switchboard corpus. Do not `git add -f` anything in here; if `git status` ever lists
+# a corpus file, this rule has been lost again.
+corpora/*
+!corpora/README.md
+
 # Model weights (voices, ASR models) belong in the cache or a mounted volume.
 models/
 *.onnx
